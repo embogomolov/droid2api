@@ -343,7 +343,8 @@ class KeyPoolManager {
       success: 0,
       duplicate: 0,
       invalid: 0,
-      errors: []
+      errors: [],
+      importedKeyIds: [] // BaSui：记录新导入的密钥ID，用于后续自动测试
     };
 
     keys.forEach((key, index) => {
@@ -371,14 +372,97 @@ class KeyPoolManager {
       }
 
       try {
-        this.addKey(trimmedKey, `Imported at ${new Date().toISOString()}`, poolGroup);
+        const keyObj = this.addKey(trimmedKey, `Imported at ${new Date().toISOString()}`, poolGroup);
         results.success++;
+        results.importedKeyIds.push(keyObj.id); // BaSui：记录新密钥的ID
       } catch (error) {
         results.errors.push(`Line ${index + 1}: ${error.message}`);
       }
     });
 
     logInfo(`Batch import completed: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid (pool: ${poolGroup || 'default'})`);
+    return results;
+  }
+
+  /**
+   * BaSui：自动测试未测试过的密钥（导入时使用）
+   * @param {Array<string>} keyIds - 要测试的密钥ID列表（可选，不传则测试所有未测试密钥）
+   * @returns {Promise<Object>} 测试结果统计
+   */
+  async testUntestedKeys(keyIds = null) {
+    // BaSui：筛选未测试过的密钥（last_test_at为空的）
+    let keysToTest;
+    if (keyIds && keyIds.length > 0) {
+      keysToTest = this.keys.filter(k => 
+        keyIds.includes(k.id) && 
+        !k.last_test_at && 
+        k.status !== 'banned'
+      );
+    } else {
+      keysToTest = this.keys.filter(k => 
+        !k.last_test_at && 
+        k.status !== 'banned'
+      );
+    }
+
+    if (keysToTest.length === 0) {
+      logInfo('No untested keys to test');
+      return {
+        tested: 0,
+        success: 0,
+        failed: 0,
+        banned: 0
+      };
+    }
+
+    const results = {
+      tested: 0,
+      success: 0,
+      failed: 0,
+      banned: 0
+    };
+
+    // BaSui：并发数从配置读取，支持动态调整！默认10个，最大100个（生产环境优化）
+    const concurrentLimit = Math.max(1, Math.min(this.config.performance.concurrentLimit || 10, 100));
+
+    logInfo(`Starting auto-test for ${keysToTest.length} untested keys (${concurrentLimit} concurrent)...`);
+
+    for (let i = 0; i < keysToTest.length; i += concurrentLimit) {
+      const batch = keysToTest.slice(i, i + concurrentLimit);
+
+      // 并发执行当前批次
+      const batchResults = await Promise.allSettled(
+        batch.map(key => this.testKey(key.id))
+      );
+
+      // 统计结果
+      batchResults.forEach(promiseResult => {
+        results.tested++;
+
+        if (promiseResult.status === 'fulfilled') {
+          const result = promiseResult.value;
+          if (result.success) {
+            results.success++;
+          } else {
+            results.failed++;
+            if (result.key_status === 'banned') {
+              results.banned++;
+            }
+          }
+        } else {
+          // Promise rejected，计为失败
+          results.failed++;
+          logError('Test key failed with exception', promiseResult.reason);
+        }
+      });
+
+      // BaSui：批次之间短暂延迟，避免速率限制（1秒）
+      if (i + concurrentLimit < keysToTest.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    logInfo(`Auto-test completed: ${results.success} success, ${results.failed} failed, ${results.banned} banned (402 auto-banned)`);
     return results;
   }
 
@@ -644,8 +728,8 @@ class KeyPoolManager {
     // BaSui：只测试非封禁状态的密钥
     const keysToTest = this.keys.filter(k => k.status !== 'banned');
 
-    // BaSui：并发数从配置读取，支持动态调整！默认10个
-    const concurrentLimit = Math.max(1, Math.min(this.config.performance.concurrentLimit || 10, 50));
+    // BaSui：并发数从配置读取，支持动态调整！默认10个，最大100个（生产环境优化）
+    const concurrentLimit = Math.max(1, Math.min(this.config.performance.concurrentLimit || 10, 100));
 
     logInfo(`Starting batch test for ${keysToTest.length} keys (${concurrentLimit} concurrent)...`);
 
@@ -688,11 +772,17 @@ class KeyPoolManager {
     return results;
   }
 
-  getKeys(page = 1, limit = 10, status = 'all') {
+  getKeys(page = 1, limit = 10, status = 'all', poolGroup = 'all') {
     let filteredKeys = this.keys;
 
+    // BaSui: 按状态筛选
     if (status !== 'all') {
       filteredKeys = filteredKeys.filter(k => k.status === status);
+    }
+
+    // BaSui: 按密钥池筛选
+    if (poolGroup !== 'all') {
+      filteredKeys = filteredKeys.filter(k => (k.poolGroup || 'default') === poolGroup);
     }
 
     const total = filteredKeys.length;
@@ -977,14 +1067,24 @@ class KeyPoolManager {
         const data = fs.readFileSync(tokenUsageFile, 'utf-8');
         const parsed = JSON.parse(data);
 
-        logDebug(`加载Token使用量数据: ${Object.keys(parsed.keys || {}).length} 个密钥`);
+        const keysCount = Object.keys(parsed.keys || {}).length;
+        logDebug(`✅ 加载Token使用量数据: ${keysCount} 个密钥`);
+        
+        // BaSui：详细日志，帮助诊断问题
+        if (keysCount === 0) {
+          logWarning(`⚠️ token_usage.json 文件存在但 keys 为空！路径: ${tokenUsageFile}`);
+        }
+        
         return parsed.keys || {};
+      } else {
+        logWarning(`⚠️ token_usage.json 文件不存在！路径: ${tokenUsageFile}`);
       }
     } catch (error) {
       logError('加载Token使用量数据失败', error);
     }
 
     // 返回空对象（没有数据时降级处理）
+    logDebug('返回空的 Token 使用量数据（降级处理）');
     return {};
   }
 
@@ -1004,18 +1104,27 @@ class KeyPoolManager {
    * - 如果某个密钥没有统计数据 → 认为它使用量为0（优先选择）
    */
   async selectKeyByTokenUsage(activeKeys) {
+    // BaSui：边界检查 - 防止空数组导致 undefined 访问
+    if (!activeKeys || activeKeys.length === 0) {
+      throw new Error('selectKeyByTokenUsage: activeKeys 为空，无法选择密钥');
+    }
+
     // BaSui：加载Token使用量数据
     const tokenUsageData = this.loadTokenUsageData();
+    const dataSize = Object.keys(tokenUsageData).length;
 
     // BaSui：如果没有统计数据，降级处理（直接选第一个）
-    if (Object.keys(tokenUsageData).length === 0) {
-      logInfo('⚠️ 没有Token使用量数据，降级使用 round-robin 算法');
+    if (dataSize === 0) {
+      logWarning(`⚠️ 没有Token使用量数据，降级使用 round-robin 算法（可用密钥数: ${activeKeys.length}）`);
+      logInfo('💡 提示：Token 自动同步可能尚未完成，请等待几秒后重试，或在管理面板手动同步');
       const keyObj = activeKeys[0];
       keyObj.usage_count = (keyObj.usage_count || 0) + 1;
       keyObj.last_used_at = new Date().toISOString();
       this.saveKeyPool();
       return keyObj;
     }
+
+    logDebug(`📊 Token使用量数据可用: ${dataSize} 个密钥，当前可选: ${activeKeys.length} 个`);
 
     // BaSui：为每个密钥绑定Token使用量（如果没有数据则认为是0）
     const keysWithUsage = activeKeys.map(key => {
@@ -1069,6 +1178,11 @@ class KeyPoolManager {
    * - 延长密钥生命周期：让接近上限的密钥休息
    */
   async selectKeyByRemaining(activeKeys) {
+    // BaSui：边界检查 - 防止空数组导致 undefined 访问
+    if (!activeKeys || activeKeys.length === 0) {
+      throw new Error('selectKeyByRemaining: activeKeys 为空，无法选择密钥');
+    }
+
     // BaSui：复用数据加载逻辑
     const tokenUsageData = this.loadTokenUsageData();
 

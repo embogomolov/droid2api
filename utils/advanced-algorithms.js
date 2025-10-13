@@ -25,6 +25,11 @@ import { logInfo, logWarn, logError, logDebug } from '../logger.js';
  * @returns {Object} 选中的密钥对象
  */
 export async function selectKeyByWeightedUsage(activeKeys, loadTokenUsageData, saveKeyPool, allKeys) {
+  // BaSui：边界检查 - 防止空数组导致 undefined 访问
+  if (!activeKeys || activeKeys.length === 0) {
+    throw new Error('selectKeyByWeightedUsage: activeKeys 为空，无法选择密钥');
+  }
+
   const tokenUsageData = loadTokenUsageData();
 
   if (Object.keys(tokenUsageData).length === 0) {
@@ -111,6 +116,11 @@ export async function selectKeyByWeightedUsage(activeKeys, loadTokenUsageData, s
  * @returns {Object} 选中的密钥对象
  */
 export async function selectKeyByQuotaAware(activeKeys, loadTokenUsageData, saveKeyPool, allKeys, config) {
+  // BaSui：边界检查 - 防止空数组导致 undefined 访问
+  if (!activeKeys || activeKeys.length === 0) {
+    throw new Error('selectKeyByQuotaAware: activeKeys 为空，无法选择密钥');
+  }
+
   const tokenUsageData = loadTokenUsageData();
 
   if (Object.keys(tokenUsageData).length === 0) {
@@ -211,6 +221,11 @@ export async function selectKeyByQuotaAware(activeKeys, loadTokenUsageData, save
  * @returns {Object} 选中的密钥对象
  */
 export async function selectKeyByTimeWindow(activeKeys, saveKeyPool, allKeys, config) {
+  // BaSui：边界检查 - 防止空数组导致 undefined 访问
+  if (!activeKeys || activeKeys.length === 0) {
+    throw new Error('selectKeyByTimeWindow: activeKeys 为空，无法选择密钥');
+  }
+
   // 默认时间窗口：24小时
   const timeWindowHours = config.timeWindowHours || 24;
   const now = Date.now();

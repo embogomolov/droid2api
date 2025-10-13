@@ -61,8 +61,30 @@ async function initializeAllPoolSelects() {
     // 加载"修改密钥池"模态框的池子选项
     await loadPoolGroupOptions('changePoolSelect', false);
 
-    // 加载密钥管理页面的池子筛选器
-    await loadPoolGroupOptions('poolGroupFilter', false);
+    // 加载密钥管理页面的池子筛选器（需要包含"全部"选项）
+    const poolFilterSelect = document.getElementById('poolGroupFilter');
+    if (poolFilterSelect) {
+        try {
+            // 先保留默认的"全部池子"选项
+            poolFilterSelect.innerHTML = '<option value="all">全部池子</option>';
+
+            // 获取密钥池列表
+            const response = await apiRequest('/pool-groups');
+            const poolGroups = response.data || [];
+
+            // 添加具体的池子选项
+            poolGroups.forEach(pool => {
+                const option = document.createElement('option');
+                option.value = pool.id;
+                option.textContent = `${pool.name} (${pool.id})`;
+                poolFilterSelect.appendChild(option);
+            });
+
+            console.log(`✅ 已加载 ${poolGroups.length} 个池子选项到密钥池筛选器`);
+        } catch (error) {
+            console.error('❌ 加载池子筛选器失败:', error);
+        }
+    }
 
     console.log('🎉 所有池子选项加载完成！');
 }
@@ -282,10 +304,12 @@ function showBatchImportModal() {
 
 /**
  * 批量导入密钥（增强版）
+ * BaSui: 支持自动测试，可检测密钥有效性，402错误自动拉黑！
  */
 async function batchImport() {
     const keysText = document.getElementById('batchKeysInput').value.trim();
     const poolGroup = document.getElementById('batchImportPoolGroup').value;
+    const autoTest = document.getElementById('autoTestKeys').checked; // BaSui: 获取自动测试选项
 
     if (!keysText) {
         alert('请输入密钥');
@@ -297,9 +321,14 @@ async function batchImport() {
     try {
         const response = await apiRequest('/keys/batch', 'POST', {
             keys,
-            poolGroup: poolGroup || undefined  // 如果是空字符串，传 undefined
+            poolGroup: poolGroup || undefined,  // 如果是空字符串，传 undefined
+            autoTest: autoTest  // BaSui: 传递自动测试参数
         });
         const result = response.data;
+
+        // BaSui: 兼容新旧两种返回格式（新格式包含import和test字段）
+        const importResult = result.import || result;
+        const testResult = result.test;
 
         const resultDiv = document.getElementById('importResult');
 
@@ -308,37 +337,54 @@ async function batchImport() {
         let statusEmoji = '✅';
         let summaryText = '';
 
-        if (result.success > 0) {
+        if (importResult.success > 0) {
             statusClass = 'success';
             statusEmoji = '✅';
-            summaryText = `成功导入 ${result.success} 个密钥！`;
-        } else if (result.duplicate > 0 && result.invalid === 0) {
+            summaryText = `成功导入 ${importResult.success} 个密钥！`;
+        } else if (importResult.duplicate > 0 && importResult.invalid === 0) {
             statusClass = 'warning';
             statusEmoji = '🔄';
-            summaryText = `所有密钥都已存在（${result.duplicate} 个重复）`;
-        } else if (result.invalid > 0) {
+            summaryText = `所有密钥都已存在（${importResult.duplicate} 个重复）`;
+        } else if (importResult.invalid > 0) {
             statusClass = 'error';
             statusEmoji = '❌';
-            summaryText = `导入失败，有 ${result.invalid} 个无效密钥`;
+            summaryText = `导入失败，有 ${importResult.invalid} 个无效密钥`;
         } else {
             statusClass = 'error';
             statusEmoji = '❌';
             summaryText = '导入失败';
         }
 
-        resultDiv.innerHTML = `
+        // BaSui: 构建导入结果HTML
+        let resultHTML = `
             <div class="result-summary ${statusClass}">
                 <h3>${statusEmoji} ${summaryText}</h3>
-                <p>📊 总数: ${result.total}</p>
-                <p>✅ 成功: ${result.success}</p>
-                <p>🔄 重复: ${result.duplicate}</p>
-                <p>❌ 无效: ${result.invalid}</p>
+                <p>📊 总数: ${keys.length}</p>
+                <p>✅ 成功: ${importResult.success}</p>
+                <p>🔄 重复: ${importResult.duplicate}</p>
+                <p>❌ 无效: ${importResult.invalid}</p>
                 ${poolGroup ? `<p>🎯 导入到池: ${poolGroup}</p>` : ''}
-            </div>
         `;
 
+        // BaSui: 如果有测试结果，显示测试统计
+        if (testResult && testResult.tested > 0) {
+            const testStatusClass = testResult.success === testResult.tested ? 'success' : 
+                                   testResult.banned > 0 ? 'warning' : 'error';
+            resultHTML += `
+                <hr style="margin: 10px 0; border: 1px solid #ddd;">
+                <h4>🧪 自动测试结果</h4>
+                <p>🔍 已测试: ${testResult.tested}</p>
+                <p>✅ 成功: ${testResult.success}</p>
+                <p>❌ 失败: ${testResult.failed}</p>
+                ${testResult.banned > 0 ? `<p>🚫 已拉黑: ${testResult.banned} (402错误)</p>` : ''}
+            `;
+        }
+
+        resultHTML += `</div>`;
+        resultDiv.innerHTML = resultHTML;
+
         // 如果有成功导入，2秒后刷新
-        if (result.success > 0) {
+        if (importResult.success > 0) {
             setTimeout(() => {
                 refreshData();
             }, 2000);

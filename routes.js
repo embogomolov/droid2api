@@ -24,9 +24,82 @@ import {
   extractOpenAITokens,
   extractCommonTokens
 } from './utils/token-extractor.js';
+import { log403Error } from './utils/error-403-logger.js';
 const router = express.Router();
 
 
+
+/**
+ * BaSui：将 Anthropic Messages API 响应转换为 OpenAI Chat Completions 格式
+ * 用于非流式响应
+ */
+function convertAnthropicToChatCompletion(anthropicResp) {
+  if (!anthropicResp || typeof anthropicResp !== 'object') {
+    throw new Error('Invalid Anthropic response object');
+  }
+
+  // 提取文本内容和工具调用
+  const content = [];
+  const toolCalls = [];
+  
+  if (anthropicResp.content && Array.isArray(anthropicResp.content)) {
+    for (const block of anthropicResp.content) {
+      if (block.type === 'text') {
+        content.push(block.text);
+      } else if (block.type === 'tool_use') {
+        toolCalls.push({
+          id: block.id,
+          type: 'function',
+          function: {
+            name: block.name,
+            arguments: JSON.stringify(block.input)
+          }
+        });
+      }
+    }
+  }
+
+  // 映射 stop_reason
+  let finishReason = 'stop';
+  if (anthropicResp.stop_reason === 'end_turn') {
+    finishReason = 'stop';
+  } else if (anthropicResp.stop_reason === 'max_tokens') {
+    finishReason = 'length';
+  } else if (anthropicResp.stop_reason === 'tool_use') {
+    finishReason = 'tool_calls';
+  }
+
+  const message = {
+    role: 'assistant',
+    content: content.join('')
+  };
+
+  // 如果有工具调用，添加到message
+  if (toolCalls.length > 0) {
+    message.tool_calls = toolCalls;
+  }
+
+  const chatCompletion = {
+    id: anthropicResp.id ? anthropicResp.id.replace(/^msg_/, 'chatcmpl-') : `chatcmpl-${Date.now()}`,
+    object: 'chat.completion',
+    created: Math.floor(Date.now() / 1000),
+    model: anthropicResp.model || 'unknown-model',
+    choices: [
+      {
+        index: 0,
+        message: message,
+        finish_reason: finishReason
+      }
+    ],
+    usage: {
+      prompt_tokens: anthropicResp.usage?.input_tokens ?? 0,
+      completion_tokens: anthropicResp.usage?.output_tokens ?? 0,
+      total_tokens: (anthropicResp.usage?.input_tokens ?? 0) + (anthropicResp.usage?.output_tokens ?? 0)
+    }
+  };
+
+  return chatCompletion;
+}
 
 /**
  * Convert a /v1/responses API result to a /v1/chat/completions-compatible format.
@@ -145,10 +218,18 @@ async function handleChatCompletions(req, res) {
       'user-agent': clientHeaders['user-agent']
     });
 
+    // BaSui：根据模型类型选择合适的转换器
+    // 所有模型都使用统一的OpenAI输入格式，转换器自动适配到目标API
     if (model.type === 'anthropic') {
-      transformedRequest = transformToAnthropic(openaiRequest);
+      // 如果配置了 backend_model，使用它作为实际调用的模型ID（用于模型别名）
+      const backendModel = model.backend_model || null;
+      transformedRequest = transformToAnthropic(openaiRequest, backendModel);
       const isStreaming = openaiRequest.stream === true;
       headers = getAnthropicHeaders(authHeader, clientHeaders, isStreaming, modelId);
+      
+      if (backendModel) {
+        logInfo(`Model mapping: ${modelId} → ${backendModel}`);
+      }
     } else if (model.type === 'openai') {
       transformedRequest = transformToOpenAI(openaiRequest);
       headers = getOpenAIHeaders(authHeader, clientHeaders);
@@ -156,7 +237,7 @@ async function handleChatCompletions(req, res) {
       transformedRequest = transformToCommon(openaiRequest);
       headers = getCommonHeaders(authHeader, clientHeaders);
     } else {
-      return res.status(500).json({ error: `Unknown endpoint type: ${model.type}` });
+      return res.status(500).json({ error: `Unknown model type: ${model.type}` });
     }
 
     logRequest('POST', endpoint.base_url, headers, transformedRequest);
@@ -178,6 +259,29 @@ async function handleChatCompletions(req, res) {
       return res.status(402).json({
         error: 'Payment Required',
         message: 'Key has been banned due to insufficient credits',
+        details: errorText
+      });
+    }
+
+    // BaSui：处理403错误 - 记录详细日志，包含系统提示词和用户提示词
+    if (response.status === 403) {
+      const errorText = await response.text();
+      logError(`403 Forbidden error with key: ${currentKeyId}`, new Error(errorText));
+      
+      // 记录详细的 403 错误日志
+      log403Error({
+        requestId: `req-${Date.now()}`,
+        keyId: currentKeyId,
+        originalRequest: openaiRequest,
+        transformedRequest: transformedRequest,
+        headers: headers,
+        endpoint: endpoint.base_url,
+        errorDetails: errorText
+      });
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied by upstream API',
         details: errorText
       });
     }
@@ -321,7 +425,19 @@ async function handleChatCompletions(req, res) {
       // 记录Token使用量
       recordTokenUsage(data, model.type, currentKeyId);
 
-      if (model.type === 'openai') {
+      if (model.type === 'anthropic') {
+        // BaSui：转换 Anthropic 响应为 OpenAI 格式
+        try {
+          const converted = convertAnthropicToChatCompletion(data);
+          logResponse(200, null, converted);
+          res.json(converted);
+        } catch (e) {
+          logError('Anthropic响应转换失败', e);
+          // 如果转换失败，回退为原始数据
+          logResponse(200, null, data);
+          res.json(data);
+        }
+      } else if (model.type === 'openai') {
         try {
           const converted = convertResponseToChatCompletion(data);
           logResponse(200, null, converted);
@@ -332,7 +448,7 @@ async function handleChatCompletions(req, res) {
           res.json(data);
         }
       } else {
-        // anthropic/common: 保持现有逻辑，直接转发
+        // common: 直接转发
         logResponse(200, null, data);
         res.json(data);
       }
@@ -452,6 +568,29 @@ async function handleDirectResponses(req, res) {
       return res.status(402).json({
         error: 'Payment Required',
         message: 'Key has been banned due to insufficient credits',
+        details: errorText
+      });
+    }
+
+    // BaSui：处理403错误 - 记录详细日志，包含系统提示词和用户提示词
+    if (response.status === 403) {
+      const errorText = await response.text();
+      logError(`403 Forbidden error with key: ${currentKeyId}`, new Error(errorText));
+      
+      // 记录详细的 403 错误日志
+      log403Error({
+        requestId: `req-${Date.now()}`,
+        keyId: currentKeyId,
+        originalRequest: openaiRequest,
+        transformedRequest: modifiedRequest,
+        headers: headers,
+        endpoint: endpoint.base_url,
+        errorDetails: errorText
+      });
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied by upstream API',
         details: errorText
       });
     }
@@ -660,6 +799,29 @@ async function handleDirectMessages(req, res) {
       return res.status(402).json({
         error: 'Payment Required',
         message: 'Key has been banned due to insufficient credits',
+        details: errorText
+      });
+    }
+
+    // BaSui：处理403错误 - 记录详细日志，包含系统提示词和用户提示词
+    if (response.status === 403) {
+      const errorText = await response.text();
+      logError(`403 Forbidden error with key: ${currentKeyId}`, new Error(errorText));
+      
+      // 记录详细的 403 错误日志
+      log403Error({
+        requestId: `req-${Date.now()}`,
+        keyId: currentKeyId,
+        originalRequest: anthropicRequest,
+        transformedRequest: modifiedRequest,
+        headers: headers,
+        endpoint: endpoint.base_url,
+        errorDetails: errorText
+      });
+
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Access denied by upstream API',
         details: errorText
       });
     }

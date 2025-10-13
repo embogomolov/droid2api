@@ -93,10 +93,8 @@ export function logInfo(message, data = null) {
     if (data) {
       console.log(smartStringify(data));
     }
-  } else {
-    // 生产模式：简单输出
-    console.log(`[INFO] ${message}`);
   }
+  // 生产模式：不输出到控制台，只写入文件
 
   // BaSui：生产模式写文件（详细）
   writeToFile('INFO', message, data);
@@ -165,10 +163,8 @@ export function logRequest(method, url, headers = null, body = null) {
       console.log('[BODY]', smartStringify(body));
     }
     console.log('='.repeat(80) + '\n');
-  } else {
-    // 生产模式：简单输出
-    console.log(`[REQUEST] ${method} ${url}`);
   }
+  // 生产模式：不输出到控制台，只写入文件
 
   // BaSui：生产模式写详细的请求日志到文件
   const requestData = { method, url, headers, body };
@@ -189,10 +185,8 @@ export function logResponse(status, headers = null, body = null) {
       console.log('[BODY]', smartStringify(body));
     }
     console.log('-'.repeat(80) + '\n');
-  } else {
-    // 生产模式：简单输出
-    console.log(`[RESPONSE] Status: ${status}`);
   }
+  // 生产模式：不输出到控制台，只写入文件
 
   // BaSui：生产模式写详细的响应日志到文件
   const responseData = { status, headers, body };

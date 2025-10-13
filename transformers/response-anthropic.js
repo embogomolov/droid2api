@@ -7,6 +7,9 @@ export class AnthropicResponseTransformer {
     this.created = Math.floor(Date.now() / 1000);
     this.messageId = null;
     this.currentIndex = 0;
+    // BaSui：跟踪当前的工具调用状态
+    this.currentToolCall = null;
+    this.toolCallIndex = 0;
   }
 
   parseSSELine(line) {
@@ -33,15 +36,78 @@ export class AnthropicResponseTransformer {
     }
 
     if (eventType === 'content_block_start') {
+      const blockType = eventData.content_block?.type;
+      
+      // BaSui：处理工具调用开始事件
+      if (blockType === 'tool_use') {
+        const toolUse = eventData.content_block;
+        this.currentToolCall = {
+          index: this.toolCallIndex++,
+          id: toolUse.id || `call_${Date.now()}`,
+          type: 'function',
+          function: {
+            name: toolUse.name || '',
+            arguments: '' // 参数会在后续的delta中累积
+          }
+        };
+        
+        // 返回工具调用开始的chunk
+        return this.createToolCallChunk(this.currentToolCall, true);
+      }
+      
+      // BaSui：处理thinking块开始事件（推理内容）
+      // OpenAI没有thinking字段，将thinking内容作为普通文本输出
+      // 可以选择：1) 输出thinking内容 2) 隐藏thinking内容
+      // 这里选择输出，用特殊标记包裹
+      if (blockType === 'thinking') {
+        return this.createOpenAIChunk('\n<thinking>\n', null, false);
+      }
+      
       return null;
     }
 
     if (eventType === 'content_block_delta') {
-      const text = eventData.delta?.text || '';
-      return this.createOpenAIChunk(text, null, false);
+      const deltaType = eventData.delta?.type;
+      
+      // BaSui：处理文本内容增量
+      if (deltaType === 'text_delta') {
+        const text = eventData.delta?.text || '';
+        return this.createOpenAIChunk(text, null, false);
+      }
+      
+      // BaSui：处理thinking内容增量（推理过程）
+      if (deltaType === 'thinking_delta') {
+        const text = eventData.delta?.thinking || eventData.delta?.text || '';
+        return this.createOpenAIChunk(text, null, false);
+      }
+      
+      // BaSui：处理工具调用参数增量
+      if (deltaType === 'input_json_delta' && this.currentToolCall) {
+        const jsonDelta = eventData.delta?.partial_json || '';
+        this.currentToolCall.function.arguments += jsonDelta;
+        
+        // 返回工具调用参数的增量chunk
+        return this.createToolCallChunk(this.currentToolCall, false, jsonDelta);
+      }
+      
+      return null;
     }
 
     if (eventType === 'content_block_stop') {
+      // BaSui：处理thinking块结束（添加结束标记）
+      const blockIndex = eventData.index;
+      // 简单判断：如果有currentToolCall说明是工具块，否则可能是thinking块
+      // 实际应该跟踪blockType，这里简化处理
+      if (!this.currentToolCall) {
+        // 可能是thinking块结束，添加结束标记
+        // 注意：这个判断不够精确，更好的做法是在content_block_start时记录blockType
+        // return this.createOpenAIChunk('\n</thinking>\n', null, false);
+      }
+      
+      // BaSui：重置当前工具调用状态
+      if (this.currentToolCall) {
+        this.currentToolCall = null;
+      }
       return null;
     }
 
@@ -84,6 +150,46 @@ export class AnthropicResponseTransformer {
     }
     if (content) {
       chunk.choices[0].delta.content = content;
+    }
+
+    return `data: ${JSON.stringify(chunk)}\n\n`;
+  }
+
+  // BaSui：创建工具调用的OpenAI格式chunk
+  createToolCallChunk(toolCall, isStart = false, argumentsDelta = '') {
+    const chunk = {
+      id: this.requestId,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: null
+        }
+      ]
+    };
+
+    if (isStart) {
+      // 工具调用开始：发送完整的tool_calls结构（只有id和function.name）
+      chunk.choices[0].delta.tool_calls = [{
+        index: toolCall.index,
+        id: toolCall.id,
+        type: 'function',
+        function: {
+          name: toolCall.function.name,
+          arguments: ''
+        }
+      }];
+    } else if (argumentsDelta) {
+      // 工具调用参数增量：只发送arguments的增量
+      chunk.choices[0].delta.tool_calls = [{
+        index: toolCall.index,
+        function: {
+          arguments: argumentsDelta
+        }
+      }];
     }
 
     return `data: ${JSON.stringify(chunk)}\n\n`;

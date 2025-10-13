@@ -6,6 +6,8 @@
     <title>密钥池管理系统 - droid2api</title>
     <!-- 主样式文件 - 已包含极致美化效果 -->
     <link rel="stylesheet" href="style.css">
+    <!-- 隐藏仪表盘筛选器 -->
+    <link rel="stylesheet" href="hide-dashboard-filter.css">
     <!-- 添加Inter字体和中文字体，提升视觉效果 -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
@@ -45,6 +47,9 @@
                 </button>
                 <button class="tab-button" onclick="switchTab('logs')">
                     📝 实时日志
+                </button>
+                <button class="tab-button" onclick="switchTab('keywordFilter')">
+                    🛡️ 关键词过滤
                 </button>
                 <button class="tab-button" onclick="switchTab('config')">
                     ⚙️ 系统配置
@@ -126,6 +131,25 @@
                 </div>
             </div>
 
+            <!-- Dashboard 图表筛选器 -->
+            <div class="dashboard-filter-bar">
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <span class="filter-icon">🎯</span>
+                        密钥池筛选
+                    </label>
+                    <select id="dashboardPoolFilter" class="filter-select" onchange="dashboardPoolFilterChanged()">
+                        <option value="all">全部池子</option>
+                    </select>
+                </div>
+                <div class="dashboard-filter-summary">
+                    <span class="stats-badge">
+                        <span class="stats-icon">🔁</span>
+                        当前池：<strong id="dashboardPoolLabel">全部池子</strong>
+                    </span>
+                </div>
+            </div>
+
             <!-- 🚀 BaSui：多级密钥池统计卡片 -->
             <div class="pool-groups-container" id="poolGroupsContainer" style="display: none;">
                 <h2 class="section-title">🎯 多级密钥池</h2>
@@ -192,7 +216,10 @@
                     </div>
                 </div>
                 <div class="chart-card">
-                    <h3>🎯 成功率排行</h3>
+                    <h3>
+                        🎯 成功率排行
+                        <span class="chart-subtitle">Top 10</span>
+                    </h3>
                     <div class="chart-placeholder" id="successRateChart">
                         <div class="success-rate-list" id="successRateList">
                             <!-- 动态生成成功率排行 -->
@@ -200,7 +227,10 @@
                     </div>
                 </div>
                 <div class="chart-card">
-                    <h3>⚡ 使用热力图</h3>
+                    <h3>
+                        ⚡ 使用热力图
+                        <span class="chart-subtitle">Top 10</span>
+                    </h3>
                     <div class="chart-placeholder" id="usageHeatmap">
                         <div class="usage-stats" id="usageStats">
                             <!-- 动态生成使用统计 -->
@@ -208,7 +238,10 @@
                     </div>
                 </div>
                 <div class="chart-card chart-card-wide">
-                    <h3>📈 Token使用趋势</h3>
+                    <h3>
+                        📈 Token使用趋势
+                        <span class="chart-subtitle">Top 10 密钥使用量分析</span>
+                    </h3>
                     <div class="chart-content-flex">
                         <!-- 左侧：柱状图/排行榜 -->
                         <div class="chart-section">
@@ -315,10 +348,9 @@
                 <table class="keys-table-modern">
                     <thead>
                         <tr>
-                            <th><input type="checkbox" id="selectAllKeys" onchange="toggleSelectAll(this)" title="全选/取消全选"></th>
                             <th>密钥ID</th>
                             <th>密钥</th>
-                            <th>🎯 密钥池</th>
+                            <th>密钥池</th>
                             <th>状态</th>
                             <th>使用次数</th>
                             <th>成功次数</th>
@@ -334,7 +366,7 @@
                     </thead>
                     <tbody id="keysTableBody">
                         <tr>
-                            <td colspan="15" class="loading-modern">
+                            <td colspan="14" class="loading-modern">
                                 <div class="loading-spinner"></div>
                                 <span>加载中...</span>
                             </td>
@@ -444,6 +476,97 @@
                 </div>
             </div>
             <!-- 实时日志Tab结束 -->
+
+            <!-- 关键词过滤Tab -->
+            <div id="tabKeywordFilter" class="tab-content">
+                <div class="keyword-section-header">
+                    <div class="keyword-title-wrap">
+                        <h2 class="section-title">🛡️ 关键词过滤管理</h2>
+                        <p class="keyword-subtitle">智能过滤敏感词，保障对话安全与合规</p>
+                    </div>
+                    <div class="keyword-status-pill">
+                        <span class="pill-label">全局状态</span>
+                        <span class="pill-value" id="filterStatStatus">关闭</span>
+                    </div>
+                </div>
+
+                <div class="keyword-stats-grid">
+                    <div class="keyword-stat-card keyword-stat-total">
+                        <div class="keyword-stat-icon">🎯</div>
+                        <div class="keyword-stat-content">
+                            <span class="keyword-stat-label">总规则数</span>
+                            <span class="keyword-stat-value" id="filterStatTotal">0</span>
+                        </div>
+                        <span class="keyword-stat-badge">RULES</span>
+                    </div>
+                    <div class="keyword-stat-card keyword-stat-enabled">
+                        <div class="keyword-stat-icon">✅</div>
+                        <div class="keyword-stat-content">
+                            <span class="keyword-stat-label">启用规则</span>
+                            <span class="keyword-stat-value" id="filterStatEnabled">0</span>
+                        </div>
+                        <span class="keyword-stat-badge">ACTIVE</span>
+                    </div>
+                    <div class="keyword-stat-card keyword-stat-coverage">
+                        <div class="keyword-stat-icon">📈</div>
+                        <div class="keyword-stat-content">
+                            <span class="keyword-stat-label">启用覆盖率</span>
+                            <span class="keyword-stat-value" id="filterCoverageValue">0%</span>
+                        </div>
+                        <span class="keyword-stat-badge">INSIGHTS</span>
+                    </div>
+                </div>
+
+                <div class="keyword-action-bar">
+                    <div class="keyword-action-info">
+                        <h3>规则控制台</h3>
+                        <p>快速启用、测试与重载关键词过滤配置</p>
+                    </div>
+                    <div class="keyword-action-buttons">
+                        <button onclick="toggleGlobalFilter()" class="btn keyword-action-btn keyword-toggle" id="toggleGlobalBtn">
+                            🔄 切换全局过滤
+                        </button>
+                        <button onclick="showAddRuleModal()" class="btn keyword-action-btn keyword-primary">
+                            ➕ 添加规则
+                        </button>
+                        <button onclick="reloadFilterConfig()" class="btn keyword-action-btn">
+                            🔄 重新加载配置
+                        </button>
+                        <button onclick="showTestRuleModal()" class="btn keyword-action-btn keyword-secondary">
+                            🧪 测试规则
+                        </button>
+                    </div>
+                </div>
+
+                <div class="keyword-table-card">
+                    <div class="keyword-table-header">
+                        <div>
+                            <h3>过滤规则列表</h3>
+                            <span class="keyword-table-hint">在此启用、调整或删除过滤策略</span>
+                        </div>
+                        <div class="keyword-table-count">
+                            共 <strong id="keywordTableCount">0</strong> 条记录
+                        </div>
+                    </div>
+                    <table class="keyword-rules-table">
+                        <thead>
+                            <tr>
+                                <th>状态</th>
+                                <th>规则</th>
+                                <th>匹配条件</th>
+                                <th>处理动作</th>
+                                <th class="column-actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="filterRulesTable">
+                            <tr>
+                                <td colspan="5" class="empty-state">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 关键词过滤Tab结束 -->
 
             <!-- 系统配置Tab -->
             <div id="tabConfig" class="tab-content">
@@ -812,6 +935,13 @@
                 <label for="batchKeysInput">密钥列表 (每行一个)：</label>
                 <textarea id="batchKeysInput" placeholder="每行一个密钥&#10;fk-xxxxxxxx&#10;fk-yyyyyyyy&#10;fk-zzzzzzzz" class="modal-textarea large"></textarea>
             </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="autoTestKeys" style="margin-right: 8px;" checked />
+                    <span>🧪 自动测试新导入的密钥（推荐）</span>
+                </label>
+                <p class="hint">💡 自动测试可检测密钥有效性，402错误会自动拉黑</p>
+            </div>
             <button onclick="batchImport()" class="btn btn-primary">📥 开始导入</button>
             <div id="importResult" class="import-result"></div>
         </div>
@@ -1177,9 +1307,114 @@
         </div>
     </div>
 
+    <!-- 关键词过滤规则模态框 - 添加/编辑 -->
+    <div id="ruleModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('ruleModal')">&times;</span>
+            <h2 id="ruleModalTitle">➕ 添加过滤规则</h2>
+            
+            <div class="form-group">
+                <label for="ruleName">规则名称：</label>
+                <input type="text" id="ruleName" class="modal-input" placeholder="例如：敏感词过滤" />
+            </div>
+
+            <div class="form-group">
+                <label for="rulePattern">匹配类型：</label>
+                <select id="rulePatternType" class="modal-input" onchange="updatePatternHint()">
+                    <option value="contains">包含匹配 (contains)</option>
+                    <option value="exact">精确匹配 (exact)</option>
+                    <option value="startsWith">开头匹配 (startsWith)</option>
+                    <option value="endsWith">结尾匹配 (endsWith)</option>
+                    <option value="regex">正则表达式 (regex)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="rulePatternValue">匹配值：</label>
+                <input type="text" id="rulePatternValue" class="modal-input" placeholder="例如：敏感词" />
+                <p class="hint" id="patternHint">💡 包含匹配：只要文本中出现该关键词就会匹配</p>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="ruleCaseSensitive">
+                    区分大小写
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="ruleAction">处理动作：</label>
+                <select id="ruleActionType" class="modal-input" onchange="updateActionFields()">
+                    <option value="replace">替换 (replace)</option>
+                    <option value="remove">删除 (remove)</option>
+                    <option value="block">阻止 (block)</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="replacementField">
+                <label for="ruleReplacement">替换文本：</label>
+                <input type="text" id="ruleReplacement" class="modal-input" placeholder="例如：***" />
+                <p class="hint">💡 留空则删除匹配内容</p>
+            </div>
+
+            <div class="form-group">
+                <label for="ruleDescription">规则描述：</label>
+                <textarea id="ruleDescription" class="modal-input" rows="3" placeholder="描述此规则的用途..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="ruleEnabled" checked>
+                    启用此规则
+                </label>
+            </div>
+
+            <button onclick="saveRule()" class="btn btn-primary" id="saveRuleBtn">💾 保存规则</button>
+        </div>
+    </div>
+
+    <!-- 测试规则模态框 -->
+    <div id="testRuleModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('testRuleModal')">&times;</span>
+            <h2>🧪 测试过滤规则</h2>
+            
+            <div class="form-group">
+                <label for="testRuleSelect">选择规则：</label>
+                <select id="testRuleSelect" class="modal-input">
+                    <option value="">测试所有规则</option>
+                </select>
+                <p class="hint">💡 不选择则测试所有启用的规则</p>
+            </div>
+
+            <div class="form-group">
+                <label for="testText">测试文本：</label>
+                <textarea id="testText" class="modal-input" rows="5" placeholder="输入要测试的文本..."></textarea>
+            </div>
+
+            <button onclick="runTestRule()" class="btn btn-primary">🧪 开始测试</button>
+
+            <div id="testRuleResult" style="margin-top: 20px; display: none;">
+                <h3>测试结果：</h3>
+                <div class="form-group">
+                    <label>原始文本：</label>
+                    <pre id="testOriginalText" style="background: #f5f5f5; padding: 10px; border-radius: 5px;"></pre>
+                </div>
+                <div class="form-group">
+                    <label>过滤后文本：</label>
+                    <pre id="testFilteredText" style="background: #e8f5e9; padding: 10px; border-radius: 5px;"></pre>
+                </div>
+                <div class="form-group">
+                    <label>匹配信息：</label>
+                    <div id="testMatchInfo"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
+    <script src="pool-selection-ui.js"></script>
     <script src="pool-groups.js"></script>
-    <!-- 🚀 BaSui: pool-selection-ui.js 暂时禁用，功能已整合到 pool-groups.js -->
-    <!-- <script src="pool-selection-ui.js"></script> -->
+    <script src="keyword-filter-ui.js"></script>
 </body>
 </html>

@@ -1,31 +1,35 @@
 import { logDebug } from '../logger.js';
 import { getSystemPrompt, getModelReasoning } from '../config.js';
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
+import keywordFilter from '../utils/keyword-filter.js';
 
 export function transformToOpenAI(openaiRequest) {
   logDebug('Transforming OpenAI request to target OpenAI format');
   
+  // 应用关键词过滤
+  const filteredRequest = keywordFilter.filterRequest(openaiRequest);
+  
   const targetRequest = {
-    model: openaiRequest.model,
+    model: filteredRequest.model,
     input: [],
     store: false
   };
 
   // Only add stream parameter if explicitly provided by client
-  if (openaiRequest.stream !== undefined) {
-    targetRequest.stream = openaiRequest.stream;
+  if (filteredRequest.stream !== undefined) {
+    targetRequest.stream = filteredRequest.stream;
   }
 
   // Transform max_tokens to max_output_tokens
-  if (openaiRequest.max_tokens) {
-    targetRequest.max_output_tokens = openaiRequest.max_tokens;
-  } else if (openaiRequest.max_completion_tokens) {
-    targetRequest.max_output_tokens = openaiRequest.max_completion_tokens;
+  if (filteredRequest.max_tokens) {
+    targetRequest.max_output_tokens = filteredRequest.max_tokens;
+  } else if (filteredRequest.max_completion_tokens) {
+    targetRequest.max_output_tokens = filteredRequest.max_completion_tokens;
   }
 
   // Transform messages to input
-  if (openaiRequest.messages && Array.isArray(openaiRequest.messages)) {
-    for (const msg of openaiRequest.messages) {
+  if (filteredRequest.messages && Array.isArray(filteredRequest.messages)) {
+    for (const msg of filteredRequest.messages) {
       const inputMsg = {
         role: msg.role,
         content: []
@@ -65,8 +69,8 @@ export function transformToOpenAI(openaiRequest) {
   }
 
   // Transform tools if present
-  if (openaiRequest.tools && Array.isArray(openaiRequest.tools)) {
-    targetRequest.tools = openaiRequest.tools.map(tool => ({
+  if (filteredRequest.tools && Array.isArray(filteredRequest.tools)) {
+    targetRequest.tools = filteredRequest.tools.map(tool => ({
       ...tool,
       strict: false
     }));
@@ -74,7 +78,7 @@ export function transformToOpenAI(openaiRequest) {
 
   // Extract system message as instructions and prepend system prompt
   const systemPrompt = getSystemPrompt();
-  const systemMessage = openaiRequest.messages?.find(m => m.role === 'system');
+  const systemMessage = filteredRequest.messages?.find(m => m.role === 'system');
   
   if (systemMessage) {
     let userInstructions = '';
@@ -94,11 +98,11 @@ export function transformToOpenAI(openaiRequest) {
   }
 
   // Handle reasoning field based on model configuration
-  const reasoningLevel = getModelReasoning(openaiRequest.model);
+  const reasoningLevel = getModelReasoning(filteredRequest.model);
   if (reasoningLevel === 'auto') {
     // Auto mode: preserve original request's reasoning field exactly as-is
-    if (openaiRequest.reasoning !== undefined) {
-      targetRequest.reasoning = openaiRequest.reasoning;
+    if (filteredRequest.reasoning !== undefined) {
+      targetRequest.reasoning = filteredRequest.reasoning;
     }
     // If original request has no reasoning field, don't add one
   } else if (reasoningLevel && ['low', 'medium', 'high'].includes(reasoningLevel)) {
@@ -114,20 +118,20 @@ export function transformToOpenAI(openaiRequest) {
   }
 
   // Pass through other parameters
-  if (openaiRequest.temperature !== undefined) {
-    targetRequest.temperature = openaiRequest.temperature;
+  if (filteredRequest.temperature !== undefined) {
+    targetRequest.temperature = filteredRequest.temperature;
   }
-  if (openaiRequest.top_p !== undefined) {
-    targetRequest.top_p = openaiRequest.top_p;
+  if (filteredRequest.top_p !== undefined) {
+    targetRequest.top_p = filteredRequest.top_p;
   }
-  if (openaiRequest.presence_penalty !== undefined) {
-    targetRequest.presence_penalty = openaiRequest.presence_penalty;
+  if (filteredRequest.presence_penalty !== undefined) {
+    targetRequest.presence_penalty = filteredRequest.presence_penalty;
   }
-  if (openaiRequest.frequency_penalty !== undefined) {
-    targetRequest.frequency_penalty = openaiRequest.frequency_penalty;
+  if (filteredRequest.frequency_penalty !== undefined) {
+    targetRequest.frequency_penalty = filteredRequest.frequency_penalty;
   }
-  if (openaiRequest.parallel_tool_calls !== undefined) {
-    targetRequest.parallel_tool_calls = openaiRequest.parallel_tool_calls;
+  if (filteredRequest.parallel_tool_calls !== undefined) {
+    targetRequest.parallel_tool_calls = filteredRequest.parallel_tool_calls;
   }
 
   logDebug('Transformed target OpenAI request', targetRequest);

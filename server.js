@@ -162,14 +162,15 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   // ========== 单进程模式 或 Worker 进程 ==========
 
   const express = await import('express');
-  const { loadConfig, isDevMode, getPort } = await import('./config.js');
-  const { logInfo, logError } = await import('./logger.js');
+  const { loadConfig, isDevMode, getPort, getTokenSyncConfig } = await import('./config.js');
+  const { logInfo, logError, logWarning } = await import('./logger.js');
   const router = (await import('./routes.js')).default;
   const { initializeAuth } = await import('./auth.js');
   const adminRouter = (await import('./api/admin-routes.js')).default;
   const tokenUsageRouter = (await import('./api/token-usage-routes.js')).default;
   const statsRouter = (await import('./api/stats-routes.js')).default;
   const logStreamRouter = (await import('./api/log-stream-routes.js')).default;
+  const keywordFilterRouter = (await import('./api/keyword-filter-routes.js')).default;
   const statsTrackerMiddleware = (await import('./middleware/stats-tracker.js')).default;
   const { logCollectorMiddleware } = await import('./middleware/log-collector.js');
   const redisCache = (await import('./utils/redis-cache.js')).default;
@@ -193,21 +194,15 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // API访问控制中间件
   function apiKeyAuth(req, res, next) {
-    // 跳过管理API、根路径和静态文件
-    const skipPaths = [
-      '/admin',                    // 管理API
-      '/',                         // 根路径
-      '/index.html',               // HTML文件
-      '/style.css',                // CSS文件
-      '/style-enhanced.css',       // CSS文件（增强版）
-      '/app.js',                   // JS文件
-      '/pool-groups.js',           // 🆕 多级密钥池管理JS
-      '/pool-selection-ui.js',     // 🆕 密钥池选择UI JS
-      '/favicon.ico'               // 网站图标
-    ];
+    // BaSui：跳过管理API、根路径和所有静态文件（通过扩展名匹配）
+    // 管理API和根路径
+    if (req.path === '/' || req.path.startsWith('/admin') || req.path.startsWith('/factory')) {
+      return next();
+    }
 
-    // 检查是否是需要跳过的路径
-    if (skipPaths.some(path => req.path === path || req.path.startsWith('/admin') || req.path.startsWith('/factory'))) {
+    // 静态文件（通过扩展名匹配，避免硬编码每个文件名）
+    const staticFileExtensions = ['.html', '.css', '.js', '.ico', '.png', '.jpg', '.svg', '.woff', '.woff2', '.ttf'];
+    if (staticFileExtensions.some(ext => req.path.endsWith(ext))) {
       return next();
     }
 
@@ -232,6 +227,9 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
     next();
   }
+
+  // BaSui: 静态文件服务必须在API认证中间件之前，避免认证拦截
+  app.use(express.default.static('public'));
 
   // 应用API访问控制
   app.use(apiKeyAuth);
@@ -264,11 +262,13 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   // BaSui: 实时日志流API路由
   app.use('/admin', logStreamRouter);
 
+  // BaSui: 关键词过滤管理API路由
+  app.use('/admin/keyword-filter', keywordFilterRouter);
+
   // 管理API路由
   app.use('/admin', adminRouter);
 
-  // 静态文件服务 (前端管理界面)
-  app.use(express.default.static('public'));
+  // BaSui: 静态文件服务已在认证中间件之前注册（见第239行），此行已删除避免重复
 
   app.get('/', (req, res) => {
     res.json({
@@ -398,12 +398,59 @@ if (CLUSTER_MODE && cluster.isPrimary) {
         logInfo('   注意：total_requests 保持累计值，today_requests 已清零');
       });
 
-      // BaSui：启动 Token 自动同步调度器（5 分钟同步一次）
-      startTokenSyncScheduler({
-        intervalMs: 5 * 60 * 1000, // 5 分钟
-        immediate: true  // 立即执行一次同步
-      });
-      logInfo('✅ Token 自动同步调度器已启动（5 分钟间隔）');
+      // BaSui：启动 Token 自动同步调度器（从配置读取）
+      const tokenSyncConfig = getTokenSyncConfig();
+      
+      if (tokenSyncConfig.enabled) {
+        logInfo(`🔄 启动 Token 自动同步调度器（间隔: ${tokenSyncConfig.interval_minutes} 分钟）...`);
+        
+        const intervalMs = tokenSyncConfig.interval_minutes * 60 * 1000;
+        const timeoutMs = tokenSyncConfig.startup_timeout_seconds * 1000;
+        
+        if (tokenSyncConfig.on_startup && timeoutMs > 0) {
+          // 启动时等待首次同步完成
+          const syncResult = await new Promise((resolve) => {
+            // 启动调度器（立即执行一次同步）
+            startTokenSyncScheduler({
+              intervalMs: intervalMs,
+              immediate: true
+            });
+            
+            // 等待首次同步完成
+            const checkInterval = setInterval(async () => {
+              const { default: tokenSyncScheduler } = await import('./utils/token-sync-scheduler.js');
+              const status = tokenSyncScheduler.getSyncStatus();
+              
+              if (!status.inProgress && status.lastSyncTime) {
+                clearInterval(checkInterval);
+                resolve(status);
+              }
+            }, 500);
+            
+            // 超时处理
+            setTimeout(() => {
+              clearInterval(checkInterval);
+              resolve({ timeout: true });
+            }, timeoutMs);
+          });
+          
+          if (syncResult.timeout) {
+            logWarning(`⚠️ Token 首次同步超时（${tokenSyncConfig.startup_timeout_seconds}秒），服务器继续启动（后台同步将继续进行）`);
+          } else {
+            logInfo(`✅ Token 自动同步调度器已启动并完成首次同步`);
+          }
+        } else {
+          // 不等待，直接启动
+          startTokenSyncScheduler({
+            intervalMs: intervalMs,
+            immediate: tokenSyncConfig.on_startup
+          });
+          logInfo(`✅ Token 自动同步调度器已启动（${tokenSyncConfig.on_startup ? '立即同步' : '等待第一个周期'}）`);
+        }
+      } else {
+        logWarning('⚠️ Token 自动同步已禁用（TOKEN_SYNC_ENABLED=false）');
+        logInfo('💡 依赖 Token 使用量的轮询算法（如 least-token-used）将降级为简单轮询');
+      }
 
       const PORT = getPort();
 

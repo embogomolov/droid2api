@@ -59,15 +59,17 @@ router.get('/stats', wrapSync((req, res) => {
  *   - page: 页码 (默认1)
  *   - limit: 每页数量 (默认10)
  *   - status: 状态筛选 (all | active | disabled | banned, 默认all)
+ *   - poolGroup: 密钥池筛选 (all | default | 自定义池名, 默认all)
  *   - includeTokenUsage: 是否包含Token使用量信息 (true/false, 默认false)
  */
 router.get('/keys', wrapAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const status = req.query.status || 'all';
+  const poolGroup = req.query.poolGroup || 'all';
   const includeTokenUsage = req.query.includeTokenUsage === 'true';
 
-  const result = keyPoolManager.getKeys(page, limit, status);
+  const result = keyPoolManager.getKeys(page, limit, status, poolGroup);
 
   // 如果需要Token使用量信息，从token-usage数据中加载
   if (includeTokenUsage) {
@@ -186,10 +188,11 @@ router.post('/keys', wrapSync((req, res) => {
 /**
  * POST /admin/keys/batch
  * 批量导入密钥
- * Body: { keys: ["fk-xxx", "fk-yyy", ...], poolGroup: "freebies" }
+ * Body: { keys: ["fk-xxx", "fk-yyy", ...], poolGroup: "freebies", autoTest: true }
+ * autoTest: 是否自动测试新导入的未测试密钥（默认false）
  */
-router.post('/keys/batch', wrapSync((req, res) => {
-  const { keys, poolGroup } = req.body;
+router.post('/keys/batch', wrapAsync(async (req, res) => {
+  const { keys, poolGroup, autoTest } = req.body;
 
   if (!keys || !Array.isArray(keys)) {
     return sendBadRequest(res, 'Keys array is required');
@@ -199,7 +202,18 @@ router.post('/keys/batch', wrapSync((req, res) => {
 
   logInfo(`Admin batch imported keys: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid (pool: ${poolGroup || 'default'})`);
 
-  sendSuccessResponse(res, results, 'Batch import completed');
+  // BaSui：如果开启自动测试，测试新导入的未测试密钥（支持402自动拉黑）
+  let testResults = null;
+  if (autoTest && results.importedKeyIds && results.importedKeyIds.length > 0) {
+    logInfo(`Auto-testing ${results.importedKeyIds.length} newly imported keys...`);
+    testResults = await keyPoolManager.testUntestedKeys(results.importedKeyIds);
+    logInfo(`Auto-test results: ${testResults.success} success, ${testResults.failed} failed, ${testResults.banned} banned (402)`);
+  }
+
+  sendSuccessResponse(res, {
+    import: results,
+    test: testResults
+  }, 'Batch import completed' + (testResults ? ` with auto-test` : ''));
 }, 'batch import keys'));
 
 /**

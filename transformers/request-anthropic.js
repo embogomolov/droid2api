@@ -1,25 +1,32 @@
 import { logDebug } from '../logger.js';
 import { getSystemPrompt, getModelReasoning, getReasoningBudget } from '../config.js';
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
+import keywordFilter from '../utils/keyword-filter.js';
 
-export function transformToAnthropic(openaiRequest) {
+export function transformToAnthropic(openaiRequest, targetModel = null) {
   logDebug('Transforming OpenAI request to Anthropic format');
   
+  // 应用关键词过滤
+  const filteredRequest = keywordFilter.filterRequest(openaiRequest);
+  
+  // BaSui：支持模型ID映射（如 gpt-5 → claude-sonnet-4）
+  const modelId = targetModel || filteredRequest.model;
+  
   const anthropicRequest = {
-    model: openaiRequest.model,
+    model: modelId,
     messages: []
   };
 
   // Only add stream parameter if explicitly provided by client
-  if (openaiRequest.stream !== undefined) {
-    anthropicRequest.stream = openaiRequest.stream;
+  if (filteredRequest.stream !== undefined) {
+    anthropicRequest.stream = filteredRequest.stream;
   }
 
   // Handle max_tokens
-  if (openaiRequest.max_tokens) {
-    anthropicRequest.max_tokens = openaiRequest.max_tokens;
-  } else if (openaiRequest.max_completion_tokens) {
-    anthropicRequest.max_tokens = openaiRequest.max_completion_tokens;
+  if (filteredRequest.max_tokens) {
+    anthropicRequest.max_tokens = filteredRequest.max_tokens;
+  } else if (filteredRequest.max_completion_tokens) {
+    anthropicRequest.max_tokens = filteredRequest.max_completion_tokens;
   } else {
     anthropicRequest.max_tokens = 4096;
   }
@@ -27,8 +34,8 @@ export function transformToAnthropic(openaiRequest) {
   // Extract system message(s) and transform other messages
   let systemContent = [];
   
-  if (openaiRequest.messages && Array.isArray(openaiRequest.messages)) {
-    for (const msg of openaiRequest.messages) {
+  if (filteredRequest.messages && Array.isArray(filteredRequest.messages)) {
+    for (const msg of filteredRequest.messages) {
       // Handle system messages separately
       if (msg.role === 'system') {
         if (typeof msg.content === 'string') {
@@ -49,6 +56,22 @@ export function transformToAnthropic(openaiRequest) {
           }
         }
         continue; // Skip adding system messages to messages array
+      }
+
+      // BaSui：处理工具结果消息（OpenAI的tool role → Anthropic的tool_result content）
+      if (msg.role === 'tool') {
+        // OpenAI格式：{ role: "tool", content: "...", tool_call_id: "..." }
+        // Anthropic格式：在assistant消息后添加user消息，包含tool_result内容块
+        const toolResultMsg = {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: msg.tool_call_id || `toolu_${Date.now()}`,
+            content: msg.content || ''
+          }]
+        };
+        anthropicRequest.messages.push(toolResultMsg);
+        continue;
       }
 
       const anthropicMsg = {
@@ -79,6 +102,22 @@ export function transformToAnthropic(openaiRequest) {
         }
       }
 
+      // BaSui：处理assistant消息中的tool_calls（转换为tool_use内容块）
+      if (msg.role === 'assistant' && msg.tool_calls && Array.isArray(msg.tool_calls)) {
+        for (const toolCall of msg.tool_calls) {
+          if (toolCall.type === 'function') {
+            anthropicMsg.content.push({
+              type: 'tool_use',
+              id: toolCall.id || `toolu_${Date.now()}`,
+              name: toolCall.function.name,
+              input: typeof toolCall.function.arguments === 'string' 
+                ? JSON.parse(toolCall.function.arguments) 
+                : toolCall.function.arguments
+            });
+          }
+        }
+      }
+
       anthropicRequest.messages.push(anthropicMsg);
     }
   }
@@ -99,8 +138,8 @@ export function transformToAnthropic(openaiRequest) {
   }
 
   // Transform tools if present
-  if (openaiRequest.tools && Array.isArray(openaiRequest.tools)) {
-    anthropicRequest.tools = openaiRequest.tools.map(tool => {
+  if (filteredRequest.tools && Array.isArray(filteredRequest.tools)) {
+    anthropicRequest.tools = filteredRequest.tools.map(tool => {
       if (tool.type === 'function') {
         return {
           name: tool.function.name,
@@ -113,11 +152,11 @@ export function transformToAnthropic(openaiRequest) {
   }
 
   // Handle thinking field based on model configuration
-  const reasoningLevel = getModelReasoning(openaiRequest.model);
+  const reasoningLevel = getModelReasoning(filteredRequest.model);
   if (reasoningLevel === 'auto') {
     // Auto mode: preserve original request's thinking field exactly as-is
-    if (openaiRequest.thinking !== undefined) {
-      anthropicRequest.thinking = openaiRequest.thinking;
+    if (filteredRequest.thinking !== undefined) {
+      anthropicRequest.thinking = filteredRequest.thinking;
     }
     // If original request has no thinking field, don't add one
   } else if (reasoningLevel && ['low', 'medium', 'high'].includes(reasoningLevel)) {
@@ -135,16 +174,16 @@ export function transformToAnthropic(openaiRequest) {
   }
 
   // Pass through other compatible parameters
-  if (openaiRequest.temperature !== undefined) {
-    anthropicRequest.temperature = openaiRequest.temperature;
+  if (filteredRequest.temperature !== undefined) {
+    anthropicRequest.temperature = filteredRequest.temperature;
   }
-  if (openaiRequest.top_p !== undefined) {
-    anthropicRequest.top_p = openaiRequest.top_p;
+  if (filteredRequest.top_p !== undefined) {
+    anthropicRequest.top_p = filteredRequest.top_p;
   }
-  if (openaiRequest.stop !== undefined) {
-    anthropicRequest.stop_sequences = Array.isArray(openaiRequest.stop) 
-      ? openaiRequest.stop 
-      : [openaiRequest.stop];
+  if (filteredRequest.stop !== undefined) {
+    anthropicRequest.stop_sequences = Array.isArray(filteredRequest.stop) 
+      ? filteredRequest.stop 
+      : [filteredRequest.stop];
   }
 
   logDebug('Transformed Anthropic request', anthropicRequest);

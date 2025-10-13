@@ -1,4 +1,8 @@
 // ========== 🚀 BaSui：多级密钥池管理功能 (Multi-Tier Pool Groups) ==========
+// 检查依赖：确保adminKey已定义
+if (typeof adminKey === 'undefined') {
+    console.error('❌ pool-groups.js 需要在 app.js 之后加载！adminKey未定义');
+}
 
 // 全局池子数据
 let poolGroupsData = [];
@@ -394,6 +398,44 @@ function updatePoolGroupSelects() {
 
         editKeyPoolSelect.value = currentValue;
     }
+
+    // 🆕 更新导出密钥模态框的下拉框（多选）
+    const exportPoolSelect = document.getElementById('exportPoolGroup');
+    if (exportPoolSelect) {
+        const selectedValues = Array.from(exportPoolSelect.selectedOptions || []).map(option => option.value);
+        exportPoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+
+        poolGroupsData.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            exportPoolSelect.appendChild(option);
+        });
+
+        // 恢复多选框的选中状态
+        selectedValues.forEach(value => {
+            const option = exportPoolSelect.querySelector(`option[value="${value}"]`);
+            if (option) {
+                option.selected = true;
+            }
+        });
+    }
+
+    // 🆕 更新批量测试模态框的下拉框
+    const testPoolSelect = document.getElementById('testPoolGroup');
+    if (testPoolSelect) {
+        const currentValue = testPoolSelect.value;
+        testPoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+
+        poolGroupsData.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            testPoolSelect.appendChild(option);
+        });
+
+        testPoolSelect.value = currentValue;
+    }
 }
 
 /**
@@ -614,7 +656,11 @@ window.filterChanged = function() {
 /**
  * 显示导出密钥模态框
  */
-function showExportKeysModal() {
+async function showExportKeysModal() {
+    // BaSui: 先确保池子数据已加载，再更新选择器
+    if (!poolGroupsData || poolGroupsData.length === 0) {
+        await loadPoolGroups();
+    }
     updatePoolGroupSelects();
     showModal('exportKeysModal');
 }
@@ -692,7 +738,11 @@ async function confirmExportKeys() {
 /**
  * 显示批量测试模态框
  */
-function showBatchTestModal() {
+async function showBatchTestModal() {
+    // BaSui: 先确保池子数据已加载，再更新选择器
+    if (!poolGroupsData || poolGroupsData.length === 0) {
+        await loadPoolGroups();
+    }
     updatePoolGroupSelects();
     document.getElementById('testResult').innerHTML = '';
     showModal('batchTestModal');

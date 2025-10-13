@@ -5,11 +5,11 @@ let currentStatus = 'all';
 let currentPoolGroup = 'all';  // 当前选择的密钥池
 let currentPageSize = 10;  // 每页显示行数
 let currentEditKeyId = null;
-// BaSui: 批量操作相关状态（模态框内使用）
-let batchModalKeyIds = new Set(); // 模态框内选中的密钥ID
-let batchModalAllKeys = []; // 模态框内显示的所有密钥
-let batchModalFilterStatus = 'all'; // 模态框内的状态筛选
-let batchModalFilterPool = 'all'; // 模态框内的密钥池筛选
+// BaSui: 批量操作模态框状态变量
+let batchModalKeyIds = new Set();
+let batchModalAllKeys = [];
+let batchModalFilterStatus = 'all';
+let batchModalFilterPool = 'all';
 
 // BaSui：localStorage的key名称
 const STORAGE_KEY_ADMIN = 'droid2api_admin_key';
@@ -194,6 +194,7 @@ async function fetchKeys() {
         page: currentPage,
         limit: currentPageSize,
         status: currentStatus,
+        poolGroup: currentPoolGroup,  // BaSui: 密钥池筛选参数
         includeTokenUsage: 'true'  // BaSui: 包含Token使用量信息
     });
 
@@ -279,16 +280,15 @@ function renderKeysTable(keys) {
             `;
         }
 
-        // BaSui：密钥池显示（带emoji和badge样式）
+        // BaSui：密钥池显示（小字体、横向、无emoji）
         const poolGroupDisplay = key.poolGroup || 'default';
         const poolGroupBadge = poolGroupDisplay === 'default'
-            ? `<span class="pool-badge pool-default">默认池</span>`
-            : `<span class="pool-badge pool-custom">🎯 ${poolGroupDisplay}</span>`;
+            ? `<span class="pool-badge-compact pool-default">${poolGroupDisplay}</span>`
+            : `<span class="pool-badge-compact pool-custom">${poolGroupDisplay}</span>`;
 
         return `
         <tr>
-            <td><input type="checkbox" class="key-checkbox" data-key-id="${key.id}"></td>
-            <td><code>${key.id}</code></td>
+            <td><code class="key-id-short" title="${key.id}">${key.id.substring(0, 16)}...</code></td>
             <td><code>${maskKey(key.key)}</code></td>
             <td>${poolGroupBadge}</td>
             <td><span class="status-badge status-${key.status}">${getStatusText(key.status)}</span></td>
@@ -439,19 +439,8 @@ function pageSizeChanged() {
     fetchKeys();
 }
 
-// BaSui：全选/取消全选功能
-function toggleSelectAll(checkbox) {
-    const checkboxes = document.querySelectorAll('.key-checkbox');
-    checkboxes.forEach(cb => {
-        cb.checked = checkbox.checked;
-    });
-}
+// ========== 🚀 BaSui: 批量操作功能 ==========
 
-// ========== 🚀 BaSui: 批量操作模态框功能（新设计）==========
-
-/**
- * 加载密钥池列表并更新选择器
- */
 async function loadBatchModalPoolGroups() {
     try {
         const response = await apiRequest('/pool-groups');
@@ -785,7 +774,7 @@ async function executeBatchDelete(keyIds) {
     }
 }
 
-// 注意：refreshData函数在下方Factory余额管理部分重新定义（包含余额刷新）
+// 批量操作功能代码块结束
 
 // 模态框操作
 function showModal(modalId) {
@@ -796,13 +785,31 @@ function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
 }
 
-function showAddKeyModal() {
+async function showAddKeyModal() {
+    // BaSui: 先确保池子数据已加载，再打开模态框
+    if (typeof poolGroupsData !== 'undefined' && (!poolGroupsData || poolGroupsData.length === 0)) {
+        if (typeof loadPoolGroups === 'function') {
+            await loadPoolGroups();
+        }
+    }
+    if (typeof updatePoolGroupSelects === 'function') {
+        updatePoolGroupSelects();
+    }
     document.getElementById('newKeyInput').value = '';
     document.getElementById('newKeyNotes').value = '';
     showModal('addKeyModal');
 }
 
-function showBatchImportModal() {
+async function showBatchImportModal() {
+    // BaSui: 先确保池子数据已加载，再打开模态框
+    if (typeof poolGroupsData !== 'undefined' && (!poolGroupsData || poolGroupsData.length === 0)) {
+        if (typeof loadPoolGroups === 'function') {
+            await loadPoolGroups();
+        }
+    }
+    if (typeof updatePoolGroupSelects === 'function') {
+        updatePoolGroupSelects();
+    }
     document.getElementById('batchKeysInput').value = '';
     document.getElementById('importResult').innerHTML = '';
     showModal('batchImportModal');
@@ -1545,10 +1552,17 @@ function renderSuccessRateChart(keys) {
         };
     }).sort((a, b) => b.successRate - a.successRate).slice(0, 10); // 只显示前10名
 
-    const successRateHtml = keysWithRate.map((key, index) => `
+    const successRateHtml = keysWithRate.map((key, index) => {
+        const poolGroup = key.pool_group || 'default';
+        const poolBadge = `<span class="pool-badge pool-badge-${poolGroup}">${poolGroup}</span>`;
+        const rankColor = index < 3 ? ['#fbbf24', '#c0c0c0', '#cd7f32'][index] : '#6b7280';
+        
+        return `
         <div class="success-rate-item">
             <div class="success-rate-key" title="${key.key}">
-                #${index + 1} ${key.key.substring(0, 20)}...
+                <span class="rank-badge" style="background: ${rankColor};">#${index + 1}</span>
+                ${poolBadge}
+                <span class="key-text">${key.key.substring(0, 18)}...</span>
             </div>
             <div class="success-rate-value">
                 <div class="success-rate-bar">
@@ -1557,7 +1571,7 @@ function renderSuccessRateChart(keys) {
                 <div class="success-rate-text">${key.successRateText}</div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 
     document.getElementById('successRateList').innerHTML = successRateHtml;
 }
@@ -1580,14 +1594,19 @@ function renderUsageChart(keys) {
     // 按使用次数排序
     const sortedKeys = keysWithUsage.sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0)).slice(0, 8);
 
-    const usageHtml = sortedKeys.map(key => {
+    const usageHtml = sortedKeys.map((key, index) => {
         const usage = key.usage_count || 0;
         const percentage = (usage / totalUsage * 100).toFixed(1);
+        const poolGroup = key.pool_group || 'default';
+        const poolBadge = `<span class="pool-badge pool-badge-${poolGroup}">${poolGroup}</span>`;
+        const rankColor = index < 3 ? ['#fbbf24', '#c0c0c0', '#cd7f32'][index] : '#6b7280';
 
         return `
             <div class="usage-stat-item">
                 <div class="usage-stat-key" title="${key.key}">
-                    ${key.key.substring(0, 25)}...
+                    <span class="rank-badge" style="background: ${rankColor};">#${index + 1}</span>
+                    ${poolBadge}
+                    <span class="key-text">${key.key.substring(0, 18)}...</span>
                 </div>
                 <div class="usage-stat-bar-container">
                     <div class="usage-stat-bar" style="width: ${percentage}%">
@@ -1643,11 +1662,17 @@ async function renderTokenTrendChart(keys) {
                 barColor = '#fbbf24'; // 黄色（偏中等使用率）
             }
 
+            // BaSui: 添加密钥池标签和排名徽章
+            const poolGroup = keyData.pool_group || 'default';
+            const poolBadge = `<span class="pool-badge pool-badge-${poolGroup}">${poolGroup}</span>`;
+            const rankColor = index < 3 ? ['#fbbf24', '#c0c0c0', '#cd7f32'][index] : '#6b7280';
+
             return `
                 <div class="token-trend-item">
-                    <div class="token-trend-rank">#${index + 1}</div>
-                    <div class="token-trend-key" title="${keyData.key}">
-                        ${keyData.key}
+                    <div class="token-trend-header">
+                        <span class="rank-badge" style="background: ${rankColor};">#${index + 1}</span>
+                        ${poolBadge}
+                        <span class="token-trend-key" title="${keyData.key}">${keyData.key}</span>
                     </div>
                     <div class="token-trend-bar-container">
                         <div class="token-trend-bar" style="width: ${keyData.percentage}%; background: ${barColor};">
@@ -2550,7 +2575,7 @@ autoAuthenticate = function() {
             document.getElementById('logoutBtn').style.display = 'block';  // BaSui: 显示退出登录按钮
             
             // BaSui: 默认显示Dashboard，并加载Token使用量数据
-            switchTab('dashboard');
+            refreshData(true);  // BaSui: 传递true确保初始加载时显示Token和余额数据
         })
         .catch(err => {
             console.error('自动认证失败:', err);

@@ -1,13 +1,17 @@
 import { logDebug } from '../logger.js';
 import { getSystemPrompt } from '../config.js';
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
+import keywordFilter from '../utils/keyword-filter.js';
 
 export function transformToCommon(openaiRequest) {
   logDebug('Transforming OpenAI request to Common format');
   
+  // 应用关键词过滤
+  const filteredRequest = keywordFilter.filterRequest(openaiRequest);
+  
   // 基本保持 OpenAI 格式，只在 messages 前面插入 system 消息
   const commonRequest = {
-    ...openaiRequest
+    ...filteredRequest
   };
 
   const systemPrompt = getSystemPrompt();
@@ -18,8 +22,8 @@ export function transformToCommon(openaiRequest) {
     
     if (hasSystemMessage) {
       // 如果已有 system 消息，在第一个 system 消息前插入我们的 system prompt
-      commonRequest.messages = commonRequest.messages.map((msg, index) => {
-        if (msg.role === 'system' && index === commonRequest.messages.findIndex(m => m.role === 'system')) {
+      commonRequest.messages = filteredRequest.messages.map((msg, index) => {
+        if (msg.role === 'system' && index === filteredRequest.messages.findIndex(m => m.role === 'system')) {
           // 找到第一个 system 消息，前置我们的 prompt
           return {
             role: 'system',
@@ -35,7 +39,7 @@ export function transformToCommon(openaiRequest) {
           role: 'system',
           content: systemPrompt
         },
-        ...(commonRequest.messages || [])
+        ...(filteredRequest.messages || [])
       ];
     }
   }

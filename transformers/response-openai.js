@@ -5,6 +5,9 @@ export class OpenAIResponseTransformer {
     this.model = model;
     this.requestId = requestId || `chatcmpl-${Date.now()}`;
     this.created = Math.floor(Date.now() / 1000);
+    // BaSui：跟踪工具调用状态
+    this.currentToolCalls = [];
+    this.toolCallIndex = 0;
   }
 
   parseSSELine(line) {
@@ -42,12 +45,44 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
+    // BaSui：处理工具调用开始事件
+    if (eventType === 'response.tool_calls.start') {
+      const toolCall = {
+        index: this.toolCallIndex++,
+        id: eventData.id || `call_${Date.now()}`,
+        type: 'function',
+        function: {
+          name: eventData.name || '',
+          arguments: ''
+        }
+      };
+      this.currentToolCalls.push(toolCall);
+      return this.createToolCallChunk(toolCall, true);
+    }
+
+    // BaSui：处理工具调用参数增量
+    if (eventType === 'response.tool_calls.delta' || eventType === 'response.function_call.delta') {
+      const argumentsDelta = eventData.delta || eventData.arguments || '';
+      const index = eventData.index !== undefined ? eventData.index : this.toolCallIndex - 1;
+      
+      if (this.currentToolCalls[index]) {
+        this.currentToolCalls[index].function.arguments += argumentsDelta;
+        return this.createToolCallChunk(this.currentToolCalls[index], false, argumentsDelta);
+      }
+      return null;
+    }
+
+    // BaSui：处理工具调用完成
+    if (eventType === 'response.tool_calls.done' || eventType === 'response.function_call.done') {
+      return null;
+    }
+
     if (eventType === 'response.done') {
       const status = eventData.response?.status;
       let finishReason = 'stop';
       
       if (status === 'completed') {
-        finishReason = 'stop';
+        finishReason = this.currentToolCalls.length > 0 ? 'tool_calls' : 'stop';
       } else if (status === 'incomplete') {
         finishReason = 'length';
       }
@@ -80,6 +115,44 @@ export class OpenAIResponseTransformer {
     }
     if (content) {
       chunk.choices[0].delta.content = content;
+    }
+
+    return `data: ${JSON.stringify(chunk)}\n\n`;
+  }
+
+  // BaSui：创建工具调用的OpenAI格式chunk
+  createToolCallChunk(toolCall, isStart = false, argumentsDelta = '') {
+    const chunk = {
+      id: this.requestId,
+      object: 'chat.completion.chunk',
+      created: this.created,
+      model: this.model,
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: null
+        }
+      ]
+    };
+
+    if (isStart) {
+      chunk.choices[0].delta.tool_calls = [{
+        index: toolCall.index,
+        id: toolCall.id,
+        type: 'function',
+        function: {
+          name: toolCall.function.name,
+          arguments: ''
+        }
+      }];
+    } else if (argumentsDelta) {
+      chunk.choices[0].delta.tool_calls = [{
+        index: toolCall.index,
+        function: {
+          arguments: argumentsDelta
+        }
+      }];
     }
 
     return `data: ${JSON.stringify(chunk)}\n\n`;

@@ -92,7 +92,8 @@ function getDefaultConfigFromEnv() {
       },
       performance: {
         concurrentLimit: parseInt(process.env.KEY_POOL_CONCURRENT_LIMIT) || 100,
-        requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || 10000
+        requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || 10000,
+        factoryApiConcurrency: parseInt(process.env.FACTORY_API_CONCURRENCY) || 100
       },
       multiTier: {
         enabled: parseBool(process.env.KEY_POOL_MULTI_TIER_ENABLED, true),
@@ -111,6 +112,12 @@ function getDefaultConfigFromEnv() {
     balance_sync: {
       sync_interval_minutes: parseInt(process.env.SYNC_INTERVAL_MINUTES) || 30,
       save_interval_minutes: parseInt(process.env.BALANCE_SAVE_INTERVAL_MINUTES) || 5
+    },
+    token_sync: {
+      enabled: parseBool(process.env.TOKEN_SYNC_ENABLED, true),
+      interval_minutes: parseInt(process.env.TOKEN_SYNC_INTERVAL_MINUTES) || 5,
+      on_startup: parseBool(process.env.TOKEN_SYNC_ON_STARTUP, true),
+      startup_timeout_seconds: parseInt(process.env.TOKEN_SYNC_STARTUP_TIMEOUT_SECONDS) || 10
     },
     redis: {
       enabled: parseBool(process.env.REDIS_ENABLED, false),
@@ -253,6 +260,17 @@ export function getMaxJsonLogSize() {
 }
 
 // 获取密钥池配置（完整版，支持所有环境变量覆盖）
+/**
+ * 获取Factory API并发配置
+ */
+export function getFactoryApiConcurrency() {
+  const cfg = getConfig();
+  const keyPoolCfg = cfg.key_pool || {};
+  return parseInt(process.env.FACTORY_API_CONCURRENCY) || 
+         keyPoolCfg?.performance?.factoryApiConcurrency || 
+         100; // 默认并发数100，与其他批量操作保持一致
+}
+
 export function getKeyPoolConfig() {
   const cfg = getConfig();
   const keyPoolCfg = cfg.key_pool || {};
@@ -285,7 +303,8 @@ export function getKeyPoolConfig() {
     // 性能配置
     performance: {
       concurrentLimit: parseInt(process.env.KEY_POOL_CONCURRENT_LIMIT) || keyPoolCfg.performance?.concurrentLimit || 100,
-      requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || keyPoolCfg.performance?.requestTimeout || 10000
+      requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || keyPoolCfg.performance?.requestTimeout || 10000,
+      factoryApiConcurrency: parseInt(process.env.FACTORY_API_CONCURRENCY) || keyPoolCfg.performance?.factoryApiConcurrency || 100
     },
 
     // 🚀 BaSui：多级密钥池配置（Multi-Tier Pool）
@@ -323,6 +342,23 @@ export function getBalanceSyncConfig() {
   return {
     sync_interval_minutes: parseInt(process.env.SYNC_INTERVAL_MINUTES) || cfg.balance_sync?.sync_interval_minutes || 30,
     save_interval_minutes: parseInt(process.env.BALANCE_SAVE_INTERVAL_MINUTES) || cfg.balance_sync?.save_interval_minutes || 5
+  };
+}
+
+// 🆕 获取Token自动同步配置
+export function getTokenSyncConfig() {
+  const cfg = getConfig();
+  
+  const parseBool = (envVar, defaultValue) => {
+    if (!envVar) return defaultValue;
+    return envVar.toLowerCase() === 'true' || envVar === '1';
+  };
+  
+  return {
+    enabled: parseBool(process.env.TOKEN_SYNC_ENABLED, cfg.token_sync?.enabled ?? true),
+    interval_minutes: parseInt(process.env.TOKEN_SYNC_INTERVAL_MINUTES) || cfg.token_sync?.interval_minutes || 5,
+    on_startup: parseBool(process.env.TOKEN_SYNC_ON_STARTUP, cfg.token_sync?.on_startup ?? true),
+    startup_timeout_seconds: parseInt(process.env.TOKEN_SYNC_STARTUP_TIMEOUT_SECONDS) || cfg.token_sync?.startup_timeout_seconds || 10
   };
 }
 

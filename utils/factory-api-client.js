@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { logDebug, logError, logInfo } from '../logger.js';
+import { getFactoryApiConcurrency } from '../config.js';
 
 /**
  * Factory AI API 客户端
@@ -122,7 +123,7 @@ export async function fetchTokenUsage(apiKey, options = {}) {
   }
 
   try {
-    logInfo('开始查询Factory密钥余额和使用量');
+    logDebug('开始查询Factory密钥余额和使用量');
 
     // 并行调用两个API
     const [orgResult, usageResult] = await Promise.allSettled([
@@ -200,7 +201,7 @@ export async function fetchTokenUsage(apiKey, options = {}) {
     }
 
     // 成功响应 - 合并数据
-    logInfo('成功获取Factory密钥余额和使用量');
+    logDebug('成功获取Factory密钥余额和使用量');
 
     const usage = usageBody.usage || {};
 
@@ -277,12 +278,13 @@ export async function fetchTokenUsage(apiKey, options = {}) {
  * @returns {Promise<Array>} 查询结果列表
  */
 export async function batchFetchTokenUsage(keys, options = {}) {
-  const { concurrency = 10, onProgress } = options;
+  // 从配置中获取并发数，如果没有传入则使用配置值
+  const { concurrency = getFactoryApiConcurrency(), onProgress } = options;
 
   const results = [];
   const total = keys.length;
 
-  logInfo(`开始批量查询 ${total} 个密钥的token使用量(并发数:${concurrency})`);
+  logDebug(`开始批量查询 ${total} 个密钥的token使用量(并发数:${concurrency})`);
 
   // 按批次处理
   for (let i = 0; i < keys.length; i += concurrency) {
@@ -338,7 +340,7 @@ export async function batchFetchTokenUsage(keys, options = {}) {
     }
   }
 
-  logInfo(`批量查询完成: ${results.filter(r => r.success).length}/${total} 成功`);
+  logDebug(`批量查询完成: ${results.filter(r => r.success).length}/${total} 成功`);
   return results;
 }
 

@@ -425,13 +425,41 @@ router.post('/sync', wrapAsync(async (req, res) => {
  * GET /admin/token/trend
  * 获取Token使用趋势数据（7天）
  * 返回每个密钥的使用趋势和总体趋势
+ * 
+ * Query参数:
+ * - poolGroup: 密钥池筛选（可选）
+ * - limit: 返回数量限制（默认10）
  */
 router.get('/trend', wrapSync((req, res) => {
   const data = loadTokenUsageData();
+  const poolGroupFilter = req.query.poolGroup; // 密钥池筛选
+  const limit = parseInt(req.query.limit) || 10; // 默认返回10条
+
+  // 获取所有密钥信息（用于密钥池筛选）
+  const allKeys = keyPoolManager.keys || [];
+  const keyIdToPoolMap = {};
+  allKeys.forEach(key => {
+    keyIdToPoolMap[key.id] = key.pool_group || 'default';
+  });
 
   // 提取所有密钥的使用数据
-  const keysData = Object.entries(data.keys || {})
-    .filter(([_, keyData]) => keyData && keyData.success && keyData.standard)
+  let keysData = Object.entries(data.keys || {})
+    .filter(([keyId, keyData]) => {
+      // 基础数据验证
+      if (!keyData || !keyData.success || !keyData.standard) {
+        return false;
+      }
+      
+      // BaSui: 密钥池筛选
+      if (poolGroupFilter) {
+        const keyPoolGroup = keyIdToPoolMap[keyId] || 'default';
+        if (keyPoolGroup !== poolGroupFilter) {
+          return false;
+        }
+      }
+      
+      return true;
+    })
     .map(([keyId, keyData]) => {
       // 安全获取密钥字符串（可能是对象）
       let keyStr = '';
@@ -441,9 +469,13 @@ router.get('/trend', wrapSync((req, res) => {
         keyStr = keyData.key.key;
       }
       
+      // 获取密钥池信息
+      const poolGroup = keyIdToPoolMap[keyId] || 'default';
+      
       return {
         id: keyId,
         key: keyStr.length > 20 ? keyStr.substring(0, 20) + '...' : keyStr,  // 脱敏显示
+        pool_group: poolGroup, // BaSui: 添加密钥池信息
         used: keyData.standard.orgTotalTokensUsed || 0,
         limit: keyData.standard.totalAllowance || 0,
         remaining: keyData.standard.remaining || 0,
@@ -453,17 +485,20 @@ router.get('/trend', wrapSync((req, res) => {
         trialEndDate: keyData.trialEndDate || null
       };
     })
-    .sort((a, b) => b.used - a.used)  // 按使用量降序
-    .slice(0, 10);  // 只返回前10个
+    .sort((a, b) => b.used - a.used);  // 按使用量降序
+
+  // BaSui: 应用数量限制
+  const topKeys = keysData.slice(0, limit);
 
   sendSuccessResponse(res, {
-    top_keys: keysData,
+    top_keys: topKeys, // BaSui: 使用限制后的数据
     summary: {
-      total_keys: Object.keys(data.keys || {}).length,
+      total_keys: keysData.length, // BaSui: 筛选后的密钥总数
       total_used: (data.summary && data.summary.total_used) || 0,
       total_limit: (data.summary && data.summary.total_limit) || 0,
       total_remaining: (data.summary && data.summary.total_remaining) || 0
     },
+    filter: poolGroupFilter ? { poolGroup: poolGroupFilter } : null, // BaSui: 返回筛选条件
     last_sync: (data.summary && data.summary.last_full_sync) || null
   });
 }, 'get token trend'));

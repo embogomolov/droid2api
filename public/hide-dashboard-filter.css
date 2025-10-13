@@ -1,0 +1,4 @@
+/* 隐藏仪表盘的密钥池筛选器 */
+.dashboard-filter-bar {
+    display: none !important;
+}
