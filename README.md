@@ -320,7 +320,14 @@ NODE_ENV=production                    # 运行环境
 
 ## 安装
 
-安装项目依赖：
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/your-username/droid2api.git
+cd droid2api
+```
+
+### 2. 安装依赖
 
 ```bash
 npm install
@@ -331,6 +338,28 @@ npm install
 - `node-fetch` - HTTP请求库
 
 > 💡 **首次使用必须执行 `npm install`**，之后只需要 `npm start` 启动服务即可。
+
+### 3. 初始化配置文件
+
+首次使用需要从模板创建配置文件：
+
+```bash
+# 复制配置文件模板
+cp data/config.json.example data/config.json
+
+# 复制密钥池文件模板
+cp data/key_pool.json.example data/key_pool.json
+```
+
+**说明**：
+- `config.json` - 系统配置（端口、模型、轮询算法等）
+- `key_pool.json` - 密钥池数据（初始为空）
+- 这两个文件包含敏感信息，已在 `.gitignore` 中排除，不会上传到仓库
+
+**默认配置特性**：
+- ✅ **多级密钥池**：默认启用（`multiTier.enabled: true`）
+- ✅ **自动降级**：高优先级池子用完后自动切换（`autoFallback: true`）
+- 📖 详细说明见 `data/README.md` 和 `docs/MULTI_TIER_POOL.md`
 
 ## 快速开始
 

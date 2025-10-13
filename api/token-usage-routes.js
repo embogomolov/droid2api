@@ -21,6 +21,37 @@ const router = express.Router();
 // Token使用量数据存储路径
 const TOKEN_USAGE_FILE = path.join(__dirname, '..', 'data', 'token_usage.json');
 
+/**
+ * 管理后台鉴权中间件
+ */
+function adminAuth(req, res, next) {
+  const adminKey = req.headers['x-admin-key'];
+  const expectedKey = process.env.ADMIN_ACCESS_KEY;
+
+  if (!expectedKey || expectedKey === 'your-admin-key-here') {
+    return res.status(500).json({
+      error: 'Admin key not configured',
+      message: 'Please set ADMIN_ACCESS_KEY in .env file'
+    });
+  }
+
+  if (!adminKey || adminKey !== expectedKey) {
+    logError('Unauthorized admin access attempt', {
+      ip: req.ip,
+      headers: req.headers
+    });
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Invalid admin access key'
+    });
+  }
+
+  next();
+}
+
+// 应用鉴权中间件到所有Token管理路由
+router.use(adminAuth);
+
 // 缓存有效期(毫秒) - 5分钟
 const CACHE_TTL = 5 * 60 * 1000;
 
@@ -399,33 +430,103 @@ router.get('/trend', wrapSync((req, res) => {
   const data = loadTokenUsageData();
 
   // 提取所有密钥的使用数据
-  const keysData = Object.entries(data.keys)
-    .filter(([_, keyData]) => keyData.success && keyData.standard)
-    .map(([keyId, keyData]) => ({
-      id: keyId,
-      key: keyData.key.substring(0, 20) + '...',  // 脱敏显示
-      used: keyData.standard.orgTotalTokensUsed || 0,
-      limit: keyData.standard.totalAllowance || 0,
-      remaining: keyData.standard.remaining || 0,
-      percentage: keyData.standard.totalAllowance > 0
-        ? ((keyData.standard.orgTotalTokensUsed || 0) / keyData.standard.totalAllowance * 100).toFixed(1)
-        : 0,
-      trialEndDate: keyData.trialEndDate || null
-    }))
+  const keysData = Object.entries(data.keys || {})
+    .filter(([_, keyData]) => keyData && keyData.success && keyData.standard)
+    .map(([keyId, keyData]) => {
+      // 安全获取密钥字符串（可能是对象）
+      let keyStr = '';
+      if (typeof keyData.key === 'string') {
+        keyStr = keyData.key;
+      } else if (keyData.key && keyData.key.key) {
+        keyStr = keyData.key.key;
+      }
+      
+      return {
+        id: keyId,
+        key: keyStr.length > 20 ? keyStr.substring(0, 20) + '...' : keyStr,  // 脱敏显示
+        used: keyData.standard.orgTotalTokensUsed || 0,
+        limit: keyData.standard.totalAllowance || 0,
+        remaining: keyData.standard.remaining || 0,
+        percentage: keyData.standard.totalAllowance > 0
+          ? ((keyData.standard.orgTotalTokensUsed || 0) / keyData.standard.totalAllowance * 100).toFixed(1)
+          : 0,
+        trialEndDate: keyData.trialEndDate || null
+      };
+    })
     .sort((a, b) => b.used - a.used)  // 按使用量降序
     .slice(0, 10);  // 只返回前10个
 
   sendSuccessResponse(res, {
     top_keys: keysData,
     summary: {
-      total_keys: Object.keys(data.keys).length,
-      total_used: data.summary.total_used || 0,
-      total_limit: data.summary.total_limit || 0,
-      total_remaining: data.summary.total_remaining || 0
+      total_keys: Object.keys(data.keys || {}).length,
+      total_used: (data.summary && data.summary.total_used) || 0,
+      total_limit: (data.summary && data.summary.total_limit) || 0,
+      total_remaining: (data.summary && data.summary.total_remaining) || 0
     },
-    last_sync: data.summary.last_full_sync
+    last_sync: (data.summary && data.summary.last_full_sync) || null
   });
 }, 'get token trend'));
+
+/**
+ * GET /admin/token/by-pool
+ * 获取按密钥池分组的Token使用量统计
+ * 返回每个密钥池的Token使用情况
+ */
+router.get('/by-pool', wrapSync((req, res) => {
+  const data = loadTokenUsageData();
+  
+  // 获取所有密钥信息（包括密钥池分组）
+  const allKeys = keyPoolManager.keys || [];
+  
+  // 按密钥池分组统计
+  const poolStats = {};
+  
+  allKeys.forEach(key => {
+    const poolGroup = key.poolGroup || 'default';
+    
+    // 初始化池子统计
+    if (!poolStats[poolGroup]) {
+      poolStats[poolGroup] = {
+        id: poolGroup,
+        total_used: 0,
+        total_limit: 0,
+        total_remaining: 0,
+        keys_with_data: 0,
+        total_keys: 0
+      };
+    }
+    
+    poolStats[poolGroup].total_keys++;
+    
+    // 获取该密钥的Token使用数据
+    const keyUsageData = data.keys[key.id];
+    if (keyUsageData && keyUsageData.success && keyUsageData.standard) {
+      poolStats[poolGroup].total_used += keyUsageData.standard.orgTotalTokensUsed || 0;
+      poolStats[poolGroup].total_limit += keyUsageData.standard.totalAllowance || 0;
+      poolStats[poolGroup].total_remaining += keyUsageData.standard.remaining || 0;
+      poolStats[poolGroup].keys_with_data++;
+    }
+  });
+  
+  // 计算使用百分比
+  Object.values(poolStats).forEach(pool => {
+    if (pool.total_limit > 0) {
+      pool.percentage = ((pool.total_used / pool.total_limit) * 100).toFixed(1);
+    } else {
+      pool.percentage = '0.0';
+    }
+  });
+  
+  sendSuccessResponse(res, {
+    pools: poolStats,
+    total_pools: Object.keys(poolStats).length,
+    cache_info: {
+      last_sync: data.summary.last_full_sync,
+      is_expired: isCacheExpired(data.summary.last_full_sync)
+    }
+  });
+}, 'get token usage by pool'));
 
 /**
  * DELETE /admin/token/cache

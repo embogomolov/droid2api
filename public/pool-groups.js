@@ -9,19 +9,46 @@ let currentChangePoolKeyId = null;
  */
 async function loadPoolGroups() {
     try {
-        const response = await fetch('/admin/pool-groups', {
-            headers: {
-                'x-admin-key': adminKey
-            }
-        });
+        // 并行获取密钥池统计和Token使用量统计
+        const [poolResponse, tokenResponse] = await Promise.all([
+            fetch('/admin/pool-groups', {
+                headers: { 'x-admin-key': adminKey }
+            }),
+            fetch('/admin/token/by-pool', {
+                headers: { 'x-admin-key': adminKey }
+            })
+        ]);
 
-        if (!response.ok) {
-            throw new Error(`加载池子失败: ${response.status}`);
+        if (!poolResponse.ok) {
+            throw new Error(`加载池子失败: ${poolResponse.status}`);
         }
 
-        const result = await response.json();
-        if (result.success) {
-            poolGroupsData = result.data || [];
+        const poolResult = await poolResponse.json();
+        if (poolResult.success) {
+            poolGroupsData = poolResult.data || [];
+            
+            // 如果Token统计请求成功，合并数据
+            if (tokenResponse.ok) {
+                const tokenResult = await tokenResponse.json();
+                if (tokenResult.success) {
+                    const tokenPools = tokenResult.data.pools;
+                    
+                    // 将Token统计数据合并到密钥池数据中
+                    poolGroupsData.forEach(pool => {
+                        const tokenStats = tokenPools[pool.id];
+                        if (tokenStats) {
+                            pool.token_stats = {
+                                total_used: tokenStats.total_used,
+                                total_limit: tokenStats.total_limit,
+                                total_remaining: tokenStats.total_remaining,
+                                percentage: tokenStats.percentage,
+                                keys_with_data: tokenStats.keys_with_data
+                            };
+                        }
+                    });
+                }
+            }
+            
             renderPoolGroups();
             updatePoolFilterDropdown();
             updatePoolGroupSelects();
@@ -69,6 +96,64 @@ function renderPoolGroups() {
             statusClass = 'pool-group-warning';
         }
 
+        // Token使用量显示 - 优化版
+        let tokenStatsHtml = '';
+        if (group.token_stats && group.token_stats.keys_with_data > 0) {
+            const { total_used, total_limit, total_remaining, percentage } = group.token_stats;
+            const percentNum = parseFloat(percentage);
+            let tokenColor = '#10b981';  // 绿色
+            let tokenBgColor = 'rgba(16, 185, 129, 0.1)';
+            if (percentNum > 80) {
+                tokenColor = '#ef4444';  // 红色
+                tokenBgColor = 'rgba(239, 68, 68, 0.1)';
+            } else if (percentNum > 60) {
+                tokenColor = '#f59e0b';  // 橙色
+                tokenBgColor = 'rgba(245, 158, 11, 0.1)';
+            } else if (percentNum > 40) {
+                tokenColor = '#fbbf24';  // 黄色
+                tokenBgColor = 'rgba(251, 191, 36, 0.1)';
+            }
+
+            tokenStatsHtml = `
+                <div class="pool-token-section" style="margin-top: 15px; padding: 15px; background: ${tokenBgColor}; border-radius: 12px; border: 2px solid ${tokenColor};">
+                    <div class="pool-token-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                        <span style="font-size: 20px;">💰</span>
+                        <span style="font-weight: 700; color: ${tokenColor}; font-size: 14px;">Token使用统计</span>
+                    </div>
+                    <div class="pool-token-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+                        <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 18px; font-weight: 700; color: ${tokenColor}; margin-bottom: 4px;">${formatTokens(total_used)}</div>
+                            <div style="font-size: 12px; color: #6b7280;">已使用</div>
+                        </div>
+                        <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 18px; font-weight: 700; color: #10b981; margin-bottom: 4px;">${formatTokens(total_remaining)}</div>
+                            <div style="font-size: 12px; color: #6b7280;">剩余</div>
+                        </div>
+                        <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 18px; font-weight: 700; color: #6b7280; margin-bottom: 4px;">${formatTokens(total_limit)}</div>
+                            <div style="font-size: 12px; color: #6b7280;">总额度</div>
+                        </div>
+                    </div>
+                    <div class="pool-token-progress">
+                        <div class="pool-progress-bar" style="height: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden;">
+                            <div class="pool-progress-fill" style="width: ${percentage}%; height: 100%; background: linear-gradient(90deg, ${tokenColor}, ${tokenColor}dd); transition: width 0.3s ease;"></div>
+                        </div>
+                        <div class="pool-progress-text" style="text-align: center; margin-top: 6px; font-weight: 600; color: ${tokenColor}; font-size: 13px;">⚡ 使用率：${percentage}%</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            tokenStatsHtml = `
+                <div class="pool-token-section" style="margin-top: 15px; padding: 15px; background: rgba(156, 163, 175, 0.1); border-radius: 12px; border: 2px dashed #d1d5db;">
+                    <div style="text-align: center; color: #9ca3af;">
+                        <div style="font-size: 32px; margin-bottom: 8px;">📊</div>
+                        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">暂无Token使用数据</div>
+                        <div style="font-size: 12px;">该池子的密钥尚未同步Token统计</div>
+                    </div>
+                </div>
+            `;
+        }
+
         return `
             <div class="pool-group-card ${statusClass}">
                 <div class="pool-group-header">
@@ -106,6 +191,7 @@ function renderPoolGroups() {
                     </div>
                     <div class="pool-progress-text">可用率：${usagePercent}%</div>
                 </div>
+                ${tokenStatsHtml}
                 ${group.description ? `<div class="pool-group-description">${escapeHtml(group.description)}</div>` : ''}
             </div>
         `;

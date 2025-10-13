@@ -2,7 +2,14 @@
 let adminKey = '';
 let currentPage = 1;
 let currentStatus = 'all';
+let currentPoolGroup = 'all';  // 当前选择的密钥池
+let currentPageSize = 10;  // 每页显示行数
 let currentEditKeyId = null;
+// BaSui: 批量操作相关状态（模态框内使用）
+let batchModalKeyIds = new Set(); // 模态框内选中的密钥ID
+let batchModalAllKeys = []; // 模态框内显示的所有密钥
+let batchModalFilterStatus = 'all'; // 模态框内的状态筛选
+let batchModalFilterPool = 'all'; // 模态框内的密钥池筛选
 
 // BaSui：localStorage的key名称
 const STORAGE_KEY_ADMIN = 'droid2api_admin_key';
@@ -176,13 +183,16 @@ async function fetchStats() {
     } catch (err) {
         console.error('Failed to fetch config:', err);
     }
+    
+    // BaSui：获取并更新Token和请求统计
+    await updateDashboardStats();
 }
 
 // 获取密钥列表
 async function fetchKeys() {
     const params = new URLSearchParams({
         page: currentPage,
-        limit: 10,
+        limit: currentPageSize,
         status: currentStatus,
         includeTokenUsage: 'true'  // BaSui: 包含Token使用量信息
     });
@@ -193,18 +203,27 @@ async function fetchKeys() {
     renderPagination(data.pagination);
     // BaSui：新增图表渲染
     renderCharts(data.keys);
+    // 更新总数显示
+    const totalCountEl = document.getElementById('totalKeysCount');
+    if (totalCountEl) {
+        totalCountEl.textContent = data.pagination.total || 0;
+    }
 }
 
-// 渲染密钥表格
+// 渲染密钥表格 - 优化版本，使用DocumentFragment减少重排
 function renderKeysTable(keys) {
     const tbody = document.getElementById('keysTableBody');
 
     if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="loading">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="loading-modern"><div class="loading-spinner"></div><span>暂无数据</span></td></tr>';
         return;
     }
 
-    tbody.innerHTML = keys.map(key => {
+    // 使用DocumentFragment批量插入，避免频繁DOM操作
+    const fragment = document.createDocumentFragment();
+    const tempContainer = document.createElement('tbody');
+    
+    tempContainer.innerHTML = keys.map(key => {
         // BaSui：生成测试结果的详细显示（包含状态码和中文说明）
         let testResultHtml = '';
         if (key.last_test_result === 'success') {
@@ -268,6 +287,7 @@ function renderKeysTable(keys) {
 
         return `
         <tr>
+            <td><input type="checkbox" class="key-checkbox" data-key-id="${key.id}"></td>
             <td><code>${key.id}</code></td>
             <td><code>${maskKey(key.key)}</code></td>
             <td>${poolGroupBadge}</td>
@@ -294,6 +314,15 @@ function renderKeysTable(keys) {
         </tr>
         `;
     }).join('');
+    
+    // 批量移动所有子节点到fragment
+    while (tempContainer.firstChild) {
+        fragment.appendChild(tempContainer.firstChild);
+    }
+    
+    // 一次性替换tbody内容
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
 }
 
 // 渲染分页
@@ -361,35 +390,402 @@ function escapeHtml(text) {
     return text.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 }
 
+// 防抖函数 - 减少频繁调用
+function debounce(func, wait = 300) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// 节流函数 - 限制执行频率
+function throttle(func, limit = 100) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// 优化后的fetchKeys函数（带防抖）
+const debouncedFetchKeys = debounce(fetchKeys, 300);
+
 // 页面操作
 function changePage(page) {
     currentPage = page;
-    fetchKeys();
+    debouncedFetchKeys();
 }
 
 function filterChanged() {
     currentStatus = document.getElementById('statusFilter').value;
+    currentPoolGroup = document.getElementById('poolGroupFilter').value;
     currentPage = 1;
+    debouncedFetchKeys();
+}
+
+// BaSui：每页显示行数变化
+function pageSizeChanged() {
+    const pageSizeSelect = document.getElementById('pageSizeSelect');
+    currentPageSize = parseInt(pageSizeSelect.value);
+    currentPage = 1;  // 重置到第一页
     fetchKeys();
 }
 
-async function refreshData(includeTokenUsage = false) {
+// BaSui：全选/取消全选功能
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.key-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+}
+
+// ========== 🚀 BaSui: 批量操作模态框功能（新设计）==========
+
+/**
+ * 加载密钥池列表并更新选择器
+ */
+async function loadBatchModalPoolGroups() {
     try {
-        await fetchStats();
-        await fetchKeys();
-        // BaSui：Token使用量统计改为可选，避免初始加载时401错误
-        if (includeTokenUsage) {
-            try {
-                await fetchTokenUsage();
-            } catch (err) {
-                console.error('获取Token使用量失败:', err);
-                // 不抛出错误，避免影响其他功能
-            }
+        const response = await apiRequest('/pool-groups');
+        const poolGroups = response.data || [];
+        
+        // 更新目标池选择器
+        const targetPoolSelect = document.getElementById('batchActionPoolSelect');
+        if (targetPoolSelect) {
+            targetPoolSelect.innerHTML = '<option value="">-- 请选择目标池 --</option><option value="default">默认池 (default)</option>';
+            poolGroups.forEach(group => {
+                if (group.id !== 'default') {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = `${group.name || group.id} (${group.id})`;
+                    targetPoolSelect.appendChild(option);
+                }
+            });
+        }
+        
+        // 更新筛选器的密钥池选项
+        const filterPoolSelect = document.getElementById('batchModalPoolFilter');
+        if (filterPoolSelect) {
+            filterPoolSelect.innerHTML = '<option value="all">全部池</option><option value="default">默认池</option>';
+            poolGroups.forEach(group => {
+                if (group.id !== 'default') {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = `${group.name || group.id} (${group.id})`;
+                    filterPoolSelect.appendChild(option);
+                }
+            });
         }
     } catch (err) {
-        alert('刷新失败: ' + err.message);
+        console.error('加载密钥池列表失败:', err);
+        // 失败时使用默认选项
     }
 }
+
+/**
+ * 打开批量操作模态框
+ * @param {string} actionType - 操作类型：'changePool' | 'enable' | 'disable' | 'delete'
+ */
+async function openBatchActionModal(actionType) {
+    // 清空之前的选择
+    batchModalKeyIds.clear();
+    batchModalFilterStatus = 'all';
+    batchModalFilterPool = 'all';
+    
+    // 设置模态框标题和操作类型
+    const modalTitle = {
+        'changePool': '🔄 批量改池',
+        'enable': '✅ 批量启用',
+        'disable': '⏸️ 批量禁用',
+        'delete': '🗑️ 批量删除'
+    }[actionType] || '批量操作';
+    
+    document.getElementById('batchActionModalTitle').textContent = modalTitle;
+    document.getElementById('batchActionModalType').value = actionType;
+    
+    // 显示/隐藏目标池选择器（只有改池操作需要）
+    const poolSelectorDiv = document.getElementById('batchActionPoolSelector');
+    if (poolSelectorDiv) {
+        poolSelectorDiv.style.display = actionType === 'changePool' ? 'block' : 'none';
+    }
+    
+    // 加载密钥池列表
+    await loadBatchModalPoolGroups();
+    
+    // 加载所有密钥
+    await loadBatchModalKeys();
+    
+    // 显示模态框
+    showModal('batchActionModal');
+}
+
+/**
+ * 加载批量操作模态框的密钥列表
+ */
+async function loadBatchModalKeys() {
+    try {
+        // 优化：减少一次性加载的数据量，改为100条
+        const params = new URLSearchParams({
+            page: 1,
+            limit: 100, // 减少到100条，避免性能问题
+            status: 'all',
+            includeTokenUsage: 'false'  // 不需要Token信息，减少数据传输
+        });
+        
+        const response = await apiRequest(`/keys?${params}`);
+        batchModalAllKeys = response.data.keys || [];
+        
+        // 渲染模态框内的密钥列表
+        renderBatchModalKeys();
+        updateBatchModalCount();
+    } catch (err) {
+        console.error('加载密钥列表失败:', err);
+        alert('加载密钥列表失败: ' + err.message);
+    }
+}
+
+/**
+ * 渲染批量操作模态框内的密钥列表
+ */
+function renderBatchModalKeys() {
+    // 应用筛选
+    let filteredKeys = batchModalAllKeys;
+    
+    // 按状态筛选
+    if (batchModalFilterStatus !== 'all') {
+        filteredKeys = filteredKeys.filter(k => k.status === batchModalFilterStatus);
+    }
+    
+    // 按密钥池筛选
+    if (batchModalFilterPool !== 'all') {
+        filteredKeys = filteredKeys.filter(k => (k.poolGroup || 'default') === batchModalFilterPool);
+    }
+    
+    const tbody = document.getElementById('batchModalKeysTableBody');
+    
+    if (filteredKeys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">暂无符合条件的密钥</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = filteredKeys.map(key => {
+        const checked = batchModalKeyIds.has(key.id) ? 'checked' : '';
+        const poolBadge = key.poolGroup || 'default';
+        const statusBadge = getStatusText(key.status);
+        
+        return `
+            <tr>
+                <td><input type="checkbox" class="batch-modal-checkbox" data-key-id="${key.id}" ${checked} onchange="toggleBatchModalKey('${key.id}', this.checked)"></td>
+                <td><code style="font-size: 0.85em;">${key.id}</code></td>
+                <td><code style="font-size: 0.85em;">${maskKey(key.key)}</code></td>
+                <td><span class="pool-badge">${poolBadge}</span></td>
+                <td><span class="status-badge status-${key.status}">${statusBadge}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+/**
+ * 切换批量操作模态框内的密钥选择
+ */
+function toggleBatchModalKey(keyId, checked) {
+    if (checked) {
+        batchModalKeyIds.add(keyId);
+    } else {
+        batchModalKeyIds.delete(keyId);
+    }
+    updateBatchModalCount();
+}
+
+/**
+ * 全选/取消全选（模态框内）
+ */
+function toggleBatchModalSelectAll(checked) {
+    // 获取当前筛选后的密钥
+    let filteredKeys = batchModalAllKeys;
+    
+    if (batchModalFilterStatus !== 'all') {
+        filteredKeys = filteredKeys.filter(k => k.status === batchModalFilterStatus);
+    }
+    
+    if (batchModalFilterPool !== 'all') {
+        filteredKeys = filteredKeys.filter(k => (k.poolGroup || 'default') === batchModalFilterPool);
+    }
+    
+    // 更新选中状态
+    filteredKeys.forEach(key => {
+        if (checked) {
+            batchModalKeyIds.add(key.id);
+        } else {
+            batchModalKeyIds.delete(key.id);
+        }
+    });
+    
+    // 重新渲染列表
+    renderBatchModalKeys();
+    updateBatchModalCount();
+}
+
+/**
+ * 批量操作模态框的筛选器变更
+ */
+function batchModalFilterChanged() {
+    batchModalFilterStatus = document.getElementById('batchModalStatusFilter').value;
+    batchModalFilterPool = document.getElementById('batchModalPoolFilter').value;
+    renderBatchModalKeys();
+}
+
+/**
+ * 更新批量操作模态框的选中数量显示
+ */
+function updateBatchModalCount() {
+    const count = batchModalKeyIds.size;
+    document.getElementById('batchModalSelectedCount').textContent = count;
+    
+    // 更新全选复选框状态
+    const selectAllCheckbox = document.getElementById('batchModalSelectAll');
+    if (selectAllCheckbox) {
+        // 获取当前筛选后的密钥数量
+        let filteredKeys = batchModalAllKeys;
+        if (batchModalFilterStatus !== 'all') {
+            filteredKeys = filteredKeys.filter(k => k.status === batchModalFilterStatus);
+        }
+        if (batchModalFilterPool !== 'all') {
+            filteredKeys = filteredKeys.filter(k => (k.poolGroup || 'default') === batchModalFilterPool);
+        }
+        
+        // 如果当前筛选的密钥全部被选中，则勾选全选框
+        const allSelected = filteredKeys.length > 0 && filteredKeys.every(k => batchModalKeyIds.has(k.id));
+        selectAllCheckbox.checked = allSelected;
+    }
+    
+    // 启用/禁用确认按钮
+    const confirmButton = document.getElementById('batchActionConfirmBtn');
+    if (confirmButton) {
+        confirmButton.disabled = count === 0;
+    }
+}
+
+/**
+ * 执行批量操作
+ */
+async function confirmBatchAction() {
+    const actionType = document.getElementById('batchActionModalType').value;
+    const selectedCount = batchModalKeyIds.size;
+    
+    if (selectedCount === 0) {
+        alert('请至少选择一个密钥');
+        return;
+    }
+    
+    const keyIds = Array.from(batchModalKeyIds);
+    
+    try {
+        switch (actionType) {
+            case 'changePool':
+                await executeBatchChangePool(keyIds);
+                break;
+            case 'enable':
+                await executeBatchToggleStatus(keyIds, 'active');
+                break;
+            case 'disable':
+                await executeBatchToggleStatus(keyIds, 'disabled');
+                break;
+            case 'delete':
+                await executeBatchDelete(keyIds);
+                break;
+            default:
+                alert('未知的操作类型');
+                return;
+        }
+    } catch (err) {
+        console.error('批量操作失败:', err);
+    }
+}
+
+/**
+ * 执行批量改池
+ */
+async function executeBatchChangePool(keyIds) {
+    const poolGroup = document.getElementById('batchActionPoolSelect').value;
+    
+    if (!poolGroup) {
+        alert('请选择目标密钥池');
+        return;
+    }
+    
+    if (!confirm(`确认将 ${keyIds.length} 个密钥移动到池「${poolGroup}」？`)) {
+        return;
+    }
+    
+    try {
+        const result = await apiRequest('/keys/batch-change-pool', 'PATCH', {
+            keyIds,
+            poolGroup
+        });
+        
+        alert(`✅ 批量改池成功！\n已移动 ${result.data.count} 个密钥到「${poolGroup}」`);
+        closeModal('batchActionModal');
+        refreshData();
+    } catch (err) {
+        alert('❌ 批量改池失败: ' + err.message);
+    }
+}
+
+/**
+ * 执行批量启用/禁用
+ */
+async function executeBatchToggleStatus(keyIds, status) {
+    const action = status === 'active' ? '启用' : '禁用';
+    
+    if (!confirm(`确认${action} ${keyIds.length} 个密钥？`)) {
+        return;
+    }
+    
+    try {
+        const result = await apiRequest('/keys/batch-toggle-status', 'PATCH', {
+            keyIds,
+            status
+        });
+        
+        alert(`✅ 批量${action}成功！\n已${action} ${result.data.count} 个密钥`);
+        closeModal('batchActionModal');
+        refreshData();
+    } catch (err) {
+        alert(`❌ 批量${action}失败: ` + err.message);
+    }
+}
+
+/**
+ * 执行批量删除
+ */
+async function executeBatchDelete(keyIds) {
+    if (!confirm(`⚠️ 确认删除 ${keyIds.length} 个密钥？\n删除后无法恢复！`)) {
+        return;
+    }
+    
+    try {
+        const result = await apiRequest('/keys/batch-delete', 'DELETE', {
+            keyIds
+        });
+        
+        alert(`✅ 批量删除成功！\n已删除 ${result.data.count} 个密钥`);
+        closeModal('batchActionModal');
+        refreshData();
+    } catch (err) {
+        alert('❌ 批量删除失败: ' + err.message);
+    }
+}
+
+// 注意：refreshData函数在下方Factory余额管理部分重新定义（包含余额刷新）
 
 // 模态框操作
 function showModal(modalId) {
@@ -442,6 +838,7 @@ function showEditKeyModal(keyId, key, notes, poolGroup) {
 async function addKey() {
     const key = document.getElementById('newKeyInput').value.trim();
     const notes = document.getElementById('newKeyNotes').value.trim();
+    const poolGroup = document.getElementById('newKeyPoolGroup')?.value || null;
 
     if (!key) {
         alert('请输入密钥');
@@ -454,7 +851,7 @@ async function addKey() {
     }
 
     try {
-        await apiRequest('/keys', 'POST', { key, notes });
+        await apiRequest('/keys', 'POST', { key, notes, poolGroup });
         alert('添加成功');
         closeModal('addKeyModal');
         refreshData();
@@ -854,54 +1251,151 @@ async function showConfigModal() {
 async function saveConfig() {
     try {
         const config = {
-            algorithm: document.getElementById('configAlgorithm').value,
-            retry: {
-                enabled: document.getElementById('configRetryEnabled').checked,
-                maxRetries: parseInt(document.getElementById('configRetryMaxRetries').value),
-                retryDelay: parseInt(document.getElementById('configRetryDelay').value)
+            // 基础配置
+            port: parseInt(document.getElementById('configPort').value),
+            user_agent: document.getElementById('configUserAgent').value,
+            dev_mode: document.getElementById('configDevMode').checked,
+            system_prompt: document.getElementById('configSystemPrompt').value,
+            
+            // 限制配置
+            limits: {
+                notes_max_length: parseInt(document.getElementById('configNotesMaxLength').value),
+                max_json_log_size: parseInt(document.getElementById('configMaxJsonLogSize').value)
             },
-            autoBan: {
-                enabled: document.getElementById('configAutoBanEnabled').checked,
-                errorThreshold: parseInt(document.getElementById('configAutoBanThreshold').value),
-                ban402: document.getElementById('configAutoBan402').checked,
-                ban401: document.getElementById('configAutoBan401').checked
+            
+            // 推理Token配置
+            reasoning_tokens: {
+                low: parseInt(document.getElementById('configReasoningLow').value),
+                medium: parseInt(document.getElementById('configReasoningMedium').value),
+                high: parseInt(document.getElementById('configReasoningHigh').value)
             },
-            performance: {
-                concurrentLimit: parseInt(document.getElementById('configConcurrentLimit').value),
-                requestTimeout: parseInt(document.getElementById('configRequestTimeout').value)
+            
+            // 余额同步配置
+            balance_sync: {
+                sync_interval_minutes: parseInt(document.getElementById('configSyncInterval').value),
+                save_interval_minutes: parseInt(document.getElementById('configSaveInterval').value)
             },
-            // 🚀 BaSui：添加多级密钥池配置
-            multiTier: {
-                enabled: document.getElementById('configMultiTierEnabled').checked,
-                autoFallback: document.getElementById('configMultiTierAutoFallback').checked
+            
+            // 密钥池配置
+            key_pool: {
+                algorithm: document.getElementById('configAlgorithm').value,
+                retry: {
+                    enabled: document.getElementById('configRetryEnabled').checked,
+                    maxRetries: parseInt(document.getElementById('configRetryMaxRetries').value),
+                    retryDelay: parseInt(document.getElementById('configRetryDelay').value)
+                },
+                autoBan: {
+                    enabled: document.getElementById('configAutoBanEnabled').checked,
+                    errorThreshold: parseInt(document.getElementById('configAutoBanThreshold').value),
+                    ban402: document.getElementById('configAutoBan402').checked,
+                    ban401: document.getElementById('configAutoBan401').checked
+                },
+                performance: {
+                    concurrentLimit: parseInt(document.getElementById('configConcurrentLimit').value),
+                    requestTimeout: parseInt(document.getElementById('configRequestTimeout').value)
+                },
+                multiTier: {
+                    enabled: document.getElementById('configMultiTierEnabled').checked,
+                    autoFallback: document.getElementById('configMultiTierAutoFallback').checked
+                }
+            },
+            
+            // Redis 配置
+            redis: {
+                enabled: document.getElementById('configRedisEnabled').checked,
+                host: document.getElementById('configRedisHost').value,
+                port: parseInt(document.getElementById('configRedisPort').value),
+                password: document.getElementById('configRedisPassword').value,
+                db: parseInt(document.getElementById('configRedisDb').value),
+                key_prefix: document.getElementById('configRedisKeyPrefix').value
+            },
+            
+            // 集群配置
+            cluster: {
+                enabled: document.getElementById('configClusterEnabled').checked,
+                workers: parseInt(document.getElementById('configClusterWorkers').value)
             }
         };
 
-        // BaSui：验证输入合法性，别tm给BaSui传SB数据
-        if (config.retry.maxRetries < 0 || config.retry.maxRetries > 10) {
+        // BaSui：验证输入合法性
+        if (config.port < 1 || config.port > 65535) {
+            alert('❌ 端口必须在 1-65535 之间');
+            return;
+        }
+        if (config.limits.notes_max_length < 100 || config.limits.notes_max_length > 10000) {
+            alert('❌ 备注最大长度必须在 100-10000 之间');
+            return;
+        }
+        if (config.limits.max_json_log_size < 1000 || config.limits.max_json_log_size > 50000) {
+            alert('❌ JSON日志最大长度必须在 1000-50000 之间');
+            return;
+        }
+        if (config.reasoning_tokens.low < 1024 || config.reasoning_tokens.low > 32768) {
+            alert('❌ 低级推理Token必须在 1024-32768 之间');
+            return;
+        }
+        if (config.reasoning_tokens.medium < 1024 || config.reasoning_tokens.medium > 32768) {
+            alert('❌ 中级推理Token必须在 1024-32768 之间');
+            return;
+        }
+        if (config.reasoning_tokens.high < 1024 || config.reasoning_tokens.high > 65536) {
+            alert('❌ 高级推理Token必须在 1024-65536 之间');
+            return;
+        }
+        if (config.balance_sync.sync_interval_minutes < 5 || config.balance_sync.sync_interval_minutes > 1440) {
+            alert('❌ 同步间隔必须在 5-1440分钟 之间');
+            return;
+        }
+        if (config.balance_sync.save_interval_minutes < 1 || config.balance_sync.save_interval_minutes > 60) {
+            alert('❌ 保存间隔必须在 1-60分钟 之间');
+            return;
+        }
+        if (config.key_pool.retry.maxRetries < 0 || config.key_pool.retry.maxRetries > 10) {
             alert('❌ 最大重试次数必须在 0-10 之间');
             return;
         }
-        if (config.retry.retryDelay < 0 || config.retry.retryDelay > 10000) {
+        if (config.key_pool.retry.retryDelay < 0 || config.key_pool.retry.retryDelay > 10000) {
             alert('❌ 重试延迟必须在 0-10000ms 之间');
             return;
         }
-        if (config.autoBan.errorThreshold < 1 || config.autoBan.errorThreshold > 100) {
+        if (config.key_pool.autoBan.errorThreshold < 1 || config.key_pool.autoBan.errorThreshold > 100) {
             alert('❌ 错误阈值必须在 1-100 之间');
             return;
         }
-        if (config.performance.concurrentLimit < 1 || config.performance.concurrentLimit > 1000) {
+        if (config.key_pool.performance.concurrentLimit < 1 || config.key_pool.performance.concurrentLimit > 1000) {
             alert('❌ 并发限制必须在 1-1000 之间');
             return;
         }
-        if (config.performance.requestTimeout < 1000 || config.performance.requestTimeout > 60000) {
+        if (config.key_pool.performance.requestTimeout < 1000 || config.key_pool.performance.requestTimeout > 60000) {
             alert('❌ 请求超时必须在 1000-60000ms 之间');
+            return;
+        }
+        if (config.redis.port < 1 || config.redis.port > 65535) {
+            alert('❌ Redis端口必须在 1-65535 之间');
+            return;
+        }
+        if (config.redis.db < 0 || config.redis.db > 15) {
+            alert('❌ Redis数据库编号必须在 0-15 之间');
+            return;
+        }
+        if (config.cluster.workers < 0 || config.cluster.workers > 32) {
+            alert('❌ Worker进程数必须在 0-32 之间');
             return;
         }
 
         await apiRequest('/config', 'PUT', config);
-        alert('✅ 配置保存成功！');
-        closeModal('configModal');
+        
+        // 检查是否修改了需要重启的配置
+        const needsRestart = config.port !== originalPort || 
+                           config.redis.enabled !== originalRedisEnabled ||
+                           config.cluster.enabled !== originalClusterEnabled;
+        
+        if (needsRestart) {
+            alert('✅ 配置保存成功！\n\n⚠️ 重要提示：\n- 端口修改需重启服务器\n- Redis 配置修改需重启服务器\n- 集群模式配置修改需重启服务器');
+        } else {
+            alert('✅ 配置保存成功！');
+        }
+        
         refreshData(); // 刷新统计信息以显示新算法
     } catch (err) {
         alert('❌ 保存配置失败\n\n' + err.message);
@@ -947,15 +1441,24 @@ function getAlgorithmText(algorithm) {
     return map[algorithm] || algorithm;
 }
 
-// BaSui：新增图表渲染功能
+// BaSui：新增图表渲染功能（优化版）
 /**
- * 渲染所有统计图表
+ * 渲染所有统计图表 - 使用requestAnimationFrame优化
  */
 function renderCharts(keys) {
-    renderStatusChart(keys);
-    renderSuccessRateChart(keys);
-    renderUsageChart(keys);
-    renderTokenTrendChart(keys);
+    // 使用requestAnimationFrame优化渲染顺序
+    requestAnimationFrame(() => {
+        renderStatusChart(keys);
+        requestAnimationFrame(() => {
+            renderSuccessRateChart(keys);
+            requestAnimationFrame(() => {
+                renderUsageChart(keys);
+                requestAnimationFrame(() => {
+                    renderTokenTrendChart(keys);
+                });
+            });
+        });
+    });
 }
 
 /**
@@ -1264,40 +1767,42 @@ function formatTokenNumber(num) {
 
 // 更新主要统计信息
 function updateMainStats(totalTokens, totalRequests, todayTokens, todayRequests) {
-    // 查找或创建Token统计显示区域
-    let statsContainer = document.querySelector('.token-stats-container');
-    if (!statsContainer) {
-        // 在stats-container后面添加Token统计
-        const mainStatsContainer = document.querySelector('.stats-container');
-        if (mainStatsContainer) {
-            statsContainer = document.createElement('div');
-            statsContainer.className = 'token-stats-container';
-            statsContainer.innerHTML = `
-                <div class="stat-card stat-primary">
-                    <div class="stat-value" id="totalTokens">${formatTokenNumber(totalTokens)}</div>
-                    <div class="stat-label">总Token使用</div>
-                </div>
-                <div class="stat-card stat-info">
-                    <div class="stat-value" id="todayTokens">${formatTokenNumber(todayTokens)}</div>
-                    <div class="stat-label">今日Token</div>
-                </div>
-                <div class="stat-card stat-success">
-                    <div class="stat-value" id="totalRequests">${formatNumber(totalRequests)}</div>
-                    <div class="stat-label">总请求数</div>
-                </div>
-                <div class="stat-card stat-warning">
-                    <div class="stat-value" id="todayRequests">${todayRequests}</div>
-                    <div class="stat-label">今日请求</div>
-                </div>
-            `;
-            mainStatsContainer.parentNode.insertBefore(statsContainer, mainStatsContainer.nextSibling);
+    // BaSui：直接更新HTML中已有的元素（美化版仪表盘）
+    const tokenUsedEl = document.getElementById('statTokenUsed');
+    const tokenTodayEl = document.getElementById('statTokenToday');
+    const totalRequestsEl = document.getElementById('statTotalRequests');
+    const todayRequestsEl = document.getElementById('statTodayRequests');
+    
+    if (tokenUsedEl) tokenUsedEl.textContent = formatTokenNumber(totalTokens);
+    if (tokenTodayEl) tokenTodayEl.textContent = formatTokenNumber(todayTokens);
+    if (totalRequestsEl) totalRequestsEl.textContent = formatNumber(totalRequests);
+    if (todayRequestsEl) todayRequestsEl.textContent = todayRequests;
+}
+
+// BaSui：新增独立的仪表盘统计更新函数
+async function updateDashboardStats() {
+    try {
+        // 并行请求Token和请求统计数据
+        const response = await fetch('/admin/stats/summary', {
+            headers: {
+                'x-admin-key': adminKey
+            }
+        });
+
+        if (!response.ok) {
+            console.warn('获取统计数据失败:', response.status);
+            return;
         }
-    } else {
-        // 更新已有的显示
-        document.getElementById('totalTokens').textContent = formatTokenNumber(totalTokens);
-        document.getElementById('todayTokens').textContent = formatTokenNumber(todayTokens);
-        document.getElementById('totalRequests').textContent = formatNumber(totalRequests);
-        document.getElementById('todayRequests').textContent = todayRequests;
+
+        const result = await response.json();
+        if (result.success && result.data) {
+            const { total_tokens = 0, total_requests = 0, today_tokens = 0, today_requests = 0 } = result.data;
+            updateMainStats(total_tokens, total_requests, today_tokens, today_requests);
+        }
+    } catch (err) {
+        console.error('更新仪表盘统计失败:', err);
+        // 失败时显示为0，避免影响用户体验
+        updateMainStats(0, 0, 0, 0);
     }
 }
 
@@ -1491,62 +1996,6 @@ async function checkAllBalances(forceRefresh = false) {
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
-    }
-}
-
-// 更新余额显示
-function updateBalanceDisplay() {
-    // 计算总余额
-    let totalBalance = 0;
-    let openaiBalance = 0;
-    let anthropicBalance = 0;
-    let glmBalance = 0;
-    let factoryBalance = 0;
-    let factoryCredits = 0;
-
-    balanceData.forEach(item => {
-        if (item.balance && item.balance.success) {
-            const provider = item.balance.provider || item.provider;
-
-            if (provider === 'openai') {
-                const available = parseFloat(item.balance.balance?.total_available) || 0;
-                openaiBalance += available;
-                totalBalance += available;
-            } else if (provider === 'anthropic') {
-                const available = parseFloat(item.balance.balance?.total_available) || 0;
-                anthropicBalance += available;
-                totalBalance += available;
-            } else if (provider === 'glm') {
-                const available = parseFloat(item.balance.balance?.remaining_balance) || 0;
-                glmBalance += available;
-                totalBalance += available / 7; // 简单汇率转换CNY to USD
-            } else if (provider === 'factory') {
-                if (item.balance.balance) {
-                    if (item.balance.balance.remaining_credits !== undefined) {
-                        factoryCredits += item.balance.balance.remaining_credits || 0;
-                    } else if (item.balance.balance.total_balance !== undefined) {
-                        factoryBalance += parseFloat(item.balance.balance.total_balance) || 0;
-                        totalBalance += factoryBalance;
-                    }
-                }
-            }
-        }
-    });
-
-    // 更新统计卡片（如果有余额显示区域）
-    const balanceCard = document.getElementById('balanceCard');
-    if (balanceCard) {
-        balanceCard.innerHTML = `
-            <div class="stat-value">$${totalBalance.toFixed(2)}</div>
-            <div class="stat-label">总余额</div>
-            <div class="balance-details">
-                ${openaiBalance > 0 ? `<div>OpenAI: $${openaiBalance.toFixed(2)}</div>` : ''}
-                ${anthropicBalance > 0 ? `<div>Anthropic: $${anthropicBalance.toFixed(2)}</div>` : ''}
-                ${glmBalance > 0 ? `<div>GLM: ¥${glmBalance.toFixed(2)}</div>` : ''}
-                ${factoryBalance > 0 ? `<div>Factory: $${factoryBalance.toFixed(2)}</div>` : ''}
-                ${factoryCredits > 0 ? `<div>Factory: ${factoryCredits} credits</div>` : ''}
-            </div>
-        `;
     }
 }
 
@@ -1956,6 +2405,11 @@ function switchTab(tabName) {
     }
 }
 
+// 保存原始配置用于检测变化
+let originalPort = 3000;
+let originalRedisEnabled = false;
+let originalClusterEnabled = false;
+
 /**
  * 加载配置数据到配置页面表单
  */
@@ -1964,30 +2418,62 @@ async function loadConfigData() {
         const response = await apiRequest('/config');
         const config = response.data;
 
-        // 填充表单
-        document.getElementById('configAlgorithm').value = config.algorithm;
+        // 保存原始配置
+        originalPort = config.port || 3000;
+        originalRedisEnabled = config.redis?.enabled || false;
+        originalClusterEnabled = config.cluster?.enabled || false;
 
-        document.getElementById('configRetryEnabled').checked = config.retry.enabled;
-        document.getElementById('configRetryMaxRetries').value = config.retry.maxRetries;
-        document.getElementById('configRetryDelay').value = config.retry.retryDelay;
+        // 基础配置
+        document.getElementById('configPort').value = config.port || 3000;
+        document.getElementById('configUserAgent').value = config.user_agent || 'factory-cli/0.19.3';
+        document.getElementById('configDevMode').checked = config.dev_mode || false;
+        document.getElementById('configSystemPrompt').value = config.system_prompt || '';
 
-        document.getElementById('configAutoBanEnabled').checked = config.autoBan.enabled;
-        document.getElementById('configAutoBanThreshold').value = config.autoBan.errorThreshold;
-        document.getElementById('configAutoBan402').checked = config.autoBan.ban402;
-        document.getElementById('configAutoBan401').checked = config.autoBan.ban401;
+        // 限制配置
+        document.getElementById('configNotesMaxLength').value = config.limits?.notes_max_length || 1000;
+        document.getElementById('configMaxJsonLogSize').value = config.limits?.max_json_log_size || 5000;
 
-        document.getElementById('configConcurrentLimit').value = config.performance.concurrentLimit;
-        document.getElementById('configRequestTimeout').value = config.performance.requestTimeout;
+        // 推理Token配置
+        document.getElementById('configReasoningLow').value = config.reasoning_tokens?.low || 4096;
+        document.getElementById('configReasoningMedium').value = config.reasoning_tokens?.medium || 12288;
+        document.getElementById('configReasoningHigh').value = config.reasoning_tokens?.high || 24576;
 
-        // 🚀 BaSui：加载多级密钥池配置（如果存在）
-        if (config.multiTier) {
-            document.getElementById('configMultiTierEnabled').checked = config.multiTier.enabled || false;
-            document.getElementById('configMultiTierAutoFallback').checked = config.multiTier.autoFallback !== false; // 默认true
-        } else {
-            // 如果配置中没有multiTier字段，使用默认值
-            document.getElementById('configMultiTierEnabled').checked = false;
-            document.getElementById('configMultiTierAutoFallback').checked = true;
-        }
+        // 余额同步配置
+        document.getElementById('configSyncInterval').value = config.balance_sync?.sync_interval_minutes || 30;
+        document.getElementById('configSaveInterval').value = config.balance_sync?.save_interval_minutes || 5;
+
+        // 密钥池配置
+        const keyPool = config.key_pool || {};
+        document.getElementById('configAlgorithm').value = keyPool.algorithm || 'round-robin';
+
+        document.getElementById('configRetryEnabled').checked = keyPool.retry?.enabled ?? true;
+        document.getElementById('configRetryMaxRetries').value = keyPool.retry?.maxRetries || 3;
+        document.getElementById('configRetryDelay').value = keyPool.retry?.retryDelay || 1000;
+
+        document.getElementById('configAutoBanEnabled').checked = keyPool.autoBan?.enabled ?? true;
+        document.getElementById('configAutoBanThreshold').value = keyPool.autoBan?.errorThreshold || 5;
+        document.getElementById('configAutoBan402').checked = keyPool.autoBan?.ban402 ?? true;
+        document.getElementById('configAutoBan401').checked = keyPool.autoBan?.ban401 ?? false;
+
+        document.getElementById('configConcurrentLimit').value = keyPool.performance?.concurrentLimit || 100;
+        document.getElementById('configRequestTimeout').value = keyPool.performance?.requestTimeout || 10000;
+
+        document.getElementById('configMultiTierEnabled').checked = keyPool.multiTier?.enabled || false;
+        document.getElementById('configMultiTierAutoFallback').checked = keyPool.multiTier?.autoFallback ?? true;
+
+        // Redis 配置
+        const redis = config.redis || {};
+        document.getElementById('configRedisEnabled').checked = redis.enabled || false;
+        document.getElementById('configRedisHost').value = redis.host || '127.0.0.1';
+        document.getElementById('configRedisPort').value = redis.port || 6379;
+        document.getElementById('configRedisPassword').value = redis.password || '';
+        document.getElementById('configRedisDb').value = redis.db || 0;
+        document.getElementById('configRedisKeyPrefix').value = redis.key_prefix || 'droid2api:';
+
+        // 集群配置
+        const cluster = config.cluster || {};
+        document.getElementById('configClusterEnabled').checked = cluster.enabled || false;
+        document.getElementById('configClusterWorkers').value = cluster.workers || 0;
     } catch (err) {
         console.error('加载配置失败:', err);
         alert('❌ 加载配置失败\n\n' + err.message);
@@ -2303,10 +2789,17 @@ function renderLogEntry(logEntry) {
     // 添加到DOM
     logList.appendChild(logDiv);
 
-    // 限制最大显示条数（防止内存爆炸）
-    const maxLogs = 500;
+    // 优化：减少最大日志条数，及时清理DOM和内存
+    const maxLogs = 100;  // 从500减少到100
     if (logList.children.length > maxLogs) {
-        logList.removeChild(logList.firstChild);
+        // 批量删除旧日志，减少DOM操作
+        const removeCount = logList.children.length - maxLogs + 10; // 多删除10条
+        for (let i = 0; i < removeCount; i++) {
+            const firstChild = logList.firstChild;
+            if (firstChild) {
+                logList.removeChild(firstChild);
+            }
+        }
     }
 }
 

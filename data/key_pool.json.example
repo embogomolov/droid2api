@@ -1,0 +1,39 @@
+{
+  "keys": [],
+  "stats": {
+    "total": 0,
+    "active": 0,
+    "disabled": 0,
+    "banned": 0
+  },
+  "poolGroups": [
+    {
+      "id": "default",
+      "name": "默认池",
+      "priority": 100,
+      "description": "默认密钥池，所有未分配到其他池子的密钥都在这里"
+    }
+  ],
+  "config": {
+    "algorithm": "round-robin",
+    "retry": {
+      "enabled": true,
+      "maxRetries": 3,
+      "retryDelay": 1000
+    },
+    "autoBan": {
+      "enabled": true,
+      "errorThreshold": 5,
+      "ban402": true,
+      "ban401": false
+    },
+    "performance": {
+      "concurrentLimit": 100,
+      "requestTimeout": 10000
+    },
+    "multiTier": {
+      "enabled": true,
+      "autoFallback": true
+    }
+  }
+}

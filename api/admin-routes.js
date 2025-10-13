@@ -1,7 +1,7 @@
 import express from 'express';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
-import { getNotesMaxLength } from '../config.js';
+import { getNotesMaxLength, getConfig, updateConfig as updateFullConfig } from '../config.js';
 import {
   sendSuccessResponse,
   sendErrorResponse,
@@ -186,18 +186,18 @@ router.post('/keys', wrapSync((req, res) => {
 /**
  * POST /admin/keys/batch
  * 批量导入密钥
- * Body: { keys: ["fk-xxx", "fk-yyy", ...] }
+ * Body: { keys: ["fk-xxx", "fk-yyy", ...], poolGroup: "freebies" }
  */
 router.post('/keys/batch', wrapSync((req, res) => {
-  const { keys } = req.body;
+  const { keys, poolGroup } = req.body;
 
   if (!keys || !Array.isArray(keys)) {
     return sendBadRequest(res, 'Keys array is required');
   }
 
-  const results = keyPoolManager.importKeys(keys);
+  const results = keyPoolManager.importKeys(keys, poolGroup || null);
 
-  logInfo(`Admin batch imported keys: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid`);
+  logInfo(`Admin batch imported keys: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid (pool: ${poolGroup || 'default'})`);
 
   sendSuccessResponse(res, results, 'Batch import completed');
 }, 'batch import keys'));
@@ -370,43 +370,81 @@ router.post('/keys/test-all', wrapAsync(async (req, res) => {
 
 /**
  * GET /admin/config
- * 获取当前轮询配置
- * 返回: { algorithm, retry, autoBan, performance }
+ * 获取完整系统配置（从 data/config.json）
+ * 返回: 完整的 config.json 对象
  */
 router.get('/config', wrapSync((req, res) => {
-  const config = keyPoolManager.getConfig();
-  sendSuccessResponse(res, config);
+  const fullConfig = getConfig();
+  sendSuccessResponse(res, fullConfig);
 }, 'get config'));
 
 /**
+ * GET /admin/config/key-pool
+ * 获取密钥池配置（仅 key_pool 部分，用于向后兼容）
+ * 返回: { algorithm, retry, autoBan, performance, multiTier }
+ */
+router.get('/config/key-pool', wrapSync((req, res) => {
+  const keyPoolConfig = keyPoolManager.getConfig();
+  sendSuccessResponse(res, keyPoolConfig);
+}, 'get key pool config'));
+
+/**
  * PUT /admin/config
- * 更新轮询配置（支持部分更新）
- * Body: { algorithm?, retry?, autoBan?, performance? }
+ * 更新完整系统配置（支持部分更新，深度合并）
+ * Body: 任何 config.json 的字段，例如：
+ *   { port: 3000, dev_mode: true, key_pool: { algorithm: "random" } }
  */
 router.put('/config', wrapSync((req, res) => {
+  const updates = req.body;
+
+  if (!updates || Object.keys(updates).length === 0) {
+    return sendBadRequest(res, 'Config data is required');
+  }
+
+  // 如果只更新 key_pool 配置，使用 keyPoolManager 的方法（保持向后兼容）
+  if (Object.keys(updates).length === 1 && updates.key_pool) {
+    const updatedConfig = keyPoolManager.updateConfig(updates.key_pool);
+    logInfo('Admin updated key_pool config', { changes: updates.key_pool });
+    return sendSuccessResponse(res, { key_pool: updatedConfig }, 'Key pool config updated successfully');
+  }
+
+  // 更新完整配置
+  const updatedFullConfig = updateFullConfig(updates);
+
+  logInfo('Admin updated full config', { changes: updates });
+
+  sendSuccessResponse(res, updatedFullConfig, 'Config updated successfully');
+}, 'update config'));
+
+/**
+ * PUT /admin/config/key-pool
+ * 更新密钥池配置（仅 key_pool 部分）
+ * Body: { algorithm?, retry?, autoBan?, performance?, multiTier? }
+ */
+router.put('/config/key-pool', wrapSync((req, res) => {
   const newConfig = req.body;
 
   if (!newConfig || Object.keys(newConfig).length === 0) {
-    return sendBadRequest(res, 'Config data is required');
+    return sendBadRequest(res, 'Key pool config data is required');
   }
 
   const updatedConfig = keyPoolManager.updateConfig(newConfig);
 
-  logInfo('Admin updated config', { changes: newConfig });
+  logInfo('Admin updated key_pool config', { changes: newConfig });
 
-  sendSuccessResponse(res, updatedConfig, 'Config updated successfully');
-}, 'update config'));
+  sendSuccessResponse(res, updatedConfig, 'Key pool config updated successfully');
+}, 'update key pool config'));
 
 /**
  * POST /admin/config/reset
- * 重置轮询配置为默认值
+ * 重置密钥池配置为默认值
  */
 router.post('/config/reset', wrapSync((req, res) => {
   const defaultConfig = keyPoolManager.resetConfig();
 
-  logInfo('Admin reset config to defaults');
+  logInfo('Admin reset key_pool config to defaults');
 
-  sendSuccessResponse(res, defaultConfig, 'Config reset to defaults');
+  sendSuccessResponse(res, defaultConfig, 'Key pool config reset to defaults');
 }, 'reset config'));
 
 /**
@@ -529,5 +567,117 @@ router.patch('/keys/:id/pool', wrapSync((req, res) => {
 
   sendSuccessResponse(res, key, 'Key pool changed successfully');
 }, 'change key pool'));
+
+// ========== 🚀 BaSui：批量操作 API ==========
+
+/**
+ * PATCH /admin/keys/batch-change-pool
+ * 批量修改密钥池
+ * Body: { keyIds: ["key1", "key2", ...], poolGroup: "main" }
+ */
+router.patch('/keys/batch-change-pool', wrapSync((req, res) => {
+  const { keyIds, poolGroup } = req.body;
+
+  if (!keyIds || !Array.isArray(keyIds) || keyIds.length === 0) {
+    return sendBadRequest(res, 'keyIds array is required and must not be empty');
+  }
+
+  if (!poolGroup) {
+    return sendBadRequest(res, 'poolGroup is required');
+  }
+
+  let count = 0;
+  const errors = [];
+
+  keyIds.forEach(keyId => {
+    try {
+      const key = keyPoolManager.getKey(keyId);
+      if (key) {
+        key.poolGroup = poolGroup;
+        count++;
+      } else {
+        errors.push(`Key ${keyId} not found`);
+      }
+    } catch (err) {
+      errors.push(`Key ${keyId}: ${err.message}`);
+    }
+  });
+
+  keyPoolManager.saveKeyPool();
+
+  logInfo(`Admin batch changed pool: ${count} keys moved to "${poolGroup}"`);
+
+  sendSuccessResponse(res, { count, errors }, `Successfully moved ${count} keys to pool "${poolGroup}"`);
+}, 'batch change pool'));
+
+/**
+ * PATCH /admin/keys/batch-toggle-status
+ * 批量启用/禁用密钥
+ * Body: { keyIds: ["key1", "key2", ...], status: "active" | "disabled" }
+ */
+router.patch('/keys/batch-toggle-status', wrapSync((req, res) => {
+  const { keyIds, status } = req.body;
+
+  if (!keyIds || !Array.isArray(keyIds) || keyIds.length === 0) {
+    return sendBadRequest(res, 'keyIds array is required and must not be empty');
+  }
+
+  if (!status || !['active', 'disabled'].includes(status)) {
+    return sendBadRequest(res, 'status must be "active" or "disabled"');
+  }
+
+  let count = 0;
+  const errors = [];
+
+  keyIds.forEach(keyId => {
+    try {
+      const key = keyPoolManager.getKey(keyId);
+      if (key) {
+        key.status = status;
+        count++;
+      } else {
+        errors.push(`Key ${keyId} not found`);
+      }
+    } catch (err) {
+      errors.push(`Key ${keyId}: ${err.message}`);
+    }
+  });
+
+  keyPoolManager.saveKeyPool();
+
+  const action = status === 'active' ? 'enabled' : 'disabled';
+  logInfo(`Admin batch ${action}: ${count} keys`);
+
+  sendSuccessResponse(res, { count, errors }, `Successfully ${action} ${count} keys`);
+}, 'batch toggle status'));
+
+/**
+ * DELETE /admin/keys/batch-delete
+ * 批量删除密钥
+ * Body: { keyIds: ["key1", "key2", ...] }
+ */
+router.delete('/keys/batch-delete', wrapSync((req, res) => {
+  const { keyIds } = req.body;
+
+  if (!keyIds || !Array.isArray(keyIds) || keyIds.length === 0) {
+    return sendBadRequest(res, 'keyIds array is required and must not be empty');
+  }
+
+  let count = 0;
+  const errors = [];
+
+  keyIds.forEach(keyId => {
+    try {
+      keyPoolManager.deleteKey(keyId);
+      count++;
+    } catch (err) {
+      errors.push(`Key ${keyId}: ${err.message}`);
+    }
+  });
+
+  logInfo(`Admin batch deleted: ${count} keys`);
+
+  sendSuccessResponse(res, { count, errors }, `Successfully deleted ${count} keys`);
+}, 'batch delete keys'));
 
 export default router;

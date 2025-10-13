@@ -199,6 +199,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       '/',                         // 根路径
       '/index.html',               // HTML文件
       '/style.css',                // CSS文件
+      '/style-enhanced.css',       // CSS文件（增强版）
       '/app.js',                   // JS文件
       '/pool-groups.js',           // 🆕 多级密钥池管理JS
       '/pool-selection-ui.js',     // 🆕 密钥池选择UI JS
@@ -290,8 +291,13 @@ if (CLUSTER_MODE && cluster.isPrimary) {
     res.status(204).end(); // 204 No Content，不返回任何内容
   });
 
-  // 404 处理 - 捕获所有未匹配的路由
+  // 404 处理 - 捕获所有未匹配的路由（排除 admin 路径，让 admin 路由自己处理）
   app.use((req, res, next) => {
+    // BaSui: 跳过 /admin 路径，这些路由有自己的错误处理
+    if (req.path.startsWith('/admin')) {
+      return next();
+    }
+
     const errorInfo = {
       timestamp: new Date().toISOString(),
       method: req.method,

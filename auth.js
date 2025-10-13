@@ -338,7 +338,7 @@ class KeyPoolManager {
     return keyObj;
   }
 
-  importKeys(keys) {
+  importKeys(keys, poolGroup = null) {
     const results = {
       success: 0,
       duplicate: 0,
@@ -371,14 +371,14 @@ class KeyPoolManager {
       }
 
       try {
-        this.addKey(trimmedKey, `Imported at ${new Date().toISOString()}`);
+        this.addKey(trimmedKey, `Imported at ${new Date().toISOString()}`, poolGroup);
         results.success++;
       } catch (error) {
         results.errors.push(`Line ${index + 1}: ${error.message}`);
       }
     });
 
-    logInfo(`Batch import completed: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid`);
+    logInfo(`Batch import completed: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid (pool: ${poolGroup || 'default'})`);
     return results;
   }
 

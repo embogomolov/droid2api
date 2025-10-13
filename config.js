@@ -7,11 +7,180 @@ const __dirname = path.dirname(__filename);
 
 let config = null;
 
+/**
+ * 从环境变量初始化默认配置
+ * 只在 config.json 不存在时调用
+ */
+function getDefaultConfigFromEnv() {
+  const parseBool = (envVar, defaultValue) => {
+    if (!envVar) return defaultValue;
+    return envVar.toLowerCase() === 'true' || envVar === '1';
+  };
+
+  return {
+    port: parseInt(process.env.PORT) || 3000,
+    endpoint: [
+      {
+        name: "openai",
+        base_url: "https://app.factory.ai/api/llm/o/v1/responses"
+      },
+      {
+        name: "anthropic",
+        base_url: "https://app.factory.ai/api/llm/a/v1/messages"
+      },
+      {
+        name: "common",
+        base_url: "https://app.factory.ai/api/llm/o/v1/chat/completions"
+      }
+    ],
+    models: [
+      {
+        name: "Opus 4.1",
+        id: "claude-opus-4-1-20250805",
+        type: "anthropic",
+        reasoning: "auto"
+      },
+      {
+        name: "Sonnet 4",
+        id: "claude-sonnet-4-20250514",
+        type: "anthropic",
+        reasoning: "auto"
+      },
+      {
+        name: "Sonnet 4.5",
+        id: "claude-sonnet-4-5-20250929",
+        type: "anthropic",
+        reasoning: "auto"
+      },
+      {
+        name: "GPT-5",
+        id: "gpt-5-2025-08-07",
+        type: "openai",
+        reasoning: "auto"
+      },
+      {
+        name: "GPT-5-Codex",
+        id: "gpt-5-codex",
+        type: "openai",
+        reasoning: "auto"
+      },
+      {
+        name: "GLM-4.6",
+        id: "glm-4.6",
+        type: "common"
+      }
+    ],
+    dev_mode: parseBool(process.env.NODE_ENV, false),
+    user_agent: process.env.USER_AGENT || "factory-cli/0.19.3",
+    system_prompt: process.env.SYSTEM_PROMPT || "You are Droid, an AI software engineering agent built by Factory.",
+    limits: {
+      notes_max_length: parseInt(process.env.NOTES_MAX_LENGTH) || 1000,
+      max_json_log_size: parseInt(process.env.MAX_JSON_LOG_SIZE) || 5000
+    },
+    key_pool: {
+      algorithm: process.env.KEY_POOL_ALGORITHM || "round-robin",
+      retry: {
+        enabled: parseBool(process.env.KEY_POOL_RETRY_ENABLED, true),
+        maxRetries: parseInt(process.env.KEY_POOL_RETRY_MAX) || 3,
+        retryDelay: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || 1000
+      },
+      autoBan: {
+        enabled: parseBool(process.env.KEY_POOL_AUTO_BAN_ENABLED, true),
+        errorThreshold: parseInt(process.env.KEY_POOL_ERROR_THRESHOLD) || 5,
+        ban402: parseBool(process.env.KEY_POOL_BAN_402, true),
+        ban401: parseBool(process.env.KEY_POOL_BAN_401, false)
+      },
+      performance: {
+        concurrentLimit: parseInt(process.env.KEY_POOL_CONCURRENT_LIMIT) || 100,
+        requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || 10000
+      },
+      multiTier: {
+        enabled: parseBool(process.env.KEY_POOL_MULTI_TIER_ENABLED, true),
+        autoFallback: parseBool(process.env.KEY_POOL_MULTI_TIER_AUTO_FALLBACK, true)
+      },
+      retry_delay_ms: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || 1000,
+      request_timeout_ms: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || 10000,
+      batch_test_interval_ms: parseInt(process.env.KEY_POOL_BATCH_TEST_INTERVAL_MS) || 500,
+      cache_ttl_ms: parseInt(process.env.KEY_POOL_CACHE_TTL_MS) || 300000
+    },
+    reasoning_tokens: {
+      low: parseInt(process.env.REASONING_BUDGET_LOW) || 4096,
+      medium: parseInt(process.env.REASONING_BUDGET_MEDIUM) || 12288,
+      high: parseInt(process.env.REASONING_BUDGET_HIGH) || 24576
+    },
+    balance_sync: {
+      sync_interval_minutes: parseInt(process.env.SYNC_INTERVAL_MINUTES) || 30,
+      save_interval_minutes: parseInt(process.env.BALANCE_SAVE_INTERVAL_MINUTES) || 5
+    },
+    redis: {
+      enabled: parseBool(process.env.REDIS_ENABLED, false),
+      host: process.env.REDIS_HOST || "127.0.0.1",
+      port: parseInt(process.env.REDIS_PORT) || 6379,
+      password: process.env.REDIS_PASSWORD || "",
+      db: parseInt(process.env.REDIS_DB) || 0,
+      key_prefix: process.env.REDIS_KEY_PREFIX || "droid2api:"
+    },
+    cluster: {
+      enabled: parseBool(process.env.CLUSTER_MODE, false),
+      workers: parseInt(process.env.CLUSTER_WORKERS) || 0
+    }
+  };
+}
+
+/**
+ * 初始化配置文件
+ * 如果 config.json 不存在，从 .env 或默认值创建
+ */
+function initializeConfig() {
+  const configPath = path.join(__dirname, 'data', 'config.json');
+  
+  // 如果配置文件不存在，从环境变量创建
+  if (!fs.existsSync(configPath)) {
+    console.log('[INFO] config.json 不存在，从 .env 初始化默认配置...');
+    
+    // 确保 data 目录存在
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // 从环境变量获取默认配置
+    const defaultConfig = getDefaultConfigFromEnv();
+    
+    // 保存到文件
+    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
+    console.log('[INFO] ✅ 已创建 config.json，配置来自 .env');
+    console.log('[INFO] 💡 之后修改配置请使用管理面板或直接编辑 config.json');
+    
+    return defaultConfig;
+  }
+  
+  return null;
+}
+
 export function loadConfig() {
   try {
     const configPath = path.join(__dirname, 'data', 'config.json');
+    
+    // 初始化配置（如果需要）
+    const initializedConfig = initializeConfig();
+    if (initializedConfig) {
+      config = initializedConfig;
+      return config;
+    }
+    
+    // 读取现有配置
     const configData = fs.readFileSync(configPath, 'utf-8');
     config = JSON.parse(configData);
+    
+    // 运行时环境变量优先级（仅特定变量）
+    if (process.env.PORT) {
+      config.port = parseInt(process.env.PORT);
+    }
+    if (process.env.NODE_ENV) {
+      config.dev_mode = process.env.NODE_ENV === 'development';
+    }
+    
     return config;
   } catch (error) {
     throw new Error(`Failed to load data/config.json: ${error.message}`);
@@ -155,4 +324,46 @@ export function getBalanceSyncConfig() {
     sync_interval_minutes: parseInt(process.env.SYNC_INTERVAL_MINUTES) || cfg.balance_sync?.sync_interval_minutes || 30,
     save_interval_minutes: parseInt(process.env.BALANCE_SAVE_INTERVAL_MINUTES) || cfg.balance_sync?.save_interval_minutes || 5
   };
+}
+
+// 保存配置到 config.json
+export function saveConfig(newConfig) {
+  try {
+    const configPath = path.join(__dirname, 'data', 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+    config = newConfig; // 更新内存中的配置
+    return config;
+  } catch (error) {
+    throw new Error(`Failed to save data/config.json: ${error.message}`);
+  }
+}
+
+// 更新部分配置（支持深度合并）
+export function updateConfig(updates) {
+  const currentConfig = getConfig();
+  const mergedConfig = deepMerge(currentConfig, updates);
+  return saveConfig(mergedConfig);
+}
+
+// 深度合并对象
+function deepMerge(target, source) {
+  const output = { ...target };
+  if (isObject(target) && isObject(source)) {
+    Object.keys(source).forEach(key => {
+      if (isObject(source[key])) {
+        if (!(key in target)) {
+          Object.assign(output, { [key]: source[key] });
+        } else {
+          output[key] = deepMerge(target[key], source[key]);
+        }
+      } else {
+        Object.assign(output, { [key]: source[key] });
+      }
+    });
+  }
+  return output;
+}
+
+function isObject(item) {
+  return item && typeof item === 'object' && !Array.isArray(item);
 }

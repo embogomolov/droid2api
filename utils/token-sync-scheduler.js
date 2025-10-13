@@ -80,7 +80,7 @@ async function performSync() {
     logInfo('🔄 开始同步 Factory API Token 使用量...');
 
     // 获取所有活跃密钥
-    const allKeys = keyPoolManager.getKeys();
+    const allKeys = keyPoolManager.keys;
     const activeKeys = allKeys.filter(k => k.status === 'active');
 
     if (activeKeys.length === 0) {
