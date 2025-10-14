@@ -21,7 +21,6 @@ auth.json
 data/key_pool.json
 data/token_usage.json
 data/request_stats.json
-data/config.json
 
 # 但保留示例配置文件（允许提交模板）
 !data/*.example.json
@@ -76,3 +75,6 @@ key_pool.json.bak
 CLAUDE.md
 **/CLAUDE.md
 .kilocodemodes
+# 文档和测试脚本（临时排除）
+docs/
+scripts/
