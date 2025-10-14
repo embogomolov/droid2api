@@ -7,8 +7,13 @@
 
 import { Router } from 'express';
 import { logEmitter, getLogBuffer, clearLogBuffer } from '../middleware/log-collector.js';
+import { generateUUID } from '../utils/uuid.js';
 
 const router = Router();
+
+// 🔧 SSE 连接管理（修复 BaSui：之前忘了定义这俩变量！）
+const activeConnections = new Map(); // key: connectionId, value: { req, res, startTime }
+let connectionCounter = 0; // 连接计数器（用于统计）
 
 /**
  * SSE 日志流端点
@@ -29,7 +34,18 @@ router.get('/logs/stream', (req, res) => {
   const levelFilter = req.query.level ? req.query.level.split(',') : null;
   const keywordFilter = req.query.keyword ? req.query.keyword.toLowerCase() : null;
 
-  console.log(`[SSE] 新客户端连接 - IP: ${req.ip}, 筛选: level=${levelFilter}, keyword=${keywordFilter}`);
+  // 🆔 生成连接 ID（修复 BaSui：给每个连接一个唯一标识）
+  const connectionId = generateUUID();
+  connectionCounter++;
+  activeConnections.set(connectionId, {
+    req,
+    res,
+    startTime: Date.now(),
+    levelFilter,
+    keywordFilter,
+  });
+
+  console.log(`[SSE] 新客户端连接 - ID: ${connectionId}, IP: ${req.ip}, 筛选: level=${levelFilter}, keyword=${keywordFilter}, 当前连接数: ${activeConnections.size}`);
 
   /**
    * 日志筛选函数
@@ -88,11 +104,20 @@ router.get('/logs/stream', (req, res) => {
   }
 
   // 🔌 客户端断开连接时清理
-  req.on('close', () => {
-    console.log(`[SSE] 客户端断开连接 - IP: ${req.ip}`);
+  
+  // 🔌 客户端断开连接时清理
+  const cleanup = () => {
+    console.log(`[SSE] 客户端断开连接 - ID: ${connectionId}, 剩余连接数: ${activeConnections.size - 1}`);
     clearInterval(heartbeatInterval);
     logEmitter.removeListener('log', logListener);
-  });
+    activeConnections.delete(connectionId);
+  };
+  
+  req.on('close', cleanup);
+  req.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
+
 });
 
 /**

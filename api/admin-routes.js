@@ -1,4 +1,6 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
 import { getNotesMaxLength, getConfig, updateConfig as updateFullConfig } from '../config.js';
@@ -9,36 +11,11 @@ import {
   wrapAsync,
   wrapSync
 } from './admin-error-handlers.js';
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
 
 const router = express.Router();
 
-/**
- * 管理后台鉴权中间件
- */
-function adminAuth(req, res, next) {
-  const adminKey = req.headers['x-admin-key'];
-  const expectedKey = process.env.ADMIN_ACCESS_KEY;
-
-  if (!expectedKey || expectedKey === 'your-admin-key-here') {
-    return res.status(500).json({
-      error: 'Admin key not configured',
-      message: 'Please set ADMIN_ACCESS_KEY in .env file'
-    });
-  }
-
-  if (!adminKey || adminKey !== expectedKey) {
-    logError('Unauthorized admin access attempt', {
-      ip: req.ip,
-      headers: req.headers
-    });
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Invalid admin access key'
-    });
-  }
-
-  next();
-}
+// 🔧 优化：adminAuth已移动到../middleware/admin-auth.js，避免重复代码
 
 // 应用鉴权中间件到所有管理路由
 router.use(adminAuth);
@@ -217,6 +194,82 @@ router.post('/keys/batch', wrapAsync(async (req, res) => {
 }, 'batch import keys'));
 
 /**
+ * GET /admin/keys/banned
+ * 获取所有封禁的密钥
+ */
+router.get('/keys/banned', wrapSync((req, res) => {
+  const bannedKeys = keyPoolManager.getBannedKeys();
+  const bannedData = keyPoolManager.loadBannedKeys();
+  
+  sendSuccessResponse(res, {
+    keys: bannedKeys,
+    stats: bannedData.stats,
+    config: bannedData.config
+  }, `Found ${bannedKeys.length} banned keys`);
+}, 'get banned keys'));
+
+/**
+ * POST /admin/keys/:id/unban
+ * 手动解封密钥
+ */
+router.post('/keys/:id/unban', wrapSync((req, res) => {
+  const keyId = req.params.id;
+  
+  try {
+    const key = keyPoolManager.unbanKey(keyId);
+    logInfo(`Admin manually unbanned key: ${keyId}`);
+    sendSuccessResponse(res, key, 'Key unbanned successfully');
+  } catch (error) {
+    sendErrorResponse(res, error, 'unban key');
+  }
+}, 'unban key'));
+
+/**
+ * POST /admin/keys/check-unban
+ * 手动触发自动解封检查
+ */
+router.post('/keys/check-unban', wrapAsync(async (req, res) => {
+  logInfo('Admin triggered auto-unban check');
+  
+  const unbannedCount = await keyPoolManager.checkAutoUnban();
+  
+  sendSuccessResponse(res, {
+    unbanned: unbannedCount,
+    bannedKeys: keyPoolManager.getBannedKeys()
+  }, `Auto-unban check completed: ${unbannedCount} keys unbanned`);
+}, 'check auto-unban'));
+
+/**
+ * PATCH /admin/keys/banned-config
+ * 更新封禁配置
+ */
+router.patch('/keys/banned-config', wrapSync((req, res) => {
+  const { auto_unban_enabled, auto_unban_hours, retest_on_unban, max_unban_attempts } = req.body;
+  
+  const bannedData = keyPoolManager.loadBannedKeys();
+  
+  if (auto_unban_enabled !== undefined) {
+    bannedData.config.auto_unban_enabled = auto_unban_enabled;
+  }
+  if (auto_unban_hours !== undefined) {
+    bannedData.config.auto_unban_hours = auto_unban_hours;
+  }
+  if (retest_on_unban !== undefined) {
+    bannedData.config.retest_on_unban = retest_on_unban;
+  }
+  if (max_unban_attempts !== undefined) {
+    bannedData.config.max_unban_attempts = max_unban_attempts;
+  }
+  
+  // 保存配置
+  const bannedKeysPath = path.join(process.cwd(), 'data', 'banned_keys.json');
+  fs.writeFileSync(bannedKeysPath, JSON.stringify(bannedData, null, 2), 'utf-8');
+  
+  logInfo('Admin updated banned keys config', bannedData.config);
+  sendSuccessResponse(res, bannedData.config, 'Banned keys config updated');
+}, 'update banned config'));
+
+/**
  * DELETE /admin/keys/disabled
  * 删除所有禁用的密钥
  * BaSui：这个路由必须放在 /keys/:id 之前，不然 Express 会把 disabled 当作 id 参数！
@@ -371,11 +424,16 @@ router.post('/keys/:id/test', wrapAsync(async (req, res) => {
 /**
  * POST /admin/keys/test-all
  * 批量测试所有密钥
+ * Query参数:
+ *   - poolGroup: 指定池子ID (可选，不传则测试所有池)
+ *   - concurrency: 并发数 (可选，默认从配置读取)
  */
 router.post('/keys/test-all', wrapAsync(async (req, res) => {
-  logInfo('Admin started batch key test');
+  const { poolGroup, concurrency } = req.query;
+  
+  logInfo('Admin started batch key test', { poolGroup, concurrency });
 
-  const results = await keyPoolManager.testAllKeys();
+  const results = await keyPoolManager.testAllKeys(poolGroup, concurrency ? parseInt(concurrency) : undefined);
 
   logInfo(`Admin batch key test completed: ${results.success} success, ${results.failed} failed`);
 

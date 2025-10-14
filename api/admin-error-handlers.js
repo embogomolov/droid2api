@@ -1,5 +1,37 @@
 import { logError } from '../logger.js';
 
+const STATUS_LABELS = {
+  400: 'Bad request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not found',
+  409: 'Conflict',
+  422: 'Unprocessable entity',
+  429: 'Too many requests',
+  500: 'Internal server error',
+  502: 'Bad gateway',
+  503: 'Service unavailable',
+  504: 'Gateway timeout'
+};
+
+function pickLabel(status) {
+  return STATUS_LABELS[status] || 'Error';
+}
+
+function ensureError(errorLike) {
+  if (errorLike instanceof Error) {
+    return errorLike;
+  }
+  if (typeof errorLike === 'string') {
+    return new Error(errorLike);
+  }
+  try {
+    return new Error(JSON.stringify(errorLike));
+  } catch (e) {
+    return new Error('未知错误');
+  }
+}
+
 /**
  * 标准错误响应构造器
  */
@@ -37,36 +69,58 @@ export function successResponse(data, message = null) {
  * 根据error.message自动判断错误类型
  */
 export function handleCommonError(error, operation) {
-  // 记录错误日志
-  logError(`Failed to ${operation}`, error);
+  const normalized = ensureError(error);
+  const status = typeof normalized.statusCode === 'number'
+    ? normalized.statusCode
+    : typeof normalized.status === 'number'
+      ? normalized.status
+      : 500;
 
-  // 根据错误消息判断错误类型
-  const errorMsg = error.message;
+  const message = normalized.message || '服务器冒烟了，但我们已经在修。';
 
-  // 404错误：资源未找到
-  if (errorMsg === 'Key not found') {
-    return errorResponse(404, 'Not found', errorMsg);
-  }
+  logError(`Failed to ${operation}`, normalized);
 
-  // 409错误：资源冲突
-  if (errorMsg === 'Key already exists') {
-    return errorResponse(409, 'Conflict', errorMsg);
-  }
-
-  // 400错误：配置更新失败
-  if (operation === 'update config' && errorMsg) {
-    return errorResponse(400, 'Bad request', errorMsg);
-  }
-
-  // 默认500错误：内部服务器错误
-  return errorResponse(500, 'Internal server error', errorMsg);
+  return errorResponse(status, pickLabel(status), message);
 }
 
 /**
  * 发送错误响应的便捷函数
  */
-export function sendErrorResponse(res, error, operation) {
-  const { status, body } = handleCommonError(error, operation);
+export function sendErrorResponse(res, errorOrStatus, operationOrMessage, maybeDetails) {
+  if (typeof errorOrStatus === 'number') {
+    const status = errorOrStatus;
+    const messageSource = operationOrMessage;
+    const details = maybeDetails !== undefined ? maybeDetails : (
+      messageSource && typeof messageSource === 'object' && !(messageSource instanceof Error)
+        ? messageSource
+        : undefined
+    );
+
+    const message = typeof messageSource === 'string'
+      ? messageSource
+      : messageSource instanceof Error
+        ? messageSource.message
+        : '请求处理失败';
+
+    const payload = {
+      error: pickLabel(status),
+      message
+    };
+
+    if (details && details !== message) {
+      payload.details = details;
+    }
+
+    if (status >= 500) {
+      logError(`Admin API responded with ${status}`, ensureError(messageSource));
+    }
+
+    return res.status(status).json(payload);
+  }
+
+  const operation = typeof operationOrMessage === 'string' ? operationOrMessage : 'process request';
+  const normalizedError = ensureError(errorOrStatus);
+  const { status, body } = handleCommonError(normalizedError, operation);
   return res.status(status).json(body);
 }
 

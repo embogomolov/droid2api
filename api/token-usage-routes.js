@@ -1,4 +1,5 @@
 import express from 'express';
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -20,34 +21,6 @@ const router = express.Router();
 
 // Token使用量数据存储路径
 const TOKEN_USAGE_FILE = path.join(__dirname, '..', 'data', 'token_usage.json');
-
-/**
- * 管理后台鉴权中间件
- */
-function adminAuth(req, res, next) {
-  const adminKey = req.headers['x-admin-key'];
-  const expectedKey = process.env.ADMIN_ACCESS_KEY;
-
-  if (!expectedKey || expectedKey === 'your-admin-key-here') {
-    return res.status(500).json({
-      error: 'Admin key not configured',
-      message: 'Please set ADMIN_ACCESS_KEY in .env file'
-    });
-  }
-
-  if (!adminKey || adminKey !== expectedKey) {
-    logError('Unauthorized admin access attempt', {
-      ip: req.ip,
-      headers: req.headers
-    });
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Invalid admin access key'
-    });
-  }
-
-  next();
-}
 
 // 应用鉴权中间件到所有Token管理路由
 router.use(adminAuth);
@@ -648,6 +621,9 @@ async function syncTokenUsageInBackground() {
   }
 }
 
+// 🔧 修复内存泄漏 - 添加定时器管理
+let autoSyncInterval = null;
+
 /**
  * 定时自动同步(每5分钟)
  * 服务器启动后自动开启
@@ -655,9 +631,15 @@ async function syncTokenUsageInBackground() {
 function startAutoSync() {
   const SYNC_INTERVAL = 5 * 60 * 1000; // 5分钟
 
+  // 清理可能存在的旧定时器
+  if (autoSyncInterval) {
+    clearInterval(autoSyncInterval);
+    autoSyncInterval = null;
+  }
+
   logInfo(`启动Token使用量自动同步,间隔: ${SYNC_INTERVAL / 1000} 秒`);
 
-  setInterval(async () => {
+  autoSyncInterval = setInterval(async () => {
     try {
       const data = loadTokenUsageData();
 
@@ -673,6 +655,22 @@ function startAutoSync() {
     }
   }, SYNC_INTERVAL);
 }
+
+/**
+ * 停止自动同步
+ */
+export function stopAutoSync() {
+  if (autoSyncInterval) {
+    clearInterval(autoSyncInterval);
+    autoSyncInterval = null;
+    logInfo('Token使用量自动同步已停止');
+  }
+}
+
+// 进程退出时清理定时器
+process.on('SIGTERM', stopAutoSync);
+process.on('SIGINT', stopAutoSync);
+process.on('exit', stopAutoSync);
 
 // 服务器启动时立即启动自动同步
 startAutoSync();

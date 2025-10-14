@@ -4,38 +4,11 @@
  */
 
 import express from 'express';
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
 import { getStats, getTodayStats, getStatsSummary, get7DaysTrend, resetStats } from '../utils/request-stats.js';
 import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
-
-/**
- * 管理后台鉴权中间件
- */
-function adminAuth(req, res, next) {
-  const adminKey = req.headers['x-admin-key'];
-  const expectedKey = process.env.ADMIN_ACCESS_KEY;
-
-  if (!expectedKey || expectedKey === 'your-admin-key-here') {
-    return res.status(500).json({
-      error: 'Admin key not configured',
-      message: 'Please set ADMIN_ACCESS_KEY in .env file'
-    });
-  }
-
-  if (!adminKey || adminKey !== expectedKey) {
-    logError('Unauthorized admin access attempt', {
-      ip: req.ip,
-      headers: req.headers
-    });
-    return res.status(403).json({
-      error: 'Forbidden',
-      message: 'Invalid admin access key'
-    });
-  }
-
-  next();
-}
 
 // 应用鉴权中间件到所有统计路由
 router.use(adminAuth);
