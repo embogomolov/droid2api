@@ -1,0 +1,88 @@
+{
+  "keys": {
+    "key_1760367267306_wkb1ae8ax": {
+      "requests": 2,
+      "prompt_tokens": 46,
+      "completion_tokens": 174,
+      "total_tokens": 220,
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 0,
+      "reasoning_tokens": 0,
+      "thinking_tokens": 0,
+      "total_latency": 9778,
+      "avg_latency": 4889,
+      "first_used": "2025-10-14T15:51:59.385Z",
+      "last_used": "2025-10-14T15:52:12.337Z"
+    }
+  },
+  "models": {
+    "anthropic": {
+      "requests": 2,
+      "prompt_tokens": 46,
+      "completion_tokens": 174,
+      "total_tokens": 220,
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 0,
+      "reasoning_tokens": 0,
+      "thinking_tokens": 0,
+      "total_latency": 9778,
+      "avg_latency": 4889,
+      "first_used": "2025-10-14T15:51:59.385Z",
+      "last_used": "2025-10-14T15:52:12.337Z"
+    }
+  },
+  "daily": {
+    "2025-10-14": {
+      "requests": 2,
+      "prompt_tokens": 46,
+      "completion_tokens": 174,
+      "total_tokens": 220,
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 0,
+      "reasoning_tokens": 0,
+      "thinking_tokens": 0,
+      "total_latency": 9778,
+      "avg_latency": 4889,
+      "first_used": "2025-10-14T15:51:59.385Z",
+      "last_used": "2025-10-14T15:52:12.337Z"
+    }
+  },
+  "hourly": {
+    "2025-10-14T23": {
+      "requests": 2,
+      "prompt_tokens": 46,
+      "completion_tokens": 174,
+      "total_tokens": 220,
+      "cache_creation_tokens": 0,
+      "cache_read_tokens": 0,
+      "reasoning_tokens": 0,
+      "thinking_tokens": 0,
+      "total_latency": 9778,
+      "avg_latency": 4889,
+      "first_used": "2025-10-14T15:51:59.385Z",
+      "last_used": "2025-10-14T15:52:12.337Z"
+    }
+  },
+  "total": {
+    "requests": 2,
+    "prompt_tokens": 46,
+    "completion_tokens": 174,
+    "total_tokens": 220,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "reasoning_tokens": 0,
+    "thinking_tokens": 0,
+    "estimated_cost": 0.001136,
+    "total_latency": null,
+    "avg_latency": null,
+    "last_used": "2025-10-14T15:52:12.337Z"
+  },
+  "last_updated": "2025-10-14T15:52:29.871Z",
+  "accuracy": {
+    "samples": 2,
+    "total_diff_prompt": 24,
+    "total_diff_completion": 1826,
+    "avg_accuracy_prompt": 0.4782608695652174,
+    "avg_accuracy_completion": -9.549183592194344
+  }
+}

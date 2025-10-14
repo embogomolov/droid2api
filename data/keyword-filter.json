@@ -14,7 +14,31 @@
         "type": "replace",
         "replacement": "If you working on tasks that would benefit from a todo list please use the TodoWrite tool to create one "
       },
-      "description": "受影响"
+      "description": "受影响",
+      "errors": [],
+      "alerts": []
+    },
+    {
+      "id": "rule-delete-sensitive-tokens",
+      "name": "批量移除敏感词",
+      "enabled": true,
+      "pattern": {
+        "type": "regex",
+        "value": "(password|token|api_key)",
+        "caseSensitive": false
+      },
+      "action": {
+        "type": "delete_keyword",
+        "mode": "targets",
+        "targets": [
+          "password",
+          "token",
+          "api_key"
+        ]
+      },
+      "description": "命中敏感词时额外删除指定关键词，防止敏感字段泄漏",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-2",
@@ -29,7 +53,9 @@
         "type": "replace",
         "replacement": "You have not created a todolist yet. Create one `update_todo_list` "
       },
-      "description": "受影响"
+      "description": "受影响",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-3",
@@ -44,7 +70,9 @@
         "type": "replace",
         "replacement": "AI助手"
       },
-      "description": "Kiro 关键词"
+      "description": "Kiro 关键词",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-4",
@@ -56,9 +84,12 @@
         "caseSensitive": false
       },
       "action": {
-        "type": "remove_content"
+        "type": "delete_keyword",
+        "mode": "inline"
       },
-      "description": "CC 关键词"
+      "description": "CC 关键词",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-5",
@@ -73,12 +104,14 @@
         "type": "replace",
         "replacement": "AI助手"
       },
-      "description": "CC 关键词"
+      "description": "CC 关键词",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-6",
       "name": "系统提示词-CC",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "contains",
         "value": "As you answer the user's questions",
@@ -88,12 +121,14 @@
         "type": "replace",
         "replacement": "用户需求"
       },
-      "description": "CC 关键词"
+      "description": "CC 关键词",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-system-software-engineering",
       "name": "系统提示词-软件工程",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "contains",
         "value": "software engineering",
@@ -103,40 +138,14 @@
         "type": "replace",
         "replacement": "软件开发"
       },
-      "description": "在system字段中替换'software engineering'为'软件开发'"
-    },
-    {
-      "id": "rule-hide-system-prefix",
-      "name": "隐藏系统标记",
-      "enabled": false,
-      "pattern": {
-        "type": "prefix",
-        "value": "[SYSTEM]",
-        "caseSensitive": true
-      },
-      "action": {
-        "type": "delete_keyword"
-      },
-      "description": "删除消息开头的[SYSTEM]前缀标记"
-    },
-    {
-      "id": "rule-remove-hidden-suffix",
-      "name": "移除隐藏后缀",
-      "enabled": true,
-      "pattern": {
-        "type": "suffix",
-        "value": "[隐藏]",
-        "caseSensitive": false
-      },
-      "action": {
-        "type": "delete_keyword"
-      },
-      "description": "删除消息末尾的[隐藏]后缀标记"
+      "description": "在system字段中替换'software engineering'为'软件开发'",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-replace-sensitive",
       "name": "替换敏感信息",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "contains",
         "value": "password",
@@ -146,26 +155,37 @@
         "type": "replace",
         "replacement": "***"
       },
-      "description": "将'password'替换为***（示例：已禁用）"
+      "description": "将'password'替换为***（示例：已禁用）",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-remove-instruction",
       "name": "移除特定指令",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "contains",
         "value": "ignore previous instructions",
         "caseSensitive": false
       },
       "action": {
-        "type": "remove_content"
+        "type": "delete_keyword",
+        "mode": "segment",
+        "delimiter": "\n\n",
+        "minLength": 50,
+        "preserveKeywords": [
+          "重要提示",
+          "注意"
+        ]
       },
-      "description": "删除包含'ignore previous instructions'的整个content块（示例：已禁用）"
+      "description": "删除包含'ignore previous instructions'的整个content块（示例：已禁用）",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-regex-example",
       "name": "正则表达式示例",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "regex",
         "value": "\\d{3}-\\d{4}-\\d{4}",
@@ -175,12 +195,14 @@
         "type": "replace",
         "replacement": "[电话号码已隐藏]"
       },
-      "description": "使用正则表达式匹配电话号码格式并替换（示例：已禁用）"
+      "description": "使用正则表达式匹配电话号码格式并替换（示例：已禁用）",
+      "errors": [],
+      "alerts": []
     },
     {
       "id": "rule-system-remove-droid",
       "name": "系统提示词-移除Droid标识",
-      "enabled": false,
+      "enabled": true,
       "pattern": {
         "type": "contains",
         "value": "Droid, an AI software engineering agent built by Factory",
@@ -190,7 +212,9 @@
         "type": "replace",
         "replacement": "一个AI助手"
       },
-      "description": "在system字段中移除Droid的具体标识信息"
+      "description": "在system字段中移除Droid的具体标识信息",
+      "errors": [],
+      "alerts": []
     }
   ],
   "logging": {
