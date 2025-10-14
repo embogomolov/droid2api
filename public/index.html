@@ -1346,7 +1346,7 @@
                 <label for="ruleAction">处理动作：</label>
                 <select id="ruleActionType" class="modal-input" onchange="updateActionFields()">
                     <option value="replace">替换 (replace)</option>
-                    <option value="remove">删除 (remove)</option>
+                    <option value="delete_keyword">删除关键词 (delete_keyword)</option>
                     <option value="block">阻止 (block)</option>
                 </select>
             </div>
@@ -1355,6 +1355,40 @@
                 <label for="ruleReplacement">替换文本：</label>
                 <input type="text" id="ruleReplacement" class="modal-input" placeholder="例如：***" />
                 <p class="hint">💡 留空则删除匹配内容</p>
+            </div>
+
+            <div class="form-group" id="deleteModeField" style="display: none;">
+                <label for="ruleDeleteMode">删除模式：</label>
+                <select id="ruleDeleteMode" class="modal-input" onchange="updateActionFields()">
+                    <option value="inline">逐字删除匹配文本</option>
+                    <option value="targets">删除指定词语</option>
+                    <option value="segment">删除整段匹配内容</option>
+                </select>
+                <p class="hint">💡 inline=直接删匹配片段；targets=额外删指定词；segment=按分隔符整段删除</p>
+            </div>
+
+            <div class="form-group" id="deleteTargetsField" style="display: none;">
+                <label for="ruleDeleteTargets">指定删除词：</label>
+                <input type="text" id="ruleDeleteTargets" class="modal-input" placeholder="例如：密码,token,secret" />
+                <p class="hint">💡 仅在“删除指定词语”模式下生效，使用逗号或换行分隔多个词</p>
+            </div>
+
+            <div class="form-group" id="deleteDelimiterField" style="display: none;">
+                <label for="ruleDeleteDelimiter">段落分隔符：</label>
+                <input type="text" id="ruleDeleteDelimiter" class="modal-input" placeholder="默认：换行换行 (\\n\\n)" />
+                <p class="hint">💡 仅在“删除整段匹配内容”模式下生效，用于拆分段落</p>
+            </div>
+
+            <div class="form-group" id="deleteMinLengthField" style="display: none;">
+                <label for="ruleDeleteMinLength">最小段落长度：</label>
+                <input type="number" id="ruleDeleteMinLength" class="modal-input" min="0" placeholder="默认 0，不限制" />
+                <p class="hint">💡 仅在“删除整段”模式下生效，长度不足不会删除，避免误杀短提示</p>
+            </div>
+
+            <div class="form-group" id="deletePreserveKeywordsField" style="display: none;">
+                <label for="ruleDeletePreserveKeywords">保留关键词：</label>
+                <textarea id="ruleDeletePreserveKeywords" class="modal-input" rows="2" placeholder="例如：RCA,注意事项"></textarea>
+                <p class="hint">💡 分隔符：逗号或换行；命中任意关键词的段落将保留不删除</p>
             </div>
 
             <div class="form-group">

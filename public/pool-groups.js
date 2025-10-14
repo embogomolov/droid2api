@@ -644,10 +644,10 @@ window.filterChanged = function() {
     const poolGroupFilter = document.getElementById('poolGroupFilter')?.value || 'all';
 
     currentStatus = statusFilter;
+    currentPoolGroup = poolGroupFilter;  // BaSui: 修复筛选功能 - 必须更新currentPoolGroup变量
     currentPage = 1;
 
-    // 如果有池子筛选，在API请求中添加参数
-    // TODO: 后端需要支持 poolGroup 参数
+    // 调用fetchKeys，它会使用currentPoolGroup参数进行筛选
     fetchKeys();
 };
 

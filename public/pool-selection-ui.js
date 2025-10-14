@@ -270,10 +270,15 @@ async function confirmBatchTest() {
 
         resultDiv.innerHTML = message;
 
-        // 自动刷新列表
+        // BaSui: 自动刷新列表显示最新测试结果
         if (autoRefresh) {
             setTimeout(() => {
-                refreshData();
+                if (typeof refreshData === 'function') {
+                    refreshData();
+                } else if (typeof fetchKeys === 'function') {
+                    fetchKeys();
+                    fetchStats();  // 同时刷新统计信息
+                }
                 closeModal('batchTestModal');
             }, 2000);
         }
@@ -383,10 +388,19 @@ async function batchImport() {
         resultHTML += `</div>`;
         resultDiv.innerHTML = resultHTML;
 
-        // 如果有成功导入，2秒后刷新
-        if (importResult.success > 0) {
+        // BaSui: 如果有成功导入或测试完成，2秒后刷新列表
+        if (importResult.success > 0 || (testResult && testResult.tested > 0)) {
             setTimeout(() => {
-                refreshData();
+                // BaSui: 检查refreshData函数是否存在（在app.js中定义）
+                if (typeof refreshData === 'function') {
+                    refreshData();
+                } else if (typeof fetchKeys === 'function') {
+                    // 如果refreshData不存在，至少刷新密钥列表
+                    fetchKeys();
+                } else {
+                    // 最后的备选方案：重新加载页面
+                    location.reload();
+                }
             }, 2000);
         }
     } catch (err) {
@@ -442,7 +456,12 @@ async function addKey() {
         });
         alert('✅ 添加成功！');
         closeModal('addKeyModal');
-        refreshData();
+        // BaSui: 刷新列表显示新添加的密钥
+        if (typeof refreshData === 'function') {
+            refreshData();
+        } else if (typeof fetchKeys === 'function') {
+            fetchKeys();
+        }
     } catch (err) {
         alert('❌ 添加失败: ' + err.message);
     }

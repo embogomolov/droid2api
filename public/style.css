@@ -5,100 +5,68 @@
 }
 
 body {
-    /* BaSui：优先使用Inter字体配合中文字体，更现代化 */
-    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
-    /* BaSui：柔和中性色动态渐变背景 - 适中亮度，白色字体清晰可见 */
-    background: linear-gradient(135deg, #64748b 0%, #475569 50%, #334155 100%);
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
     background-size: 400% 400%;
     background-attachment: fixed;
-    animation: gradientShift 20s ease infinite;
     min-height: 100vh;
     padding: 20px;
     color: #333;
-    position: relative;
     overflow-x: hidden;
+    animation: oceanWave 25s ease infinite;
+    position: relative;
 }
 
-/* BaSui：优化 - 移除动画装饰元素，提高性能 */
+/* 海洋波纹背景效果 */
 body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+        radial-gradient(circle at 20% 80%, rgba(26, 188, 156, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(52, 211, 153, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(72, 219, 251, 0.08) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: -1;
+    animation: floatingBubbles 30s ease-in-out infinite;
+}
+
+/* 添加动态光效 */
+body::after {
     content: '';
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 50px 50px;
+    right: 0;
+    height: 100vh;
+    background: linear-gradient(180deg, transparent 0%, rgba(26, 188, 156, 0.03) 100%);
     pointer-events: none;
-    opacity: 0.2;
     z-index: -1;
 }
 
-/* BaSui：移除body::after动画元素，减少渲染层 */
+/* 删除未使用的动画 */
 
-@keyframes bgMove {
-    0% { transform: translate(0, 0); }
-    100% { transform: translate(50px, 50px); }
-}
 
-@keyframes floatingGlow {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.1); }
-}
-
-/* BaSui：背景渐变动画，让页面更有生气！✨ */
-@keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     position: relative;
     z-index: 1;
-    /* BaSui：容器加载时淡入动画 ✨ */
-    animation: containerFadeIn 0.8s ease;
 }
 
-@keyframes containerFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* BaSui美化版 - 页面头部 */
 header {
     text-align: center;
     color: white;
     margin-bottom: 40px;
-    animation: fadeIn 0.8s;
 }
 
 header h1 {
-    font-size: 3em;
+    font-size: 2.8em;
     margin-bottom: 15px;
-    text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
     font-weight: 700;
-    letter-spacing: 2px;
-    animation: slideDown 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes slideDown {
-    from {
-        transform: translateY(-30px);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+    letter-spacing: 1px;
 }
 
 .subtitle {
@@ -109,24 +77,36 @@ header h1 {
     text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
 }
 
-/* 认证区域 - BaSui美化版 */
 .auth-section {
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 450px;
-    animation: fadeIn 0.5s;
 }
 
 .auth-card {
-    background: #f8fafc;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 255, 250, 0.95) 100%);
+    backdrop-filter: blur(25px) saturate(150%);
     padding: 50px 45px;
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    border-radius: 32px;
+    box-shadow: 
+        0 30px 60px rgba(15, 38, 61, 0.12),
+        0 15px 30px rgba(26, 188, 156, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
     width: 100%;
     max-width: 450px;
-    border: 1px solid rgba(255,255,255,0.2);
-    animation: slideUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(26, 188, 156, 0.2);
+    animation: slideUp 0.8s cubic-bezier(0.23, 1, 0.320, 1);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.auth-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 
+        0 35px 70px rgba(15, 38, 61, 0.15),
+        0 20px 35px rgba(26, 188, 156, 0.1);
 }
 
 .auth-card h2 {
@@ -164,21 +144,23 @@ header h1 {
     font-weight: 600;
 }
 
-/* BaSui：页面顶部全局提示信息 - 美化版 ✨ */
+/* 全局提示信息 */
 .hint {
     text-align: center;
     color: #6b7280;
     font-size: 14px;
     margin: 16px 0 24px;
-    padding: 14px 20px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(249, 250, 251, 0.9) 100%);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    border: 1px solid rgba(102, 126, 234, 0.15);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.05);
+    padding: 16px 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 252, 0.88) 100%);
+    backdrop-filter: blur(16px) saturate(150%);
+    border-radius: 14px;
+    border: 1px solid rgba(103, 126, 234, 0.1);
+    box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
     line-height: 1.6;
     font-weight: 400;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hint:hover {
@@ -188,8 +170,7 @@ header h1 {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
 }
 
-/* 统计卡片 - BaSui美化版 */
-/* 统计卡片 - BaSui美化增强版 */
+/* 统计卡片 */
 .stats-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -204,60 +185,29 @@ header h1 {
 }
 
 .stat-card {
-    background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
-    padding: 25px;
-    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%);
+    padding: 28px;
+    border-radius: 20px;
     box-shadow: 
-        0 20px 40px rgba(0, 0, 0, 0.08),
-        inset 0 2px 4px rgba(255, 255, 255, 0.5);
+        0 10px 25px rgba(0, 0, 0, 0.05),
+        0 6px 12px rgba(0, 0, 0, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
     display: flex;
     align-items: center;
-    gap: 20px;
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 2px solid transparent;
+    gap: 24px;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(103, 126, 234, 0.08);
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(16px) saturate(180%);
     cursor: pointer;
-    transform-style: preserve-3d;
-    perspective: 1000px;
 }
 
-/* 卡片渐变装饰条 */
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    opacity: 0;
-    transition: opacity 0.3s;
-}
 
-/* 卡片背景渐变光晕 */
-.stat-card::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 150%;
-    height: 150%;
-    background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
-    transform: translate(-50%, -50%) scale(0);
-    transition: transform 0.5s ease;
-    z-index: 0;
-}
-
-.stat-card:hover::after {
-    transform: translate(-50%, -50%) scale(1);
-}
 
 .stat-card:hover {
-    transform: translateY(-10px) rotateX(-5deg) scale(1.03);
-    box-shadow: 
-        0 30px 60px rgba(0, 0, 0, 0.15),
-        0 0 40px rgba(102, 126, 234, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.12);
 }
 
 .stat-card:hover::before {
@@ -378,13 +328,13 @@ header h1 {
     }
 }
 
-/* 操作按钮 - BaSui美化版 */
+/* 操作按钮区域 */
 .actions-container {
     display: flex;
     gap: 12px;
     margin-bottom: 25px;
     flex-wrap: wrap;
-    justify-content: center;  /* BaSui: 居中对齐按钮 */
+    justify-content: center;
     background: linear-gradient(135deg, rgba(233, 213, 255, 0.2) 0%, rgba(216, 180, 254, 0.2) 100%);
     /* BaSui：增加按钮区域的内边距，让按钮更舒展！*/
     padding: 24px 25px;
@@ -401,63 +351,39 @@ header h1 {
     border-radius: 8px;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s, box-shadow 0.2s;
     font-weight: 500;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    position: relative;
-    overflow: hidden;
 }
 
-/* BaSui：按钮点击波纹效果 */
-.btn::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.5);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
-}
 
-/* BaSui：极致美化 - 按钮光泽效果 */
-.btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    transition: left 0.8s;
-}
 
-.btn:active::after {
-    width: 300px;
-    height: 300px;
-}
+
+
+
 
 .btn-primary {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%);
     color: white;
-    /* BaSui：按钮加上轻微的边框光晕 */
     border: 1px solid rgba(255, 255, 255, 0.2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(26, 188, 156, 0.3);
 }
 
-.btn:hover::before {
-    left: 100%;
-}
+
 
 .btn-primary:hover {
     transform: translateY(-3px) scale(1.02);
     box-shadow: 
-        0 10px 30px rgba(79, 172, 254, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
-    /* BaSui：悬停时加强渐变效果 ✨ */
-    background: linear-gradient(135deg, #5fbdff 0%, #10d9ff 100%);
+        0 12px 24px rgba(26, 188, 156, 0.4),
+        0 8px 16px rgba(22, 160, 133, 0.3);
+    background: linear-gradient(135deg, #16a085 0%, #1abc9c 100%);
     filter: brightness(1.1);
 }
 
@@ -532,7 +458,7 @@ header h1 {
     white-space: nowrap;
 }
 
-/* 筛选区域 - BaSui美化版 */
+/* 筛选区域 */
 .filter-container {
     background: linear-gradient(135deg, rgba(219, 234, 254, 0.3) 0%, rgba(191, 219, 254, 0.3) 100%);
     /* BaSui：增加筛选区域的内边距，让它更舒适！*/
@@ -575,7 +501,7 @@ header h1 {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-/* 表格 - BaSui美化版 */
+/* 表格样式 */
 .table-container {
     border-radius: 20px;
     overflow: hidden;
@@ -777,6 +703,8 @@ header h1 {
     border-radius: 24px;
     width: 90%;
     max-width: 550px;
+    max-height: 80vh; /* BaSui：限制最大高度，防止内容太长覆盖整个页面 */
+    overflow-y: auto; /* BaSui：内容超出时可以滚动 */
     /* BaSui：更强的阴影 + 边框光晕效果 ✨ */
     box-shadow: 0 25px 80px rgba(0,0,0,0.5),
                 0 0 0 1px rgba(255,255,255,0.1);
@@ -805,7 +733,7 @@ header h1 {
 
 @keyframes slideUp {
     from {
-        transform: translateY(50px);
+        transform: translateY(30px);
         opacity: 0;
     }
     to {
@@ -916,7 +844,15 @@ header h1 {
 /* BaSui：配置模态框样式 */
 .modal-content-large {
     max-width: 700px;
-    max-height: 85vh;
+    max-height: 75vh; /* BaSui：进一步降低高度，确保更好的交互性 */
+    overflow-y: auto;
+}
+
+/* BaSui：批量操作模态框专用样式，内容多时滚动 */
+#batchTestModal .modal-content,
+#batchImportModal .modal-content,
+#exportKeysModal .modal-content {
+    max-height: 70vh; /* 批量操作模态框更低一些 */
     overflow-y: auto;
 }
 
@@ -1201,19 +1137,10 @@ select.modal-input:focus {
     box-shadow: 0 8px 32px rgba(102, 126, 234, 0.12), 
                 0 2px 8px rgba(0, 0, 0, 0.05);
     border: 1px solid rgba(102, 126, 234, 0.1);
-    animation: slideUpFadeIn 0.8s ease;
+    animation: slideUp 0.8s ease;
 }
 
-@keyframes slideUpFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+
 
 .config-actions .btn {
     min-width: 160px;
@@ -1242,9 +1169,7 @@ select.modal-input:focus {
     transition: left 0.6s ease;
 }
 
-.config-actions .btn:hover::before {
-    left: 100%;
-}
+.config-actions 
 
 .config-actions .btn:hover {
     transform: translateY(-3px) scale(1.02);
@@ -1418,14 +1343,78 @@ select.modal-input:focus {
     animation: pulse 2s ease-in-out infinite;
 }
 
+/* 统一的动画效果库 */
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
         transform: scale(1);
     }
     50% {
-        opacity: 0.8;
-        transform: scale(1.1);
+        opacity: 0.85;
+        transform: scale(1.05);
+    }
+}
+
+/* 优雅的呼吸灯效果 */
+@keyframes breathe {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(26, 188, 156, 0.3);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(26, 188, 156, 0.5);
+        transform: scale(1.02);
+    }
+}
+
+/* 新增浮动气泡动画 */
+@keyframes floatingBubbles {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+        opacity: 0.5;
+    }
+    33% {
+        transform: translateY(-20px) scale(1.1);
+        opacity: 0.7;
+    }
+    66% {
+        transform: translateY(10px) scale(0.95);
+        opacity: 0.4;
+    }
+}
+
+/* 涟漪扩散效果 */
+@keyframes rippleEffect {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+/* 闪烁高亮动画 */
+@keyframes glowPulse {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(26, 188, 156, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(26, 188, 156, 0.8), 0 0 40px rgba(26, 188, 156, 0.4);
+    }
+}
+
+/* 渐变背景动画 */
+@keyframes oceanWave {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
     }
 }
 
@@ -1707,18 +1696,22 @@ select.modal-input:focus {
 }
 
 .chart-card {
-    background: linear-gradient(135deg, rgba(243, 232, 255, 0.4) 0%, rgba(233, 213, 255, 0.4) 100%);
-    border-radius: 15px;
-    padding: 20px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.92) 100%);
+    border-radius: 20px;
+    padding: 24px;
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 
+        0 8px 24px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(103, 126, 234, 0.08);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chart-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 
+        0 16px 32px rgba(0, 0, 0, 0.08),
+        0 0 0 1px rgba(103, 126, 234, 0.1);
 }
 
 .chart-card h3 {
@@ -2515,10 +2508,7 @@ select.modal-input:focus {
 }
 
 /* 脉冲动画 */
-@keyframes pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-}
+
 
 /* 过期警告条 */
 .expiry-warning {
@@ -3464,10 +3454,7 @@ select[multiple] option:checked {
     animation: pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
+
 
 /* ===================== 结束：密钥池选择 UI 样式 ===================== */
 
@@ -3905,6 +3892,11 @@ select[multiple] option:checked {
 }
 
 .keyword-chip.action-remove {
+    background: rgba(59, 130, 246, 0.14);
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+.keyword-chip.action-delete_keyword {
     background: rgba(59, 130, 246, 0.14);
     color: #1d4ed8;
     border-color: rgba(59, 130, 246, 0.3);

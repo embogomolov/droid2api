@@ -110,19 +110,47 @@ function renderFilterRules() {
 
     const actionLabels = {
         replace: '替换',
-        remove: '删除',
+        delete_keyword: '删除关键词',
         block: '阻止'
+    };
+    const deleteModeLabels = {
+        inline: '逐字删除',
+        targets: '指定词',
+        segment: '整段'
     };
 
     tbody.innerHTML = filterRules.map(rule => {
         const statusClass = rule.enabled ? 'enabled' : 'disabled';
         const patternLabel = patternLabels[rule.pattern.type] || rule.pattern.type;
         const actionLabel = actionLabels[rule.action.type] || rule.action.type;
-        const replacementText = rule.action.type === 'replace'
-            ? `<code>${escapeHtml(rule.action.replacement || '（空）')}</code>`
-            : '—';
-        const ruleIdArg = escapeHtml(JSON.stringify(rule.id));
-        const ruleNameArg = escapeHtml(JSON.stringify(rule.name));
+        const actionChips = [`<span class="keyword-chip action-${rule.action.type}">${actionLabel}</span>`];
+        let actionDetail = '—';
+
+        if (rule.action.type === 'replace') {
+            actionDetail = `<code>${escapeHtml(rule.action.replacement || '（空）')}</code>`;
+        } else if (rule.action.type === 'delete_keyword') {
+            const mode = rule.action.mode || 'inline';
+            actionChips.push(`<span class="keyword-chip chip-outline">${deleteModeLabels[mode] || mode}</span>`);
+
+            if (mode === 'targets' && Array.isArray(rule.action.targets) && rule.action.targets.length > 0) {
+                actionDetail = rule.action.targets.map(escapeHtml).join(', ');
+            } else if (mode === 'segment') {
+                const meta = [
+                    `分隔符 <code>${escapeHtml(rule.action.delimiter || '\\n\\n')}</code>`
+                ];
+                if (typeof rule.action.minLength === 'number') {
+                    meta.push(`最小长度 ≥ ${rule.action.minLength}`);
+                }
+                if (Array.isArray(rule.action.preserveKeywords) && rule.action.preserveKeywords.length > 0) {
+                    meta.push(`保留关键词: ${rule.action.preserveKeywords.map(escapeHtml).join(', ')}`);
+                }
+                actionDetail = meta.join('<br/>');
+            }
+        }
+        // BaSui：修复按钮点击问题 - 不要对参数使用 escapeHtml + JSON.stringify 组合
+        // 只需要对 ID 和名称进行单引号转义，生成正确的 onclick 属性
+        const ruleIdArg = `'${rule.id.replace(/'/g, "\\'")}'`;
+        const ruleNameArg = `'${rule.name.replace(/'/g, "\\'")}'`;
 
         return `
         <tr class="rule-row ${statusClass}">
@@ -144,9 +172,9 @@ function renderFilterRules() {
             </td>
             <td>
                 <div class="keyword-chip-group">
-                    <span class="keyword-chip action-${rule.action.type}">${actionLabel}</span>
+                    ${actionChips.join('')}
                 </div>
-                <div class="keyword-rule-replacement">${replacementText}</div>
+                <div class="keyword-rule-replacement">${actionDetail}</div>
             </td>
             <td>
                 <div class="keyword-row-actions">
@@ -206,6 +234,11 @@ function showAddRuleModal() {
     document.getElementById('ruleCaseSensitive').checked = false;
     document.getElementById('ruleActionType').value = 'replace';
     document.getElementById('ruleReplacement').value = '';
+    document.getElementById('ruleDeleteMode').value = 'inline';
+    document.getElementById('ruleDeleteTargets').value = '';
+    document.getElementById('ruleDeleteDelimiter').value = '';
+    document.getElementById('ruleDeleteMinLength').value = '';
+    document.getElementById('ruleDeletePreserveKeywords').value = '';
     document.getElementById('ruleDescription').value = '';
     document.getElementById('ruleEnabled').checked = true;
     
@@ -234,6 +267,15 @@ function editRule(ruleId) {
     document.getElementById('ruleCaseSensitive').checked = rule.pattern.caseSensitive || false;
     document.getElementById('ruleActionType').value = rule.action.type;
     document.getElementById('ruleReplacement').value = rule.action.replacement || '';
+    document.getElementById('ruleDeleteMode').value = rule.action.mode || 'inline';
+    document.getElementById('ruleDeleteTargets').value = Array.isArray(rule.action.targets)
+        ? rule.action.targets.join(', ')
+        : '';
+    document.getElementById('ruleDeleteDelimiter').value = rule.action.delimiter || '';
+    document.getElementById('ruleDeleteMinLength').value = rule.action.minLength ?? '';
+    document.getElementById('ruleDeletePreserveKeywords').value = Array.isArray(rule.action.preserveKeywords)
+        ? rule.action.preserveKeywords.join(', ')
+        : '';
     document.getElementById('ruleDescription').value = rule.description || '';
     document.getElementById('ruleEnabled').checked = rule.enabled;
     
@@ -251,6 +293,11 @@ async function saveRule() {
     const caseSensitive = document.getElementById('ruleCaseSensitive').checked;
     const actionType = document.getElementById('ruleActionType').value;
     const replacement = document.getElementById('ruleReplacement').value;
+    const deleteMode = document.getElementById('ruleDeleteMode').value;
+    const deleteTargetsInput = document.getElementById('ruleDeleteTargets').value;
+    const deleteDelimiter = document.getElementById('ruleDeleteDelimiter').value;
+    const deleteMinLengthValue = document.getElementById('ruleDeleteMinLength').value;
+    const deletePreserveKeywordsInput = document.getElementById('ruleDeletePreserveKeywords').value;
     const description = document.getElementById('ruleDescription').value.trim();
     const enabled = document.getElementById('ruleEnabled').checked;
 
@@ -280,6 +327,44 @@ async function saveRule() {
 
     if (actionType === 'replace') {
         ruleData.action.replacement = replacement;
+    } else if (actionType === 'delete_keyword') {
+        ruleData.action.mode = deleteMode;
+
+        if (deleteMode === 'targets') {
+            const targets = deleteTargetsInput
+                .split(/[\n,]/)
+                .map(item => item.trim())
+                .filter(Boolean);
+
+            if (targets.length === 0) {
+                showNotification('请至少填写一个要删除的关键词', 'error');
+                return;
+            }
+
+            ruleData.action.targets = targets;
+        }
+
+        if (deleteMode === 'segment') {
+            ruleData.action.delimiter = deleteDelimiter.trim();
+
+            if (deleteMinLengthValue !== '') {
+                const minLengthNumber = Number(deleteMinLengthValue);
+                if (Number.isNaN(minLengthNumber) || minLengthNumber < 0) {
+                    showNotification('最小段落长度必须是大于等于 0 的数字', 'error');
+                    return;
+                }
+                ruleData.action.minLength = minLengthNumber;
+            }
+
+            const preserveKeywords = deletePreserveKeywordsInput
+                .split(/[\n,]/)
+                .map(item => item.trim())
+                .filter(Boolean);
+
+            if (preserveKeywords.length > 0) {
+                ruleData.action.preserveKeywords = preserveKeywords;
+            }
+        }
     }
 
     try {
@@ -474,11 +559,44 @@ function updatePatternHint() {
 function updateActionFields() {
     const type = document.getElementById('ruleActionType').value;
     const replacementField = document.getElementById('replacementField');
-    
+    const deleteModeField = document.getElementById('deleteModeField');
+    const deleteTargetsField = document.getElementById('deleteTargetsField');
+    const deleteDelimiterField = document.getElementById('deleteDelimiterField');
+    const deleteMinLengthField = document.getElementById('deleteMinLengthField');
+    const deletePreserveKeywordsField = document.getElementById('deletePreserveKeywordsField');
+    const deleteModeSelect = document.getElementById('ruleDeleteMode');
+    const deleteMode = deleteModeSelect ? deleteModeSelect.value : 'inline';
+
     if (type === 'replace') {
         replacementField.style.display = 'block';
     } else {
         replacementField.style.display = 'none';
+    }
+
+    if (type === 'delete_keyword') {
+        deleteModeField.style.display = 'block';
+
+        if (deleteMode === 'targets') {
+            deleteTargetsField.style.display = 'block';
+        } else {
+            deleteTargetsField.style.display = 'none';
+        }
+
+        if (deleteMode === 'segment') {
+            deleteDelimiterField.style.display = 'block';
+            deleteMinLengthField.style.display = 'block';
+            deletePreserveKeywordsField.style.display = 'block';
+        } else {
+            deleteDelimiterField.style.display = 'none';
+            deleteMinLengthField.style.display = 'none';
+            deletePreserveKeywordsField.style.display = 'none';
+        }
+    } else {
+        deleteModeField.style.display = 'none';
+        deleteTargetsField.style.display = 'none';
+        deleteDelimiterField.style.display = 'none';
+        deleteMinLengthField.style.display = 'none';
+        deletePreserveKeywordsField.style.display = 'none';
     }
 }
 
