@@ -163,9 +163,9 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   const express = await import('express');
   const { loadConfig, isDevMode, getPort, getTokenSyncConfig } = await import('./config.js');
-  const { logInfo, logError, logWarning } = await import('./logger.js');
+  const { logInfo, logError, logWarning, logDebug } = await import('./logger.js');
   const router = (await import('./routes.js')).default;
-  const { initializeAuth } = await import('./auth.js');
+  const { initializeAuth, default: keyPoolManager } = await import('./auth.js');
   const adminRouter = (await import('./api/admin-routes.js')).default;
   const tokenUsageRouter = (await import('./api/token-usage-routes.js')).default;
   const statsRouter = (await import('./api/stats-routes.js')).default;
@@ -255,6 +255,10 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // Factory Token使用量管理API路由
   app.use('/admin/token', tokenUsageRouter);
+
+  // Token统计API路由（新的准确统计）
+  const tokenStatsRouter = (await import('./api/token-stats-routes.js')).default;
+  app.use('/admin/token-stats', tokenStatsRouter);
 
   // BaSui: 请求统计API路由
   app.use('/admin/stats', statsRouter);
@@ -450,6 +454,73 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       } else {
         logWarning('⚠️ Token 自动同步已禁用（TOKEN_SYNC_ENABLED=false）');
         logInfo('💡 依赖 Token 使用量的轮询算法（如 least-token-used）将降级为简单轮询');
+      }
+
+      // 🔓 启动自动解封检查定时任务
+      const AUTO_UNBAN_CHECK_INTERVAL = 60 * 60 * 1000; // 每小时检查一次
+      setInterval(async () => {
+        try {
+          logDebug('🔓 执行自动解封检查...');
+          const unbannedCount = await keyPoolManager.checkAutoUnban();
+          if (unbannedCount > 0) {
+            logInfo(`🔓 自动解封检查完成: ${unbannedCount} 个密钥已解封`);
+          }
+        } catch (error) {
+          logError('自动解封检查失败', error);
+        }
+      }, AUTO_UNBAN_CHECK_INTERVAL);
+      
+      // 启动时立即执行一次检查
+      setTimeout(async () => {
+        try {
+          logDebug('🔓 启动时执行自动解封检查...');
+          const unbannedCount = await keyPoolManager.checkAutoUnban();
+          if (unbannedCount > 0) {
+            logInfo(`🔓 启动时自动解封: ${unbannedCount} 个密钥已解封`);
+          }
+        } catch (error) {
+          logError('启动时自动解封检查失败', error);
+        }
+      }, 5000); // 启动5秒后执行
+      
+      logInfo('🔓 自动解封检查已启动（每小时检查一次）');
+
+      const isAutoTestLeader = !CLUSTER_MODE || (cluster.isWorker && cluster.worker?.id === 1);
+      if (isAutoTestLeader) {
+        // 🧪 每小时自动测试启用密钥，确保402及时被拉黑
+        const HOURLY_KEY_TEST_INTERVAL = 60 * 60 * 1000; // 1小时
+        let hourlyKeyTestRunning = false;
+
+        const runHourlyKeyTest = async (trigger = 'scheduled') => {
+          if (hourlyKeyTestRunning) {
+            logWarning(`🧪 自动密钥测试仍在执行，跳过本次触发（${trigger}）`);
+            return;
+          }
+
+          hourlyKeyTestRunning = true;
+          const startedAt = Date.now();
+          logInfo(`🧪 自动密钥测试启动（触发：${trigger}，仅测试启用密钥）...`);
+
+          try {
+            const results = await keyPoolManager.testAllKeys(null, null, {
+              includeDisabled: false,
+              sourceLabel: `${trigger}-auto`
+            });
+
+            const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);
+            logInfo(`🧪 自动密钥测试完成：总计 ${results.total}，成功 ${results.success}，失败 ${results.failed}，封禁 ${results.banned}，耗时 ${elapsed}s`);
+          } catch (error) {
+            logError('自动密钥测试失败', error);
+          } finally {
+            hourlyKeyTestRunning = false;
+          }
+        };
+
+        setInterval(() => runHourlyKeyTest('hourly'), HOURLY_KEY_TEST_INTERVAL);
+        setTimeout(() => runHourlyKeyTest('startup'), 15_000);
+        logInfo('🧪 自动密钥测试调度器已启动（每小时执行一次，仅启用密钥）');
+      } else {
+        logInfo('🧪 自动密钥测试调度器仅在主进程/首个 Worker 执行，当前进程跳过');
       }
 
       const PORT = getPort();

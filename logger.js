@@ -31,19 +31,23 @@ function getTimestamp() {
  * BaSui：智能JSON序列化 - 大对象截断，小对象美化
  * 避免疯狂序列化大对象导致性能下降！
  */
-function smartStringify(data) {
+function smartStringify(data, isConsole = false) {
   if (!data) return '';
 
   try {
     const jsonStr = JSON.stringify(data);
     const maxSize = getMaxJsonLogSize();
+    
+    // 控制台输出时使用更小的限制
+    const consoleMaxSize = isConsole ? Math.min(maxSize, 500) : maxSize;
 
     // 如果对象太大，只输出摘要
-    if (jsonStr.length > maxSize) {
+    if (jsonStr.length > consoleMaxSize) {
       const summary = {
         _truncated: true,
         _original_size: jsonStr.length,
-        _preview: jsonStr.substring(0, maxSize) + '...'
+        _preview: jsonStr.substring(0, consoleMaxSize) + '...',
+        _hint: isConsole ? '完整内容已写入日志文件' : undefined
       };
       return JSON.stringify(summary, null, 2);
     }
@@ -56,12 +60,11 @@ function smartStringify(data) {
 }
 
 /**
- * BaSui：写入日志文件（仅生产模式）
+ * BaSui：写入日志文件
  * 使用追加模式，避免覆盖已有日志
  */
 function writeToFile(level, message, data = null) {
-  // BaSui：开发模式不写文件，节省IO！
-  if (isDevMode()) return;
+  // BaSui：开发模式也写文件，保留完整日志！
 
   try {
     ensureLogDir();
@@ -88,15 +91,15 @@ export function logInfo(message, data = null) {
 
   // BaSui：控制台输出
   if (isDev) {
-    // 开发模式：详细输出
-    console.log(`[INFO] ${message}`);
+    // 开发模式：详细输出（但缩短过长内容）
+    console.log(`\x1b[36m[INFO]\x1b[0m ${message}`);
     if (data) {
-      console.log(smartStringify(data));
+      console.log(smartStringify(data, true));
     }
   }
   // 生产模式：不输出到控制台，只写入文件
 
-  // BaSui：生产模式写文件（详细）
+  // BaSui：写文件（完整内容）
   writeToFile('INFO', message, data);
 }
 
@@ -104,10 +107,10 @@ export function logWarn(message, data = null) {
   const isDev = isDevMode();
 
   // BaSui：警告日志始终输出到控制台
-  console.warn(`[WARN] ${message}`);
+  console.warn(`\x1b[33m[WARN]\x1b[0m ${message}`);
   
   if (data && isDev) {
-    console.warn(smartStringify(data));
+    console.warn(smartStringify(data, true));
   }
 
   // BaSui：警告日志需要写文件，方便追踪潜在问题
@@ -119,9 +122,9 @@ export function logDebug(message, data = null) {
 
   // BaSui：DEBUG日志只在开发模式输出到控制台
   if (isDev) {
-    console.log(`[DEBUG] ${message}`);
+    console.log(`\x1b[90m[DEBUG]\x1b[0m ${message}`);
     if (data) {
-      console.log(smartStringify(data));
+      console.log(smartStringify(data, true));
     }
   }
 
@@ -133,12 +136,22 @@ export function logError(message, error = null) {
   const isDev = isDevMode();
 
   // BaSui：错误日志始终输出到控制台
-  console.error(`[ERROR] ${message}`);
+  console.error(`\x1b[31m[ERROR]\x1b[0m ${message}`);
 
   if (error) {
     if (isDev) {
-      // 开发模式：完整错误堆栈
-      console.error(error);
+      // 开发模式：完整错误堆栈（但过长时截断）
+      if (error instanceof Error) {
+        const stack = error.stack || error.message;
+        // 堆栈太长时截断
+        if (stack && stack.length > 1000) {
+          console.error(stack.substring(0, 1000) + '\n... [堆栈已截断，完整内容见日志文件]');
+        } else {
+          console.error(error);
+        }
+      } else {
+        console.error(smartStringify(error, true));
+      }
     } else {
       // 生产模式：简单错误信息
       console.error(error.message || error);

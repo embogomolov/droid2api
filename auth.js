@@ -28,6 +28,10 @@ class KeyPoolManager {
     this.keyPoolPath = path.join(__dirname, 'data', 'key_pool.json');
     this.keys = [];
     this.poolGroups = [];  // 🚀 BaSui：多级密钥池配置
+    // 🔧 修复并发写入竞态条件 - 添加写锁机制
+    this.writeLock = false;
+    this.writeQueue = [];
+    this.pendingSaveData = null;
     this.stats = {
       total: 0,
       active: 0,
@@ -83,7 +87,7 @@ class KeyPoolManager {
         }
         logInfo(`Polling algorithm: ${this.config.algorithm}`);
       } else {
-        logInfo('Key pool file not found, starting with empty pool');
+        logInfo('密钥池文件不存在，从空池开始');
         this.saveKeyPool();
       }
     } catch (error) {
@@ -92,13 +96,23 @@ class KeyPoolManager {
     }
   }
 
-  saveKeyPool() {
-    // BaSui：🚀 性能优化 - 使用异步批量写入（不阻塞主线程）
-    // 高并发场景下，多次写入会自动合并为一次（debounce 1秒）
+  async saveKeyPool() {
+    // 🔧 修复：添加写锁防止并发写入竞态
+    if (this.isWriting) {
+      // 🔧 修复 BaSui：改用 DEBUG 级别，避免日志污染
+      logDebug('[KeyPool] Write in progress, queueing request...');
+      await new Promise(resolve => {
+        this.writeQueue = this.writeQueue || [];
+        this.writeQueue.push(resolve);
+      });
+    }
+    this.isWriting = true;
+
+    // 🔧 修复并发写入竞态条件 - 使用写锁保护
     this.stats.total = this.keys.length;
-    this.stats.active = this.keys.filter(k => k.status === 'active').length;
-    this.stats.disabled = this.keys.filter(k => k.status === 'disabled').length;
-    this.stats.banned = this.keys.filter(k => k.status === 'banned').length;
+    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
+    this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
+    this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
 
     const data = {
       keys: this.keys,
@@ -107,20 +121,65 @@ class KeyPoolManager {
       config: this.config
     };
 
-    // BaSui：获取全局异步写入器（单例模式）
-    const writer = fileWriterManager.getWriter(this.keyPoolPath, {
-      debounceTime: 1000,  // 1秒内的多次写入合并为一次
-      maxRetries: 3,       // 失败重试3次
-      retryDelay: 500      // 重试延迟500ms
-    });
+    // 更新待保存数据
+    this.pendingSaveData = data;
 
-    // BaSui：异步写入（不会阻塞当前请求！）
-    // 注意：这里不用 await，让写入在后台进行
-    writer.write(data).catch(error => {
-      logError('密钥池异步保存失败', error);
-    });
+    // 如果正在写入，加入队列
+    if (this.writeLock) {
+      return new Promise((resolve, reject) => {
+        this.writeQueue.push({ resolve, reject });
+      });
+    }
 
-    logDebug('Key pool save scheduled (async)');
+    // 执行写入
+    return this._performSave();
+  
+    this.isWriting = false;
+    // 处理等待队列
+    if (this.writeQueue && this.writeQueue.length > 0) {
+      const waiter = this.writeQueue.shift();
+      waiter();
+    }
+  }
+
+  async _performSave() {
+    if (!this.pendingSaveData) return;
+
+    this.writeLock = true;
+    const dataToSave = this.pendingSaveData;
+    this.pendingSaveData = null;
+
+    try {
+      // BaSui：获取全局异步写入器（单例模式）
+      const writer = fileWriterManager.getWriter(this.keyPoolPath, {
+        debounceTime: 1000,  // 1秒内的多次写入合并为一次
+        maxRetries: 3,       // 失败重试3次
+        retryDelay: 500      // 重试延迟500ms
+      });
+
+      // 异步写入
+      await writer.write(dataToSave);
+      logDebug('Key pool saved successfully');
+
+      // 处理队列中的请求
+      const queue = this.writeQueue;
+      this.writeQueue = [];
+      queue.forEach(({ resolve }) => resolve());
+    } catch (error) {
+      logError('密钥池保存失败', error);
+      
+      // 处理队列中的请求（通知失败）
+      const queue = this.writeQueue;
+      this.writeQueue = [];
+      queue.forEach(({ reject }) => reject(error));
+    } finally {
+      this.writeLock = false;
+
+      // 如果还有新的待保存数据，继续保存
+      if (this.pendingSaveData) {
+        this._performSave();
+      }
+    }
   }
 
   /**
@@ -128,9 +187,9 @@ class KeyPoolManager {
    */
   async saveKeyPoolImmediately() {
     this.stats.total = this.keys.length;
-    this.stats.active = this.keys.filter(k => k.status === 'active').length;
-    this.stats.disabled = this.keys.filter(k => k.status === 'disabled').length;
-    this.stats.banned = this.keys.filter(k => k.status === 'banned').length;
+    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
+    this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
+    this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
 
     const data = {
       keys: this.keys,
@@ -146,14 +205,14 @@ class KeyPoolManager {
 
   async getNextKey() {
     // BaSui：只选用测试通过成功的key，没有就直接报错，简单粗暴！
-    let activeKeys = this.keys.filter(k =>
+    let activeKeys = (this.keys || []).filter(k =>
       k.status === 'active' && k.last_test_result === 'success'
     );
 
     if (activeKeys.length === 0) {
       // 艹，一个测试通过的key都没有，直接报错！
       const totalKeys = this.keys.length;
-      const activeButUntestedKeys = this.keys.filter(k => k.status === 'active' && k.last_test_result !== 'success').length;
+      const activeButUntestedKeys = (this.keys || []).filter(k => k.status === 'active' && k.last_test_result !== 'success').length;
 
       throw new Error(
         `密钥池中没有测试通过的可用密钥。` +
@@ -275,28 +334,262 @@ class KeyPoolManager {
     };
   }
 
-  banKey(keyId, reason = 'Payment Required - No Credits') {
-    const key = this.keys.find(k => k.id === keyId);
+  disableKey(keyId, reason = 'Key disabled') {
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
-      logError(`Key not found for banning: ${keyId}`);
+      logError(`未找到要禁用的密钥：${keyId}`);
       return false;
     }
 
-    key.status = 'banned';
-    key.banned_at = new Date().toISOString();
-    key.banned_reason = reason;
+    const now = new Date().toISOString();
+    key.status = 'disabled';
+    key.disabled_at = now;
+    key.disabled_reason = reason;
+    key.last_test_result = 'failed';
+    key.error_count = (key.error_count || 0) + 1;
+    key.last_error = reason;
+    key.disabled_402_count = reason.includes('402')
+      ? (key.disabled_402_count || 0) + 1
+      : key.disabled_402_count || 0;
 
     this.saveKeyPool();
-    logInfo(`🚫 Key banned: ${keyId} - ${reason}`);
+    logWarning(`🔕 密钥已禁用: ${keyId} - ${reason}`);
     return true;
   }
 
+  banKey(keyId, reason = 'Payment Required - No Credits') {
+    const keyIndex = this.keys.findIndex(k => k.id === keyId);
+    if (keyIndex === -1) {
+      logError(`未找到要封禁的密钥：${keyId}`);
+      return false;
+    }
+
+    const key = this.keys[keyIndex];
+    key.status = 'banned';
+    key.banned_at = new Date().toISOString();
+    key.banned_reason = reason;
+    key.unban_attempts = 0;  // 解封尝试次数
+
+    // 将封禁的密钥移动到banned_keys.json
+    this.saveBannedKey(key);
+    
+    // 从主密钥池中移除
+    this.keys.splice(keyIndex, 1);
+    this.saveKeyPool();
+    
+    logInfo(`🚫 密钥已封禁并移动到封禁列表: ${keyId} - ${reason}`);
+    return true;
+  }
+
+  /**
+   * 保存封禁的密钥到banned_keys.json
+   */
+  saveBannedKey(key) {
+    const bannedKeysPath = path.join(__dirname, 'data', 'banned_keys.json');
+    let bannedData = {
+      keys: [],
+      stats: {
+        total_banned: 0,
+        auto_unbanned: 0, 
+        manual_unbanned: 0,
+        last_check: null
+      },
+      config: {
+        auto_unban_enabled: true,
+        auto_unban_hours: 24,
+        retest_on_unban: true,
+        max_unban_attempts: 3
+      }
+    };
+    
+    try {
+      if (fs.existsSync(bannedKeysPath)) {
+        bannedData = JSON.parse(fs.readFileSync(bannedKeysPath, 'utf-8'));
+      }
+    } catch (error) {
+      logError('读取banned_keys.json失败', error);
+    }
+    
+    // 添加封禁的密钥
+    bannedData.keys.push(key);
+    bannedData.stats.total_banned++;
+    
+    // 保存到文件
+    try {
+      fs.writeFileSync(bannedKeysPath, JSON.stringify(bannedData, null, 2), 'utf-8');
+    } catch (error) {
+      logError('写入banned_keys.json失败', error);
+    }
+  }
+  
+  /**
+   * 加载封禁的密钥列表
+   */
+  loadBannedKeys() {
+    const bannedKeysPath = path.join(__dirname, 'data', 'banned_keys.json');
+    try {
+      if (fs.existsSync(bannedKeysPath)) {
+        const data = JSON.parse(fs.readFileSync(bannedKeysPath, 'utf-8'));
+        return data;
+      }
+    } catch (error) {
+      logError('加载banned_keys.json失败', error);
+    }
+    return { keys: [], stats: {}, config: {} };
+  }
+  
+  /**
+   * 自动解封检查（定时任务调用）
+   * 检查被封禁的密钥是否满足解封条件
+   */
+  async checkAutoUnban() {
+    const bannedData = this.loadBannedKeys();
+    if (!bannedData.config.auto_unban_enabled) {
+      return;
+    }
+    
+    const now = new Date();
+    const unbanHours = bannedData.config.auto_unban_hours || 24;
+    const maxAttempts = bannedData.config.max_unban_attempts || 3;
+    
+    let unbannedCount = 0;
+    const keysToKeep = [];
+    
+    for (const key of bannedData.keys) {
+      const bannedTime = new Date(key.banned_at);
+      const hoursSinceBan = (now - bannedTime) / (1000 * 60 * 60);
+      
+      // 检查是否满足解封时间条件
+      if (hoursSinceBan >= unbanHours) {
+        // 检查解封尝试次数
+        if ((key.unban_attempts || 0) < maxAttempts) {
+          logInfo(`⏰ 尝试自动解封密钥: ${key.id} (已封禁 ${hoursSinceBan.toFixed(1)} 小时)`);
+          
+          // 如果配置了重新测试
+          if (bannedData.config.retest_on_unban) {
+            // 先将密钥加回主池进行测试
+            key.status = 'active';
+            key.unban_attempts = (key.unban_attempts || 0) + 1;
+            this.keys.push(key);
+            
+            // 测试密钥
+            try {
+              const testResult = await this.testKey(key.id);
+              if (testResult.success) {
+                logInfo(`✅ 密钥自动解封成功: ${key.id}`);
+                unbannedCount++;
+                this.saveKeyPool();
+                bannedData.stats.auto_unbanned++;
+              } else if (testResult.status === 402) {
+                // 还是402错误，继续封禁
+                logWarning(`❌ 密钥解封失败(仍然402): ${key.id}`);
+                const index = this.keys.findIndex(k => k.id === key.id);
+                if (index > -1) {
+                  this.keys.splice(index, 1);
+                }
+                keysToKeep.push(key);
+              } else {
+                // 其他错误，暂时解封
+                logInfo(`⚠️ 密钥解封但状态未知: ${key.id}`);
+                unbannedCount++;
+                this.saveKeyPool();
+                bannedData.stats.auto_unbanned++;
+              }
+            } catch (error) {
+              logError(`密钥测试失败: ${key.id}`, error);
+              keysToKeep.push(key);
+            }
+          } else {
+            // 不测试，直接解封
+            key.status = 'active';
+            delete key.banned_at;
+            delete key.banned_reason;
+            delete key.unban_attempts;
+            this.keys.push(key);
+            this.saveKeyPool();
+            unbannedCount++;
+            bannedData.stats.auto_unbanned++;
+            logInfo(`✅ 密钥自动解封(未测试): ${key.id}`);
+          }
+        } else {
+          logDebug(`密钥解封尝试次数已达上限: ${key.id} (${key.unban_attempts}/${maxAttempts})`);
+          keysToKeep.push(key);
+        }
+      } else {
+        keysToKeep.push(key);
+      }
+    }
+    
+    // 更新封禁列表
+    bannedData.keys = keysToKeep;
+    bannedData.stats.last_check = now.toISOString();
+    
+    // 保存更新后的封禁列表
+    const bannedKeysPath = path.join(__dirname, 'data', 'banned_keys.json');
+    try {
+      fs.writeFileSync(bannedKeysPath, JSON.stringify(bannedData, null, 2), 'utf-8');
+    } catch (error) {
+      logError('更新banned_keys.json失败', error);
+    }
+    
+    if (unbannedCount > 0) {
+      logInfo(`🔓 自动解封完成: ${unbannedCount} 个密钥已解封`);
+    }
+    
+    return unbannedCount;
+  }
+  
+  /**
+   * 手动解封密钥
+   */
+  unbanKey(keyId) {
+    const bannedData = this.loadBannedKeys();
+    const keyIndex = bannedData.keys.findIndex(k => k.id === keyId);
+    
+    if (keyIndex === -1) {
+      throw new Error(`未找到封禁的密钥: ${keyId}`);
+    }
+    
+    const key = bannedData.keys[keyIndex];
+    // 恢复密钥到主池
+    key.status = 'active';
+    delete key.banned_at;
+    delete key.banned_reason;
+    delete key.unban_attempts;
+    
+    this.keys.push(key);
+    this.saveKeyPool();
+    
+    // 从封禁列表移除
+    bannedData.keys.splice(keyIndex, 1);
+    bannedData.stats.manual_unbanned++;
+    
+    // 保存更新后的封禁列表
+    const bannedKeysPath = path.join(__dirname, 'data', 'banned_keys.json');
+    try {
+      fs.writeFileSync(bannedKeysPath, JSON.stringify(bannedData, null, 2), 'utf-8');
+    } catch (error) {
+      logError('更新banned_keys.json失败', error);
+    }
+    
+    logInfo(`🔓 密钥已手动解封: ${keyId}`);
+    return key;
+  }
+  
+  /**
+   * 获取封禁的密钥列表
+   */
+  getBannedKeys() {
+    const bannedData = this.loadBannedKeys();
+    return bannedData.keys || [];
+  }
+  
   getCurrentKeyId() {
     return this.currentKeyId;
   }
 
   addKey(key, notes = '', poolGroup = null) {
-    if (this.keys.find(k => k.key === key)) {
+    if ((this.keys || []).find(k => k.key === key)) {
       throw new Error('Key already exists');
     }
 
@@ -366,7 +659,7 @@ class KeyPoolManager {
         return;
       }
 
-      if (this.keys.find(k => k.key === trimmedKey)) {
+      if ((this.keys || []).find(k => k.key === trimmedKey)) {
         results.duplicate++;
         return;
       }
@@ -393,20 +686,20 @@ class KeyPoolManager {
     // BaSui：筛选未测试过的密钥（last_test_at为空的）
     let keysToTest;
     if (keyIds && keyIds.length > 0) {
-      keysToTest = this.keys.filter(k => 
+      keysToTest = (this.keys || []).filter(k => 
         keyIds.includes(k.id) && 
         !k.last_test_at && 
         k.status !== 'banned'
       );
     } else {
-      keysToTest = this.keys.filter(k => 
+      keysToTest = (this.keys || []).filter(k => 
         !k.last_test_at && 
         k.status !== 'banned'
       );
     }
 
     if (keysToTest.length === 0) {
-      logInfo('No untested keys to test');
+      logInfo('没有未测试的密钥需要测试');
       return {
         tested: 0,
         success: 0,
@@ -469,7 +762,7 @@ class KeyPoolManager {
   deleteKey(keyId) {
     const index = this.keys.findIndex(k => k.id === keyId);
     if (index === -1) {
-      throw new Error('Key not found');
+      throw new Error('未找到密钥');
     }
 
     const key = this.keys[index];
@@ -480,9 +773,9 @@ class KeyPoolManager {
   }
 
   toggleKeyStatus(keyId, newStatus) {
-    const key = this.keys.find(k => k.id === keyId);
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
-      throw new Error('Key not found');
+      throw new Error('未找到密钥');
     }
 
     if (key.status === 'banned' && newStatus === 'active') {
@@ -500,9 +793,9 @@ class KeyPoolManager {
   }
 
   updateNotes(keyId, notes) {
-    const key = this.keys.find(k => k.id === keyId);
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
-      throw new Error('Key not found');
+      throw new Error('未找到密钥');
     }
 
     key.notes = notes;
@@ -511,23 +804,24 @@ class KeyPoolManager {
   }
 
   async testKey(keyId) {
-    const key = this.keys.find(k => k.id === keyId);
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
-      throw new Error('Key not found');
+      throw new Error('未找到密钥');
     }
 
     logInfo(`Testing key: ${keyId}`);
 
     // BaSui：实现重试机制，网络问题别一次就放弃！
     const retryConfig = this.config.retry;
-    const maxRetries = retryConfig.enabled ? (retryConfig.maxRetries || 0) : 0;
+    const configuredRetries = retryConfig.enabled ? (retryConfig.maxRetries || 0) : 0;
+    const maxAttempts = Math.max(1, Math.min(configuredRetries + 1, 3));
     const retryDelay = retryConfig.retryDelay || 1000;
 
     let lastError;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        if (attempt > 0) {
-          logInfo(`Retrying key test: ${keyId} (attempt ${attempt}/${maxRetries})`);
+        if (attempt > 1) {
+          logInfo(`Retrying key test: ${keyId} (第 ${attempt} 次/最多 ${maxAttempts} 次)`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
@@ -566,13 +860,25 @@ class KeyPoolManager {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(transformedRequest),
-            signal: controller.signal
+            signal: controller.signal,
+            maxRetries: 1
           });
           clearTimeout(timeoutId);
         } catch (fetchError) {
           clearTimeout(timeoutId);
-          if (fetchError.name === 'AbortError') {
-            throw new Error('Request timeout after 10 seconds');
+          // BaSui：处理 AbortError - 页面刷新或连接中断时不要崩溃！
+          if (fetchError.name === 'AbortError' || fetchError.type === 'aborted') {
+            key.last_test_result = 'aborted';
+            key.last_error = 'Test aborted (connection reset or timeout)';
+            this.saveKeyPool();
+            
+            return {
+              success: false,
+              status: 0,
+              message: 'Test aborted (connection reset or timeout)',
+              key_status: key.status,
+              aborted: true
+            };
           }
           throw fetchError;
         }
@@ -586,13 +892,27 @@ class KeyPoolManager {
           responseText = await response.text();
           responseBody = JSON.parse(responseText);
         } catch (e) {
+          // BaSui：处理流错误 - 页面刷新时可能中断读取
+          if (e.name === 'AbortError' || e.type === 'aborted') {
+            key.last_test_result = 'aborted';
+            key.last_error = 'Response reading aborted';
+            this.saveKeyPool();
+            
+            return {
+              success: false,
+              status: 0,
+              message: 'Test aborted while reading response',
+              key_status: key.status,
+              aborted: true
+            };
+          }
           // 响应不是JSON格式，使用原始文本
           responseBody = { raw: responseText };
         }
 
         // BaSui：402错误是确定性错误，不需要重试，直接封禁并返回
         if (response.status === 402) {
-          const errorMsg = responseBody?.error?.message || 'Payment Required - No Credits';
+          const errorMsg = responseBody?.error?.message || '余额不足 - 没有额度';
           key.status = 'banned';
           key.banned_at = new Date().toISOString();
           key.banned_reason = errorMsg;
@@ -619,7 +939,7 @@ class KeyPoolManager {
 
         // BaSui：401认证失败，标记为禁用！可能是密钥无效或被撤销了！
         if (response.status === 401) {
-          const errorMsg = responseBody?.error?.message || 'Unauthorized - Invalid API Key';
+          const errorMsg = responseBody?.error?.message || '未授权 - 无效的 API 密钥';
           key.status = 'disabled';
           key.last_test_result = 'failed';
           key.error_count = (key.error_count || 0) + 1;
@@ -657,7 +977,7 @@ class KeyPoolManager {
         }
 
         // BaSui：其他HTTP错误状态，如果是5xx可能是临时问题，可以重试
-        const errorMsg = responseBody?.error?.message || response.statusText || 'Unknown error';
+        const errorMsg = responseBody?.error?.message || response.statusText || '未知错误';
 
         // 4xx错误（除了429）是确定性错误，不重试
         if (response.status >= 400 && response.status < 500 && response.status !== 429) {
@@ -689,49 +1009,65 @@ class KeyPoolManager {
       } catch (error) {
         lastError = error;
 
-        // BaSui：如果还有重试机会，继续；否则退出循环
-        if (attempt < maxRetries) {
-          logInfo(`Key test attempt ${attempt + 1} failed: ${error.message}, will retry...`);
+        if (attempt < maxAttempts) {
+          logInfo(`Key test attempt ${attempt} failed: ${error.message}，准备第 ${attempt + 1} 次重试...`);
           continue;
         }
 
-        // 所有重试都失败了
         break;
       }
     }
 
-    // BaSui：所有重试都失败，记录最后的错误
-    key.status = 'disabled';  // BaSui：所有重试都失败，禁用密钥！
+    const finalErrorMessage = lastError?.message || 'Key test failed';
+
+    // BaSui：测试疯狂撞墙 3 次还不醒，直接BAN！
+    key.status = 'banned';
+    key.banned_at = new Date().toISOString();
+    key.banned_reason = `Auto test failed after ${maxAttempts} attempts`;
     key.last_test_result = 'failed';
     key.error_count = (key.error_count || 0) + 1;
-    key.last_error = lastError.message;
+    key.last_error = finalErrorMessage;
     this.saveKeyPool();
 
-    logError(`Key test error after ${maxRetries + 1} attempts: ${keyId}`, lastError);
+    logError(`Key test error after ${maxAttempts} attempts: ${keyId}`, lastError);
     return {
       success: false,
       status: 0,
-      message: `Test error after ${maxRetries + 1} attempts: ${lastError.message}`,
+      message: `Key banned after ${maxAttempts} failed test attempts: ${finalErrorMessage}`,
       key_status: key.status
     };
   }
 
-  async testAllKeys() {
+  async testAllKeys(poolGroup = null, customConcurrency = null, options = {}) {
+    const {
+      includeDisabled = true,
+      sourceLabel = 'manual'
+    } = options;
+
+    // BaSui：支持按池过滤测试！如果指定了poolGroup，只测试该池的密钥
+    let keysToTest = (this.keys || []).filter(k => k.status !== 'banned');
+
+    if (!includeDisabled) {
+      keysToTest = keysToTest.filter(k => k.status !== 'disabled');
+    }
+    
+    if (poolGroup) {
+      keysToTest = keysToTest.filter(k => k.pool_group === poolGroup);
+      logInfo(`Filtering keys for pool group: ${poolGroup}, found ${keysToTest.length} keys`);
+    }
+    
     const results = {
-      total: this.keys.length,
+      total: keysToTest.length,
       tested: 0,
       success: 0,
       failed: 0,
       banned: 0
     };
 
-    // BaSui：只测试非封禁状态的密钥
-    const keysToTest = this.keys.filter(k => k.status !== 'banned');
+    // BaSui：并发数优先使用传入参数，否则从配置读取，支持动态调整！默认10个，最大100个（生产环境优化）
+    const concurrentLimit = Math.max(1, Math.min(customConcurrency || this.config.performance.concurrentLimit || 10, 100));
 
-    // BaSui：并发数从配置读取，支持动态调整！默认10个，最大100个（生产环境优化）
-    const concurrentLimit = Math.max(1, Math.min(this.config.performance.concurrentLimit || 10, 100));
-
-    logInfo(`Starting batch test for ${keysToTest.length} keys (${concurrentLimit} concurrent)...`);
+    logInfo(`Starting ${sourceLabel} batch test for ${keysToTest.length} keys${poolGroup ? ` in pool '${poolGroup}'` : ''} (${concurrentLimit} concurrent)...`);
 
     for (let i = 0; i < keysToTest.length; i += concurrentLimit) {
       const batch = keysToTest.slice(i, i + concurrentLimit);
@@ -772,6 +1108,15 @@ class KeyPoolManager {
     return results;
   }
 
+  /**
+   * 获取活动密钥数量（用于重试逻辑）
+   */
+  getActiveKeyCount() {
+    return (this.keys || []).filter(k => 
+      k.status === 'active' && k.last_test_result === 'success'
+    ).length;
+  }
+  
   getKeys(page = 1, limit = 10, status = 'all', poolGroup = 'all') {
     let filteredKeys = this.keys;
 
@@ -803,27 +1148,27 @@ class KeyPoolManager {
   }
 
   getKey(keyId) {
-    const key = this.keys.find(k => k.id === keyId);
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
-      throw new Error('Key not found');
+      throw new Error('未找到密钥');
     }
     return key;
   }
 
   getStats() {
     this.stats.total = this.keys.length;
-    this.stats.active = this.keys.filter(k => k.status === 'active').length;
-    this.stats.disabled = this.keys.filter(k => k.status === 'disabled').length;
-    this.stats.banned = this.keys.filter(k => k.status === 'banned').length;
+    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
+    this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
+    this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
 
     return this.stats;
   }
 
   deleteDisabledKeys() {
-    const disabledKeys = this.keys.filter(k => k.status === 'disabled');
+    const disabledKeys = (this.keys || []).filter(k => k.status === 'disabled');
     const count = disabledKeys.length;
 
-    this.keys = this.keys.filter(k => k.status !== 'disabled');
+    this.keys = (this.keys || []).filter(k => k.status !== 'disabled');
     this.saveKeyPool();
 
     logInfo(`Deleted ${count} disabled keys`);
@@ -831,10 +1176,10 @@ class KeyPoolManager {
   }
 
   deleteBannedKeys() {
-    const bannedKeys = this.keys.filter(k => k.status === 'banned');
+    const bannedKeys = (this.keys || []).filter(k => k.status === 'banned');
     const count = bannedKeys.length;
 
-    this.keys = this.keys.filter(k => k.status !== 'banned');
+    this.keys = (this.keys || []).filter(k => k.status !== 'banned');
     this.saveKeyPool();
 
     logInfo(`Deleted ${count} banned keys`);
@@ -952,7 +1297,7 @@ class KeyPoolManager {
   _filterKeysByPoolPriority(activeKeys) {
     // BaSui：如果没有配置 poolGroups，返回所有密钥（降级处理）
     if (!this.poolGroups || this.poolGroups.length === 0) {
-      logDebug('No pool groups configured, using all active keys');
+      logDebug('未配置密钥池组，使用所有活动密钥');
       return activeKeys;
     }
 
@@ -1020,7 +1365,7 @@ class KeyPoolManager {
 
     return this.poolGroups.map(group => {
       // 筛选属于这个池子的密钥
-      const poolKeys = this.keys.filter(k => k.poolGroup === group.id);
+      const poolKeys = (this.keys || []).filter(k => k.poolGroup === group.id);
       const total = poolKeys.length;
       const active = poolKeys.filter(k => k.status === 'active').length;
       const disabled = poolKeys.filter(k => k.status === 'disabled').length;
@@ -1150,7 +1495,7 @@ class KeyPoolManager {
     selectedKey.last_used_at = new Date().toISOString();
 
     // BaSui：保存到密钥池
-    const originalKey = this.keys.find(k => k.id === selectedKey.id);
+    const originalKey = (this.keys || []).find(k => k.id === selectedKey.id);
     if (originalKey) {
       originalKey.usage_count = selectedKey.usage_count;
       originalKey.last_used_at = selectedKey.last_used_at;
@@ -1222,7 +1567,7 @@ class KeyPoolManager {
     selectedKey.last_used_at = new Date().toISOString();
 
     // BaSui：保存到密钥池
-    const originalKey = this.keys.find(k => k.id === selectedKey.id);
+    const originalKey = (this.keys || []).find(k => k.id === selectedKey.id);
     if (originalKey) {
       originalKey.usage_count = selectedKey.usage_count;
       originalKey.last_used_at = selectedKey.last_used_at;
@@ -1311,7 +1656,7 @@ class KeyPoolManager {
 
   async selectKeyByWeight(activeKeys = null) {
     // BaSui：优先使用传入的activeKeys，如果没有则内部过滤
-    const availableKeys = activeKeys || this.keys.filter(k => k.status === 'active' && k.last_test_result === 'success');
+    const availableKeys = activeKeys || (this.keys || []).filter(k => k.status === 'active' && k.last_test_result === 'success');
 
     if (availableKeys.length === 0) {
       throw new Error('密钥池中没有可用的密钥。总密钥数：' + this.keys.length + '。请先在管理面板中测试您的密钥。');
@@ -1363,7 +1708,7 @@ class KeyPoolManager {
   }
 
   async updateKeyStats(keyId, success) {
-    const key = this.keys.find(k => k.id === keyId);
+    const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
       logError('密钥 ' + keyId + ' 未找到，无法更新统计');
       return;
@@ -1383,6 +1728,34 @@ class KeyPoolManager {
     this.saveKeyPool();
 
     logDebug('密钥 ' + keyId.substring(0, 15) + '... 统计更新：成功率 ' + (key.success_rate * 100).toFixed(2) + '%，评分 ' + key.weight_score);
+  }
+
+  /**
+   * 增加密钥的错误计数（用于403等非致命错误）
+   * @param {string} keyId - 密钥ID
+   */
+  incrementErrorCount(keyId) {
+    const key = (this.keys || []).find(k => k.id === keyId);
+    if (!key) {
+      logError(`无法增加错误计数：未找到密钥 ${keyId}`);
+      return;
+    }
+    
+    // 增加错误计数
+    key.error_count = (key.error_count || 0) + 1;
+    key.last_error_at = new Date().toISOString();
+    key.total_requests = (key.total_requests || 0) + 1;
+    
+    // 更新成功率
+    key.success_rate = key.total_requests > 0 
+      ? (key.success_requests || 0) / key.total_requests 
+      : 0;
+    
+    // BaSui：错误发生后重新计算评分（不使用缓存）
+    key.weight_score = this.calculateKeyScore(key, false);
+    
+    logDebug(`Incremented error count for key ${keyId}: error_count=${key.error_count}, total_requests=${key.total_requests}`);
+    this.saveKeyPool();
   }
 }
 

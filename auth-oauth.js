@@ -29,6 +29,8 @@ class OAuthAuthenticator {
   /**
    * 从 DROID_REFRESH_KEY 或 auth.json 加载认证信息
    * 优先级：DROID_REFRESH_KEY > data/auth.json > ~/.factory/auth.json
+   *
+   * 🔧 BaSui：如果没有配置任何 refresh_token，直接返回 null，不报错！
    */
   async loadOAuthConfig() {
     // 1️⃣ 检查 DROID_REFRESH_KEY 环境变量
@@ -55,8 +57,8 @@ class OAuthAuthenticator {
           this.lastRefreshTime = authData.last_refresh;
         }
 
-        // 老王：恢复 tokenData，用于兜底
-        if (authData.api_key) {
+        // 🔧 BaSui：修复字段读取 - 优先使用 refresh_token 作为缓存判断依据
+        if (authData.refresh_token || authData.api_key) {
           this.tokenData = authData;
         }
 
@@ -72,6 +74,12 @@ class OAuthAuthenticator {
     }
 
     // 3️⃣ 检查 ~/.factory/auth.json 文件（用户级，兜底）
+    // 🔧 BaSui：添加环境变量控制 - 可通过 SKIP_FACTORY_AUTH=true 禁止读取用户级配置
+    if (process.env.SKIP_FACTORY_AUTH === 'true') {
+      logInfo('SKIP_FACTORY_AUTH is set, skipping ~/.factory/auth.json');
+      return null;
+    }
+
     const homeDir = process.env.HOME || process.env.USERPROFILE;
     if (homeDir) {
       const factoryAuthPath = path.join(homeDir, '.factory', 'auth.json');
@@ -87,8 +95,8 @@ class OAuthAuthenticator {
             this.lastRefreshTime = authData.last_refresh;
           }
 
-          // 老王：恢复 tokenData
-          if (authData.api_key) {
+          // 🔧 BaSui：修复字段读取 - 优先使用 refresh_token 作为缓存判断依据
+          if (authData.refresh_token || authData.api_key) {
             this.tokenData = authData;
           }
 
@@ -119,6 +127,12 @@ class OAuthAuthenticator {
 
     logInfo('Refreshing API key via WorkOS OAuth...');
 
+    // 🔧 修复 BaSui：检查 WORKOS_CLIENT_ID 是否配置
+    const clientId = process.env.WORKOS_CLIENT_ID || 'client_factory';
+    if (!process.env.WORKOS_CLIENT_ID) {
+      logWarning('WORKOS_CLIENT_ID not set, using default: client_factory');
+    }
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -126,7 +140,7 @@ class OAuthAuthenticator {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          client_id: process.env.WORKOS_CLIENT_ID || 'client_factory',
+          client_id: clientId,
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
         }),
@@ -135,6 +149,16 @@ class OAuthAuthenticator {
       if (!response.ok) {
         const errorText = await response.text();
         logError(`WorkOS OAuth refresh failed: ${response.status} ${response.statusText}`, errorText);
+
+        // 🔧 修复 BaSui：提供更友好的错误提示
+        if (response.status === 400 && errorText.includes('invalid_client')) {
+          logError('❌ OAuth 认证失败！可能的原因：');
+          logError('  1. WORKOS_CLIENT_ID 环境变量未设置或不正确');
+          logError('  2. refresh_token 已过期或无效');
+          logError('  3. WorkOS API 配置变更');
+          logError('💡 建议：检查环境变量配置或联系管理员');
+        }
+
         return null;
       }
 
