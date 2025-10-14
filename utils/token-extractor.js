@@ -2,9 +2,12 @@
  * Token 提取工具
  * BaSui: 专门用来从 Anthropic/OpenAI 响应中提取完整的 Token 统计
  * 支持：input_tokens, output_tokens, thinking_tokens, cache_creation_tokens, cache_read_tokens
+ * 
+ * 更新：集成了更准确的token计算和标准化功能
  */
 
 import { logDebug } from '../logger.js';
+import { normalizeTokenStats, estimateRequestTokens } from './token-counter.js';
 
 /**
  * 从 Anthropic 流式响应中提取完整 Token 统计

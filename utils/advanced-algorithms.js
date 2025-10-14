@@ -25,9 +25,10 @@ import { logInfo, logWarn, logError, logDebug } from '../logger.js';
  * @returns {Object} 选中的密钥对象
  */
 export async function selectKeyByWeightedUsage(activeKeys, loadTokenUsageData, saveKeyPool, allKeys) {
-  // BaSui：边界检查 - 防止空数组导致 undefined 访问
+  // 🔧 修复：优雅降级而不是抛出错误
   if (!activeKeys || activeKeys.length === 0) {
-    throw new Error('selectKeyByWeightedUsage: activeKeys 为空，无法选择密钥');
+    logWarn('selectKeyByWeightedUsage: 没有可用密钥，返回null');
+    return null;  // 返回null让调用者处理
   }
 
   const tokenUsageData = loadTokenUsageData();
@@ -116,9 +117,10 @@ export async function selectKeyByWeightedUsage(activeKeys, loadTokenUsageData, s
  * @returns {Object} 选中的密钥对象
  */
 export async function selectKeyByQuotaAware(activeKeys, loadTokenUsageData, saveKeyPool, allKeys, config) {
-  // BaSui：边界检查 - 防止空数组导致 undefined 访问
+  // 🔧 修复：优雅降级而不是抛出错误
   if (!activeKeys || activeKeys.length === 0) {
-    throw new Error('selectKeyByQuotaAware: activeKeys 为空，无法选择密钥');
+    logWarn('selectKeyByQuotaAware: 没有可用密钥，返回null');
+    return null;
   }
 
   const tokenUsageData = loadTokenUsageData();

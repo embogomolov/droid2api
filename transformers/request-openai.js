@@ -8,6 +8,12 @@ export function transformToOpenAI(openaiRequest) {
   
   // 应用关键词过滤
   const filteredRequest = keywordFilter.filterRequest(openaiRequest);
+
+  // BaSui：上游限制 temperature 与 top_p 不能并存，保留 temperature 优先
+  if (filteredRequest.temperature !== undefined && filteredRequest.top_p !== undefined) {
+    logDebug('BaSui：检测到同时携带 temperature/top_p，自动丢弃 top_p 以满足上游要求');
+    delete filteredRequest.top_p;
+  }
   
   const targetRequest = {
     model: filteredRequest.model,

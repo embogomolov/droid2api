@@ -8,6 +8,12 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
   
   // 应用关键词过滤
   const filteredRequest = keywordFilter.filterRequest(openaiRequest);
+
+  // BaSui：Anthropic 同样不接受 temperature 与 top_p 同时设置，保留 temperature 优先
+  if (filteredRequest.temperature !== undefined && filteredRequest.top_p !== undefined) {
+    logDebug('BaSui：检测到 temperature 与 top_p 并存，自动丢弃 top_p 以符合目标 API');
+    delete filteredRequest.top_p;
+  }
   
   // BaSui：支持模型ID映射（如 gpt-5 → claude-sonnet-4）
   const modelId = targetModel || filteredRequest.model;

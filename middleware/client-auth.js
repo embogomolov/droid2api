@@ -38,19 +38,19 @@ export function validateClientAuth(req, res, next) {
   const clientKey = req.headers['x-api-key'] || extractBearerToken(req.headers.authorization);
 
   if (!clientKey) {
-    logError('Client auth failed: No API key provided');
+    logError('客户端认证失败：未提供 API 密钥');
     return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'API key is required. Please provide x-api-key header or Authorization: Bearer <key>'
+      error: '未授权',
+      message: '需要 API 密钥。请提供 x-api-key 头或 Authorization: Bearer <key>'
     });
   }
 
   // BaSui：验证客户端密钥是否匹配
   if (clientKey !== apiAccessKey) {
-    logError('Client auth failed: Invalid API key');
+    logError('客户端认证失败：无效的 API 密钥');
     return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Invalid API key'
+      error: '未授权',
+      message: '无效的 API 密钥'
     });
   }
 
@@ -85,10 +85,10 @@ export function validateAdminAuth(req, res, next) {
 
   // 如果没配置管理密钥，拒绝访问
   if (!adminKey) {
-    logError('Admin auth failed: ADMIN_ACCESS_KEY not configured');
+    logError('管理员认证失败：未配置 ADMIN_ACCESS_KEY');
     return res.status(503).json({
-      error: 'Service Unavailable',
-      message: 'Admin panel is not configured. Please set ADMIN_ACCESS_KEY environment variable.'
+      error: '服务不可用',
+      message: '管理面板未配置。请设置 ADMIN_ACCESS_KEY 环境变量。'
     });
   }
 
@@ -96,19 +96,19 @@ export function validateAdminAuth(req, res, next) {
   const clientAdminKey = req.headers['x-admin-key'];
 
   if (!clientAdminKey) {
-    logError('Admin auth failed: No admin key provided');
+    logError('管理员认证失败：未提供管理密钥');
     return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Admin key is required. Please provide x-admin-key header.'
+      error: '未授权',
+      message: '需要管理密钥。请提供 x-admin-key 头。'
     });
   }
 
   // 验证管理密钥
   if (clientAdminKey !== adminKey) {
-    logError('Admin auth failed: Invalid admin key');
+    logError('管理员认证失败：无效的管理密钥');
     return res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Invalid admin key'
+      error: '未授权',
+      message: '无效的管理密钥'
     });
   }
 

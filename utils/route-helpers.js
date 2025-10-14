@@ -1,5 +1,6 @@
 import { logInfo, logDebug, logError } from '../logger.js';
 import keyPoolManager from '../auth.js';
+import fetchWithPool, { FetchRetryError } from './http-client.js';
 
 /**
  * 从响应中提取Token使用量信息
@@ -50,17 +51,61 @@ export function extractUsageFromResponse(data, type) {
 }
 
 /**
- * 记录Token使用量（仅日志记录，不持久化）
+ * 记录Token使用量（使用更准确的计算方法）
  * @param {Object} data - 响应数据
  * @param {string} modelType - 模型类型
  * @param {string} keyId - 密钥ID
+ * @param {Object} request - 原始请求数据（用于验证计算准确性）
+ * @param {Object} estimated - 预估的token使用量
+ * @param {number} latency - 请求延迟（毫秒）
  */
-export function recordTokenUsage(data, modelType, keyId) {
+export function recordTokenUsage(data, modelType, keyId, request = null, estimated = null, latency = null) {
   try {
     const usage = extractUsageFromResponse(data, modelType);
 
     if (usage && keyId) {
-      logDebug(`Token使用量: ${usage.total_tokens} tokens (keyId: ${keyId})`);
+      // 使用token使用量管理器记录
+      import('./token-usage-manager.js').then(module => {
+        const tokenUsageManager = module.default;
+        tokenUsageManager.recordUsage({
+          keyId,
+          model: modelType,
+          usage,
+          estimated,
+          latency
+        });
+      }).catch(err => {
+        logDebug(`导入token-usage-manager失败: ${err.message}`);
+      });
+
+      // 如果有请求数据，验证token计算的准确性
+      if (request && request.messages) {
+        import('./token-counter.js').then(({ countMessagesTokens }) => {
+          const calculatedInputTokens = countMessagesTokens(request.messages, modelType);
+          
+          // 比较实际值和计算值
+          const actualInputTokens = usage.prompt_tokens || usage.input_tokens || 0;
+          if (actualInputTokens > 0) {
+            const difference = Math.abs(actualInputTokens - calculatedInputTokens);
+            const percentDiff = (difference / actualInputTokens * 100).toFixed(1);
+            
+            if (percentDiff > 10) {
+              logDebug(`Token计算差异: 实际=${actualInputTokens}, 计算=${calculatedInputTokens}, 差异=${percentDiff}%`);
+            }
+          }
+        }).catch(err => {
+          logDebug(`导入token-counter失败: ${err.message}`);
+        });
+      }
+
+      // 记录更详细的token使用信息
+      const tokenDetails = {
+        total: usage.total_tokens || 0,
+        input: usage.prompt_tokens || usage.input_tokens || 0,
+        output: usage.completion_tokens || usage.output_tokens || 0
+      };
+
+      logDebug(`Token使用量 (keyId: ${keyId}): 总计=${tokenDetails.total}, 输入=${tokenDetails.input}, 输出=${tokenDetails.output}`);
     }
   } catch (error) {
     logDebug(`记录Token使用量失败: ${error.message}`);
@@ -74,13 +119,13 @@ export function recordTokenUsage(data, modelType, keyId) {
  * @param {Object} res - Express响应对象
  */
 export async function handle402Error(keyId, response, res) {
-  keyPoolManager.banKey(keyId, 'Payment Required - No Credits');
+  keyPoolManager.disableKey(keyId, '402: Payment Required - No Credits');
   const errorText = await response.text();
-  logError(`Key banned due to 402 error: ${keyId}`, new Error(errorText));
+  logError(`Key disabled due to 402 error: ${keyId}`, new Error(errorText));
 
   return res.status(402).json({
     error: 'Payment Required',
-    message: 'Key has been banned due to insufficient credits',
+    message: 'Key has been disabled due to insufficient credits',
     details: errorText
   });
 }
@@ -218,18 +263,35 @@ export async function executeUpstreamRequest(req, res, options) {
 
   // 调用上游API
   let response;
+  const requestBody = typeof body === 'string' ? body : JSON.stringify(body);
+
   try {
-    response = await fetch(endpoint, {
+    response = await fetchWithPool(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body)
+      body: requestBody,
+      maxRetries: 1
     });
   } catch (fetchError) {
+    if (fetchError instanceof FetchRetryError) {
+      logError('Upstream retry exhausted', fetchError);
+      if (!res.headersSent) {
+        return res.status(504).json({
+          error: 'Upstream retry exhausted',
+          message: fetchError.message,
+          attempts: fetchError.attempts
+        });
+      }
+      return;
+    }
     logError('Failed to call upstream API', fetchError);
-    return res.status(500).json({
-      error: 'Upstream API call failed',
-      message: fetchError.message
-    });
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: 'Upstream API call failed',
+        message: fetchError.message
+      });
+    }
+    return;
   }
 
   logInfo(`Response status: ${response.status}`);

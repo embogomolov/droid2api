@@ -36,19 +36,22 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
-    if (eventType === 'response.output_text.delta') {
+    if (eventType === 'response?.output_text?.delta') {
       const text = eventData.delta || eventData.text || '';
       return this.createOpenAIChunk(text, null, false);
     }
 
-    if (eventType === 'response.output_text.done') {
+    if (eventType === 'response?.output_text?.done') {
       return null;
     }
 
     // BaSui：处理工具调用开始事件
-    if (eventType === 'response.tool_calls.start') {
+    if (eventType === 'response?.tool_calls?.start') {
+      // 🔧 修复：使用原子操作防止竞态条件
+      const currentIndex = this.toolCallIndex;
+      this.toolCallIndex = currentIndex + 1;
       const toolCall = {
-        index: this.toolCallIndex++,
+        index: currentIndex,
         id: eventData.id || `call_${Date.now()}`,
         type: 'function',
         function: {
@@ -61,7 +64,7 @@ export class OpenAIResponseTransformer {
     }
 
     // BaSui：处理工具调用参数增量
-    if (eventType === 'response.tool_calls.delta' || eventType === 'response.function_call.delta') {
+    if (eventType === 'response?.tool_calls?.delta' || eventType === 'response?.function_call?.delta') {
       const argumentsDelta = eventData.delta || eventData.arguments || '';
       const index = eventData.index !== undefined ? eventData.index : this.toolCallIndex - 1;
       
@@ -73,7 +76,7 @@ export class OpenAIResponseTransformer {
     }
 
     // BaSui：处理工具调用完成
-    if (eventType === 'response.tool_calls.done' || eventType === 'response.function_call.done') {
+    if (eventType === 'response?.tool_calls?.done' || eventType === 'response?.function_call?.done') {
       return null;
     }
 

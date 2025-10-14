@@ -41,8 +41,11 @@ export class AnthropicResponseTransformer {
       // BaSui：处理工具调用开始事件
       if (blockType === 'tool_use') {
         const toolUse = eventData.content_block;
+        // 🔧 修复：使用原子操作防止竞态条件
+        const currentIndex = this.toolCallIndex;
+        this.toolCallIndex = currentIndex + 1;
         this.currentToolCall = {
-          index: this.toolCallIndex++,
+          index: currentIndex,
           id: toolUse.id || `call_${Date.now()}`,
           type: 'function',
           function: {

@@ -47,7 +47,16 @@ class AsyncFileWriter {
 
     // BaSui：debounce - 1秒内的多次写入合并为一次
     return new Promise((resolve, reject) => {
-      this.writeQueue.push({ resolve, reject });
+      
+    // 🔧 修复：限制队列大小防止内存泄漏
+    if (this.writeQueue.length > 1000) {
+      const error = new Error('Write queue overflow - too many pending writes');
+      logError('AsyncFileWriter queue overflow', error);
+      reject(error);
+      return;
+    }
+
+    this.writeQueue.push({ resolve, reject });
 
       this.writeTimer = setTimeout(async () => {
         await this._flushWrite();
@@ -79,7 +88,8 @@ class AsyncFileWriter {
   async _flushWrite() {
     // BaSui：防止并发写入（加锁）
     if (this.isWriting) {
-      logDebug('Write in progress, skipping...');
+      // 🔧 修复 BaSui：改用 DEBUG 级别，避免日志污染
+      logDebug(`[FileWriter] Write in progress for ${this.filePath}, will retry after debounce`);
       return;
     }
 
@@ -216,6 +226,22 @@ class FileWriterManager {
 
 // BaSui：全局单例
 const fileWriterManager = new FileWriterManager();
+
+// 🔧 修复：进程退出时flush所有pending写入，避免数据丢失
+async function flushAllWriters() {
+  try {
+    console.log('Flushing all pending writes...');
+    await fileWriterManager.destroyAll();
+    console.log('All pending writes flushed');
+  } catch (error) {
+    console.error('Error flushing writes:', error);
+  }
+}
+
+// 注册进程退出钩子
+process.on('SIGTERM', flushAllWriters);
+process.on('SIGINT', flushAllWriters);
+process.on('beforeExit', flushAllWriters);
 
 export { AsyncFileWriter, fileWriterManager };
 export default fileWriterManager;
