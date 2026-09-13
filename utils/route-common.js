@@ -199,3 +199,17 @@ export default {
   validateModel,
   setStreamingHeaders
 };
+
+// Stop pulling upstream events while a slow client is backpressured.
+export function writeResponseChunk(res, chunk) {
+  if (res.destroyed) throw new Error('Client disconnected');
+  if (res.write(chunk)) return;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => { res.off('drain', drained); res.off('close', closed); res.off('error', failed); };
+    const drained = () => { cleanup(); resolve(); };
+    const closed = () => { cleanup(); reject(new Error('Client disconnected')); };
+    const failed = error => { cleanup(); reject(error); };
+    res.once('drain', drained); res.once('close', closed); res.once('error', failed);
+    if (res.destroyed) closed();
+  });
+}

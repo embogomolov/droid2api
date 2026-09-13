@@ -19,7 +19,7 @@ import { logInfo, logError, logDebug } from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const STATS_FILE = path.join(__dirname, '..', 'data', 'request_stats.json');
+const STATS_FILE = process.env.DROID2API_STATS_FILE || path.join(__dirname, '..', 'data', 'request_stats.json');
 const DAILY_RETENTION_DAYS = 30; // Retain 30 days of daily statistics.
 
 /**
@@ -135,7 +135,8 @@ export function recordRequest({
   cacheCreationTokens = 0,
   cacheReadTokens = 0,
   model = 'unknown',
-  success = true
+  success = true,
+  factoryTransport = null
 }) {
   try {
     const stats = loadStats();
@@ -146,6 +147,23 @@ export function recordRequest({
     stats.total.tokens += totalTokens;
     stats.total.requests += 1;
     stats.total.last_updated = new Date().toISOString();
+    if (factoryTransport) {
+      // Physical Factory requests, including hidden context uploads. Missing
+      // usage is counted separately; these are token counts, not quota estimates.
+      stats.factory_transport ||= { total: {}, by_key: {} };
+      const key = factoryTransport.keyId || 'external';
+      stats.factory_transport.by_key[key] ||= {};
+      for (const target of [stats.factory_transport.total, stats.factory_transport.by_key[key]]) {
+        const increments = { requests: 1, warmups: factoryTransport.phase === 'warmup' ? 1 : 0,
+          delta_requests: factoryTransport.contextMode === 'delta' ? 1 : 0,
+          unknown_usage_requests: factoryTransport.usage ? 0 : 1,
+          sent_bytes: factoryTransport.frameBytes, input_tokens: inputTokens,
+          cached_input_tokens: cacheReadTokens, uncached_input_tokens: Math.max(0, inputTokens - cacheReadTokens),
+          cache_write_tokens: cacheCreationTokens, output_tokens: outputTokens,
+          reasoning_tokens: factoryTransport.usage?.output_tokens_details?.reasoning_tokens ?? factoryTransport.usage?.output_tokens_details?.thinking_tokens ?? factoryTransport.usage?.thinking_output_tokens ?? 0 };
+        for (const [name, value] of Object.entries(increments)) target[name] = (target[name] || 0) + value;
+      }
+    }
 
     // Update daily statistics.
     if (!stats.daily[today]) {
