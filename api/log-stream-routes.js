@@ -29,6 +29,7 @@ router.get('/logs/stream', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // Nginx compatibility
+  res.write(': connected\n\n'); // Establish SSE immediately, even with an empty log buffer.
 
   // 📋 Get filter parameters
   const levelFilter = req.query.level ? req.query.level.split(',') : null;

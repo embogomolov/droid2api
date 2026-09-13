@@ -68,6 +68,14 @@ router.get('/keys', wrapAsync(async (req, res) => {
   const includeTokenUsage = req.query.includeTokenUsage === 'true';
 
   const result = keyPoolManager.getKeys(page, limit, status, poolGroup);
+  result.keys = result.keys.map(key => ({ ...key, routing: Object.fromEntries(
+    [['standard', 'claude-haiku-4-5-20251001'], ['core', 'kimi-k3']].map(([group, model]) => {
+      let blocked = null;
+      try { blocked = getWindowSync(keyPoolManager).routingBlock(key, model); }
+      catch { blocked = 'Window synchronization status is unavailable'; }
+      return [group, { blocked }];
+    })
+  ) }));
 
   // Load token-usage data if token usage information is requested
   if (includeTokenUsage) {

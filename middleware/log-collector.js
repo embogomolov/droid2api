@@ -74,6 +74,25 @@ function truncateData(data, maxLength = 500) {
 export function logCollectorMiddleware(req, res, next) {
   const startTime = Date.now();
   const timestamp = getTimestamp();
+  // UI polling and key administration are not generation traffic; never buffer key payloads.
+  if ((req.originalUrl || req.url).startsWith('/admin')) return next();
+  if (req.method === 'POST' && /^\/v1\/(responses|messages|chat\/completions)\/?$/.test(req.path || req.url)) {
+    let recorded = false;
+    const complete = () => {
+      if (recorded) return;
+      recorded = true;
+      const report = res.locals?.factoryRequest || {};
+      const failed = !res.writableFinished || res.statusCode >= 400 || report.success === false;
+      addLogToBuffer({ type: 'generation', timestamp: getTimestamp(), level: failed ? 'error' : 'info',
+        summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
+          elapsedMs: Date.now() - startTime, usage: report.usage || null,
+          outcome: !res.writableFinished ? 'Disconnected' : res.statusCode >= 400 ? `HTTP ${res.statusCode}` : report.success === false ? 'Stream failed' : 'Completed',
+          error: report.error || null } });
+    };
+    res.once('finish', complete); res.once('close', complete);
+    return next();
+  }
+
 
   // 🔍 Record the request log
   const requestLog = {
