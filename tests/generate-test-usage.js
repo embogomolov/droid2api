@@ -1,6 +1,6 @@
 /**
- * 生成测试用的Token使用量数据
- * 用于测试可视化界面
+ * Generate sample token usage data
+ * Used to test the visualization interface
  */
 import fs from 'fs';
 import path from 'path';
@@ -9,14 +9,14 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 创建data目录（在项目根目录）
+// Create the data directory at the project root
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
-    console.log('✅ 创建data目录');
+    console.log('✅ Created data directory');
 }
 
-// 生成模拟的使用量数据
+// Generate simulated usage data
 const generateUsageData = () => {
     const usage = {};
     const keys = [
@@ -30,14 +30,14 @@ const generateUsageData = () => {
     const today = new Date();
     const dates = [];
 
-    // 生成最近7天的日期
+    // Generate dates for the last 7 days
     for (let i = 6; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         dates.push(date.toISOString().split('T')[0]);
     }
 
-    // 为每个密钥生成使用数据
+    // Generate usage data for each key
     keys.forEach((key, index) => {
         const maskedKey = `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
         usage[maskedKey] = {
@@ -48,7 +48,7 @@ const generateUsageData = () => {
             last_updated: new Date().toISOString()
         };
 
-        // 生成每日数据
+        // Generate daily data
         dates.forEach(date => {
             usage[maskedKey].daily[date] = {
                 tokens: Math.floor(Math.random() * 100000) + 5000,
@@ -56,7 +56,7 @@ const generateUsageData = () => {
             };
         });
 
-        // 生成今天的小时数据
+        // Generate hourly data for today
         const todayDate = dates[dates.length - 1];
         for (let hour = 0; hour <= new Date().getHours(); hour++) {
             const hourKey = `${todayDate}T${hour.toString().padStart(2, '0')}:00`;
@@ -70,7 +70,7 @@ const generateUsageData = () => {
     return usage;
 };
 
-// 生成余额数据（可选）
+// Generate balance data (optional)
 const generateBalanceData = () => {
     const balances = {};
     const keys = [
@@ -93,33 +93,33 @@ const generateBalanceData = () => {
     return balances;
 };
 
-// 保存使用量数据
+// Save usage data
 const usageFile = path.join(dataDir, 'factory_usage.json');
 const usageData = {
     usage: generateUsageData(),
     timestamp: new Date().toISOString()
 };
 fs.writeFileSync(usageFile, JSON.stringify(usageData, null, 2));
-console.log('✅ 生成测试使用量数据:', usageFile);
+console.log('✅ Generated sample usage data:', usageFile);
 
-// 保存余额数据
+// Save balance data
 const balanceFile = path.join(dataDir, 'factory_balance.json');
 const balanceData = {
     balances: generateBalanceData(),
     last_sync: new Date().toISOString()
 };
 fs.writeFileSync(balanceFile, JSON.stringify(balanceData, null, 2));
-console.log('✅ 生成测试余额数据:', balanceFile);
+console.log('✅ Generated sample balance data:', balanceFile);
 
-// 显示生成的数据统计
+// Show statistics for the generated data
 const stats = Object.values(usageData.usage).reduce((acc, curr) => {
     acc.totalTokens += curr.total_tokens;
     acc.totalRequests += curr.total_requests;
     return acc;
 }, { totalTokens: 0, totalRequests: 0 });
 
-console.log('\n📊 生成的测试数据统计:');
-console.log(`  - 密钥数量: ${Object.keys(usageData.usage).length}`);
-console.log(`  - 总Token使用量: ${stats.totalTokens.toLocaleString()}`);
-console.log(`  - 总请求次数: ${stats.totalRequests.toLocaleString()}`);
-console.log('\n🎉 测试数据生成完成！重启服务器后即可在前端看到可视化效果。');
+console.log('\n📊 Generated test data statistics:');
+console.log(`  - Number of keys: ${Object.keys(usageData.usage).length}`);
+console.log(`  - Total token usage: ${stats.totalTokens.toLocaleString()}`);
+console.log(`  - Total request count: ${stats.totalRequests.toLocaleString()}`);
+console.log('\n🎉 Test data generated! Restart the server to see the visualizations in the UI.');

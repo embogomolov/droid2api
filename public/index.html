@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>密钥池管理系统 - droid2api</title>
-    <!-- 主样式文件 - 已包含极致美化效果 -->
+    <!-- Main stylesheet, including visual enhancements -->
     <link rel="stylesheet" href="style.css">
-    <!-- 隐藏仪表盘筛选器 -->
+    <!-- Hide the dashboard filter -->
     <link rel="stylesheet" href="hide-dashboard-filter.css">
-    <!-- 添加Inter字体和中文字体，提升视觉效果 -->
+    <!-- Load Inter and a CJK font for improved typography -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -25,19 +25,19 @@
             </div>
         </header>
 
-        <!-- 认证区域 -->
+        <!-- Authentication section -->
         <div id="authSection" class="auth-section">
             <div class="auth-card">
                 <h2>🔐 管理员认证</h2>
-                <input type="password" id="adminKeyInput" placeholder="请输入管理员密钥" onkeypress="if(event.key==='Enter') authenticate()" />
+                <input type="password" id="adminKeyInput" placeholder="Enter your admin access key" onkeypress="if(event.key==='Enter') authenticate()" />
                 <button onclick="authenticate()" class="btn btn-primary">登录</button>
                 <p class="hint">💡 管理员密钥配置在 .env 文件的 ADMIN_ACCESS_KEY<br>登录后会自动记住1小时，过期后需重新登录</p>
             </div>
         </div>
 
-        <!-- 主内容区域 -->
+        <!-- Main content area -->
         <div id="mainContent" class="main-content" style="display: none;">
-            <!-- Tab导航 -->
+            <!-- Tab navigation -->
             <div class="tab-navigation">
                 <button class="tab-button active" onclick="switchTab('dashboard')">
                     📊 仪表盘
@@ -56,10 +56,10 @@
                 </button>
             </div>
 
-            <!-- Tab内容区域 -->
-            <!-- Dashboard页面 -->
+            <!-- Tab content area -->
+            <!-- Dashboard page -->
             <div id="tabDashboard" class="tab-content active">
-            <!-- 统计信息 - 美化版 -->
+            <!-- Styled statistics summary -->
             <div class="stats-container">
                 <div class="stat-card stat-primary">
                     <div class="stat-icon">🔑</div>
@@ -89,7 +89,7 @@
                         <div class="stat-label">已封禁</div>
                     </div>
                 </div>
-                <!-- BaSui：显示当前轮询算法 -->
+                <!-- BaSui: Show the current key selection algorithm -->
                 <div class="stat-card stat-info">
                     <div class="stat-icon">🎯</div>
                     <div class="stat-content">
@@ -99,7 +99,7 @@
                 </div>
             </div>
             
-            <!-- Token使用统计 - 新增第二行 -->
+            <!-- Token usage statistics in a second row -->
             <div class="stats-container stats-row-2">
                 <div class="stat-card stat-token-used">
                     <div class="stat-icon">📊</div>
@@ -131,7 +131,7 @@
                 </div>
             </div>
 
-            <!-- Dashboard 图表筛选器 -->
+            <!-- Dashboard chart filter -->
             <div class="dashboard-filter-bar">
                 <div class="filter-group">
                     <label class="filter-label">
@@ -150,11 +150,11 @@
                 </div>
             </div>
 
-            <!-- 🚀 BaSui：多级密钥池统计卡片 -->
+            <!-- 🚀 BaSui: Multi-tier key pool statistics cards -->
             <div class="pool-groups-container" id="poolGroupsContainer" style="display: none;">
                 <h2 class="section-title">🎯 多级密钥池</h2>
                 <div class="pool-groups-grid" id="poolGroupsGrid">
-                    <!-- 动态生成池子卡片 -->
+                    <!-- Pool cards are generated dynamically -->
                 </div>
                 <div class="pool-groups-actions">
                     <button onclick="showCreatePoolModal()" class="btn btn-primary">➕ 创建密钥池</button>
@@ -207,7 +207,7 @@
                 </div>
             </div>
 
-            <!-- 性能统计图表 -->
+            <!-- Performance statistics charts -->
             <div class="charts-container">
                 <div class="chart-card">
                     <h3>📊 密钥状态分布</h3>
@@ -222,7 +222,7 @@
                     </h3>
                     <div class="chart-placeholder" id="successRateChart">
                         <div class="success-rate-list" id="successRateList">
-                            <!-- 动态生成成功率排行 -->
+                            <!-- Success rate ranking is generated dynamically -->
                         </div>
                     </div>
                 </div>
@@ -233,7 +233,7 @@
                     </h3>
                     <div class="chart-placeholder" id="usageHeatmap">
                         <div class="usage-stats" id="usageStats">
-                            <!-- 动态生成使用统计 -->
+                            <!-- Usage statistics are generated dynamically -->
                         </div>
                     </div>
                 </div>
@@ -243,16 +243,16 @@
                         <span class="chart-subtitle">Top 10 密钥使用量分析</span>
                     </h3>
                     <div class="chart-content-flex">
-                        <!-- 左侧：柱状图/排行榜 -->
+                        <!-- Left: bar chart and ranking -->
                         <div class="chart-section">
                             <h4>📊 使用量排行榜</h4>
                             <div class="chart-placeholder" id="tokenTrendChart">
                                 <div class="token-trend-stats" id="tokenTrendStats">
-                                    <!-- 动态生成Token排行榜 -->
+                                    <!-- Token usage ranking is generated dynamically -->
                                 </div>
                             </div>
                         </div>
-                        <!-- 右侧：折线图 -->
+                        <!-- Right: line chart -->
                         <div class="chart-section">
                             <h4>📉 7天使用趋势</h4>
                             <div class="chart-placeholder" id="tokenLineChart">
@@ -263,11 +263,11 @@
                 </div>
             </div>
             </div>
-            <!-- Dashboard Tab结束 -->
+            <!-- End of dashboard tab -->
 
-            <!-- 密钥管理Tab -->
+            <!-- Key management tab -->
             <div id="tabKeys" class="tab-content">
-            <!-- 操作按钮区 -->
+            <!-- Action buttons -->
             <div class="actions-container">
                 <button onclick="showAddKeyModal()" class="btn btn-primary">➕ 添加密钥</button>
                 <button onclick="showBatchImportModal()" class="btn btn-secondary">📥 批量导入</button>
@@ -278,7 +278,7 @@
                 <button onclick="refreshData(true)" class="btn btn-success">🔄 刷新</button>
             </div>
 
-            <!-- BaSui: 批量操作按钮区 (新设计) -->
+            <!-- BaSui: Bulk action buttons (updated design) -->
             <div class="actions-container" style="margin-top: 10px; border-top: 2px solid #e5e7eb; padding-top: 10px;">
                 <span style="font-weight: 600; color: #6b7280; margin-right: 10px;">📦 批量操作:</span>
                 <button onclick="openBatchActionModal('changePool')" class="btn btn-warning">
@@ -295,7 +295,7 @@
                 </button>
             </div>
 
-            <!-- 筛选区域 - 美化版 -->
+            <!-- Styled filter area -->
             <div class="filter-container-modern">
                 <div class="filter-group">
                     <label class="filter-label">
@@ -317,7 +317,7 @@
                     </label>
                     <select id="poolGroupFilter" onchange="filterChanged()" class="filter-select">
                         <option value="all">全部池子</option>
-                        <!-- 动态加载池子选项 -->
+                        <!-- Pool options are loaded dynamically -->
                     </select>
                 </div>
 
@@ -343,7 +343,7 @@
                 </div>
             </div>
 
-            <!-- 密钥列表 - 美化版 -->
+            <!-- Styled key list -->
             <div class="table-container-modern">
                 <table class="keys-table-modern">
                     <thead>
@@ -375,16 +375,16 @@
                 </table>
             </div>
 
-            <!-- 分页 - 美化版 -->
+            <!-- Styled pagination -->
             <div class="pagination-modern" id="pagination"></div>
             </div>
-            <!-- 密钥管理Tab结束 -->
+            <!-- End of key management tab -->
 
-            <!-- 实时日志Tab -->
+            <!-- Live logs tab -->
             <div id="tabLogs" class="tab-content">
                 <h2 class="section-title">📝 实时日志</h2>
 
-                <!-- 日志统计卡片 -->
+                <!-- Log statistics cards -->
                 <div class="log-stats-container">
                     <div class="log-stat-card log-stat-total">
                         <div class="log-stat-icon">📊</div>
@@ -416,7 +416,7 @@
                     </div>
                 </div>
 
-                <!-- 日志控制面板 -->
+                <!-- Log controls -->
                 <div class="log-controls">
                     <div class="log-controls-left">
                         <button onclick="toggleLogStream()" class="btn btn-primary" id="logStreamToggle">
@@ -434,7 +434,7 @@
                     </div>
                 </div>
 
-                <!-- 日志筛选器 -->
+                <!-- Log filters -->
                 <div class="log-filters">
                     <div class="filter-group">
                         <label>级别筛选：</label>
@@ -457,7 +457,7 @@
                     </div>
                     <div class="filter-group">
                         <label>关键词搜索：</label>
-                        <input type="text" id="logSearchKeyword" placeholder="输入关键词..." onkeyup="applyLogFilters()" class="filter-input">
+                        <input type="text" id="logSearchKeyword" placeholder="Enter a keyword..." onkeyup="applyLogFilters()" class="filter-input">
                     </div>
                     <div class="filter-group">
                         <label>自动滚动：</label>
@@ -468,16 +468,16 @@
                     </div>
                 </div>
 
-                <!-- 日志显示区域 -->
+                <!-- Log display area -->
                 <div class="log-display-container">
                     <div class="log-list" id="logList">
                         <div class="log-empty">暂无日志，点击"启动实时日志"开始监控</div>
                     </div>
                 </div>
             </div>
-            <!-- 实时日志Tab结束 -->
+            <!-- End of live logs tab -->
 
-            <!-- 关键词过滤Tab -->
+            <!-- Keyword filtering tab -->
             <div id="tabKeywordFilter" class="tab-content">
                 <div class="keyword-section-header">
                     <div class="keyword-title-wrap">
@@ -566,16 +566,16 @@
                     </table>
                 </div>
             </div>
-            <!-- 关键词过滤Tab结束 -->
+            <!-- End of keyword filtering tab -->
 
-            <!-- 系统配置Tab -->
+            <!-- Settings tab -->
             <div id="tabConfig" class="tab-content">
                 <h2 class="section-title">⚙️ 系统配置</h2>
                 <p class="hint">💡 修改后点击"保存配置"按钮生效，部分配置需重启服务器</p>
 
-                <!-- 配置卡片网格 - 第一行 -->
+                <!-- Configuration card grid - row 1 -->
                 <div class="config-grid">
-                    <!-- 基础配置卡片 -->
+                    <!-- General settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🎛️</div>
@@ -600,7 +600,7 @@
                         </div>
                     </div>
 
-                    <!-- 轮询算法卡片 -->
+                    <!-- Key selection algorithm card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔄</div>
@@ -609,17 +609,17 @@
                         <div class="form-group">
                             <label for="configAlgorithm">算法类型：</label>
                             <select id="configAlgorithm" class="modal-input">
-                                <optgroup label="📋 传统算法">
+                                <optgroup label="📋 Basic algorithms">
                                     <option value="round-robin">轮询 (Round-Robin) - 按顺序分配</option>
                                     <option value="random">随机 (Random) - 随机选择</option>
                                     <option value="least-used">最少使用 (Least-Used) - 选择使用次数最少的</option>
                                     <option value="weighted-score">加权评分 (Weighted-Score) - 基于成功率和使用情况智能选择</option>
                                 </optgroup>
-                                <optgroup label="🆕 基于Token用量的智能算法">
+                                <optgroup label="🆕 Token usage algorithms">
                                     <option value="least-token-used">💰 最少Token用量 - 选择已使用Token最少的密钥(均衡用量)</option>
                                     <option value="max-remaining">🔋 最大剩余配额 - 选择剩余Token最多的密钥(避免耗尽)</option>
                                 </optgroup>
-                                <optgroup label="🚀 高级智能算法">
+                                <optgroup label="🚀 Advanced algorithms">
                                     <option value="weighted-usage">🎯 加权综合评分 - 综合剩余Token/使用率/成功率(推荐⭐)</option>
                                     <option value="quota-aware">📊 配额感知 - 自动跳过达到配额上限的密钥</option>
                                     <option value="time-window">⏰ 时间窗口 - 基于最近N小时使用量选择</option>
@@ -631,7 +631,7 @@
                     </div>
                 </div>
 
-                <!-- 系统提示词 (全宽卡片) -->
+                <!-- System prompt (full-width card) -->
                 <div class="config-card config-card-full">
                     <div class="config-card-header">
                         <div class="config-card-icon">💬</div>
@@ -643,9 +643,9 @@
                     </div>
                 </div>
 
-                <!-- 配置卡片网格 - 第二行 -->
+                <!-- Configuration card grid - row 2 -->
                 <div class="config-grid">
-                    <!-- 限制配置卡片 -->
+                    <!-- Size limits card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">⚖️</div>
@@ -663,7 +663,7 @@
                         </div>
                     </div>
 
-                    <!-- 余额同步配置卡片 -->
+                    <!-- Balance synchronization settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔄</div>
@@ -682,9 +682,9 @@
                     </div>
                 </div>
 
-                <!-- 配置卡片网格 - 第三行 -->
+                <!-- Configuration card grid - row 3 -->
                 <div class="config-grid">
-                    <!-- 推理Token配置卡片 -->
+                    <!-- Reasoning token settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🧠</div>
@@ -707,7 +707,7 @@
                         </div>
                     </div>
 
-                    <!-- 性能配置卡片 -->
+                    <!-- Performance settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">⚡</div>
@@ -726,9 +726,9 @@
                     </div>
                 </div>
 
-                <!-- 配置卡片网格 - 第四行 -->
+                <!-- Configuration card grid - row 4 -->
                 <div class="config-grid">
-                    <!-- 重试机制配置卡片 -->
+                    <!-- Retry settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔁</div>
@@ -752,7 +752,7 @@
                         </div>
                     </div>
 
-                    <!-- 自动封禁配置卡片 -->
+                    <!-- Automatic proxy blocking settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🚫</div>
@@ -784,7 +784,7 @@
                     </div>
                 </div>
 
-                <!-- 🚀 BaSui：多级密钥池配置 -->
+                <!-- 🚀 BaSui: Multi-tier pool settings -->
                 <div class="config-section">
                     <h3>🎯 多级密钥池 (Multi-Tier Pool)</h3>
                     <div class="form-group">
@@ -812,9 +812,9 @@
                     </div>
                 </div>
 
-                <!-- 配置卡片网格 - Redis 和集群 -->
+                <!-- Configuration card grid - Redis and cluster mode -->
                 <div class="config-grid">
-                    <!-- Redis 配置卡片 -->
+                    <!-- Redis settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🗄️</div>
@@ -838,7 +838,7 @@
                         </div>
                         <div class="form-group">
                             <label for="configRedisPassword">Redis 密码：</label>
-                            <input type="password" id="configRedisPassword" placeholder="留空表示无密码" class="modal-input" />
+                            <input type="password" id="configRedisPassword" placeholder="Leave blank if no password is required" class="modal-input" />
                         </div>
                         <div class="form-group">
                             <label for="configRedisDb">数据库编号：</label>
@@ -852,7 +852,7 @@
                         </div>
                     </div>
 
-                    <!-- 集群模式配置卡片 -->
+                    <!-- Cluster mode settings card -->
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🖥️</div>
@@ -881,19 +881,19 @@
                     </div>
                 </div>
 
-                <!-- 配置操作按钮 -->
+                <!-- Configuration action buttons -->
                 <div class="config-actions">
                     <button onclick="saveConfig()" class="btn btn-primary">💾 保存配置</button>
                     <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 重置为默认值</button>
                     <button onclick="loadConfigData()" class="btn btn-secondary">🔄 重新加载</button>
                 </div>
             </div>
-            <!-- 系统配置Tab结束 -->
+            <!-- End of settings tab -->
 
         </div>
     </div>
 
-    <!-- 添加密钥模态框 -->
+    <!-- Add key dialog -->
     <div id="addKeyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('addKeyModal')">&times;</span>
@@ -906,19 +906,19 @@
                 <label for="newKeyPoolGroup">🎯 所属密钥池：</label>
                 <select id="newKeyPoolGroup" class="modal-input">
                     <option value="">默认池 (default)</option>
-                    <!-- 动态加载池子选项 -->
+                    <!-- Pool options are loaded dynamically -->
                 </select>
                 <p class="hint">💡 选择密钥所属的池子，支持多级密钥池优先级管理</p>
             </div>
             <div class="form-group">
                 <label for="newKeyNotes">备注：</label>
-                <textarea id="newKeyNotes" placeholder="备注(可选)" class="modal-textarea"></textarea>
+                <textarea id="newKeyNotes" placeholder="Notes (optional)" class="modal-textarea"></textarea>
             </div>
             <button onclick="addKey()" class="btn btn-primary">添加</button>
         </div>
     </div>
 
-    <!-- 批量导入模态框 -->
+    <!-- Bulk import dialog -->
     <div id="batchImportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchImportModal')">&times;</span>
@@ -927,13 +927,13 @@
                 <label for="batchImportPoolGroup">🎯 导入到哪个池：</label>
                 <select id="batchImportPoolGroup" class="modal-input">
                     <option value="">默认池 (default)</option>
-                    <!-- 动态加载池子选项 -->
+                    <!-- Pool options are loaded dynamically -->
                 </select>
                 <p class="hint">💡 所有导入的密钥将添加到选中的池子</p>
             </div>
             <div class="form-group">
                 <label for="batchKeysInput">密钥列表 (每行一个)：</label>
-                <textarea id="batchKeysInput" placeholder="每行一个密钥&#10;fk-xxxxxxxx&#10;fk-yyyyyyyy&#10;fk-zzzzzzzz" class="modal-textarea large"></textarea>
+                <textarea id="batchKeysInput" placeholder="One key per line&#10;fk-xxxxxxxx&#10;fk-yyyyyyyy&#10;fk-zzzzzzzz" class="modal-textarea large"></textarea>
             </div>
             <div class="form-group" style="margin-top: 10px;">
                 <label style="display: flex; align-items: center; cursor: pointer;">
@@ -947,7 +947,7 @@
         </div>
     </div>
 
-    <!-- 编辑备注模态框 -->
+    <!-- Edit notes dialog -->
     <div id="editNotesModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editNotesModal')">&times;</span>
@@ -957,7 +957,7 @@
         </div>
     </div>
 
-    <!-- BaSui: 编辑密钥模态框 -->
+    <!-- BaSui: Edit key dialog -->
     <div id="editKeyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editKeyModal')">&times;</span>
@@ -971,13 +971,13 @@
                 <label for="editKeyPoolGroup">🎯 所属密钥池：</label>
                 <select id="editKeyPoolGroup" class="modal-input">
                     <option value="default">默认池 (default)</option>
-                    <!-- 动态加载池子选项 -->
+                    <!-- Pool options are loaded dynamically -->
                 </select>
                 <p class="hint">💡 选择密钥所属的池子，支持多级密钥池优先级管理</p>
             </div>
             <div class="form-group">
                 <label for="editKeyNotesInput">备注：</label>
-                <textarea id="editKeyNotesInput" placeholder="备注(可选)" class="modal-textarea"></textarea>
+                <textarea id="editKeyNotesInput" placeholder="Notes (optional)" class="modal-textarea"></textarea>
             </div>
             <div class="modal-actions">
                 <button onclick="saveEditedKey()" class="btn btn-primary">💾 保存</button>
@@ -986,29 +986,29 @@
         </div>
     </div>
 
-    <!-- BaSui：轮询配置模态框 -->
+    <!-- BaSui: Key selection settings dialog -->
     <div id="configModal" class="modal">
         <div class="modal-content modal-content-large">
             <span class="close" onclick="closeModal('configModal')">&times;</span>
             <h2>⚙️ 轮询配置</h2>
 
-            <!-- 轮询算法 -->
+            <!-- Key selection algorithm -->
             <div class="config-section">
                 <h3>🔄 轮询算法</h3>
                 <div class="form-group">
                     <label for="configAlgorithm">算法类型：</label>
                     <select id="configAlgorithm" class="modal-input">
-                        <optgroup label="📋 传统算法">
+                        <optgroup label="📋 Basic algorithms">
                                 <option value="round-robin">轮询 (Round-Robin) - 按顺序分配</option>
                                 <option value="random">随机 (Random) - 随机选择</option>
                                 <option value="least-used">最少使用 (Least-Used) - 选择使用次数最少的</option>
                                 <option value="weighted-score">加权评分 (Weighted-Score) - 基于成功率和使用情况智能选择</option>
                             </optgroup>
-                            <optgroup label="🆕 基于Token用量的智能算法">
+                            <optgroup label="🆕 Token usage algorithms">
                                 <option value="least-token-used">💰 最少Token用量 - 选择已使用Token最少的密钥(均衡用量)</option>
                                 <option value="max-remaining">🔋 最大剩余配额 - 选择剩余Token最多的密钥(避免耗尽)</option>
                             </optgroup>
-                            <optgroup label="🚀 高级智能算法">
+                            <optgroup label="🚀 Advanced algorithms">
                                 <option value="weighted-usage">🎯 加权综合评分 - 综合剩余Token/使用率/成功率(推荐⭐)</option>
                                 <option value="quota-aware">📊 配额感知 - 自动跳过达到配额上限的密钥</option>
                                 <option value="time-window">⏰ 时间窗口 - 基于最近N小时使用量选择</option>
@@ -1019,7 +1019,7 @@
                 </div>
             </div>
 
-            <!-- 重试机制 -->
+            <!-- Retry settings -->
             <div class="config-section">
                 <h3>🔁 重试机制</h3>
                 <div class="form-group">
@@ -1040,7 +1040,7 @@
                 </div>
             </div>
 
-            <!-- 自动封禁 -->
+            <!-- Automatic proxy blocking -->
             <div class="config-section">
                 <h3>🚫 自动封禁</h3>
                 <div class="form-group">
@@ -1068,7 +1068,7 @@
                 </div>
             </div>
 
-            <!-- 性能配置 -->
+            <!-- Performance settings -->
             <div class="config-section">
                 <h3>⚡ 性能配置</h3>
                 <div class="form-group">
@@ -1083,7 +1083,7 @@
                 </div>
             </div>
 
-            <!-- 操作按钮 -->
+            <!-- Action buttons -->
             <div class="modal-actions">
                 <button onclick="saveConfig()" class="btn btn-primary">💾 保存配置</button>
                 <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 重置为默认值</button>
@@ -1092,7 +1092,7 @@
         </div>
     </div>
 
-    <!-- 🚀 BaSui：创建密钥池模态框 -->
+    <!-- 🚀 BaSui: Create pool dialog -->
     <div id="createPoolModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('createPoolModal')">&times;</span>
@@ -1104,7 +1104,7 @@
             </div>
             <div class="form-group">
                 <label for="newPoolName">池子名称 (中文)：</label>
-                <input type="text" id="newPoolName" placeholder="白嫖池" class="modal-input" />
+                <input type="text" id="newPoolName" placeholder="Free-tier pool" class="modal-input" />
             </div>
             <div class="form-group">
                 <label for="newPoolPriority">优先级：</label>
@@ -1113,13 +1113,13 @@
             </div>
             <div class="form-group">
                 <label for="newPoolDescription">描述：</label>
-                <textarea id="newPoolDescription" placeholder="描述(可选)" class="modal-textarea"></textarea>
+                <textarea id="newPoolDescription" placeholder="Description (optional)" class="modal-textarea"></textarea>
             </div>
             <button onclick="createPool()" class="btn btn-primary">创建</button>
         </div>
     </div>
 
-    <!-- 🚀 BaSui：修改密钥池模态框 -->
+    <!-- 🚀 BaSui: Change pool dialog -->
     <div id="changePoolModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('changePoolModal')">&times;</span>
@@ -1129,33 +1129,33 @@
                 <label for="changePoolSelect">目标密钥池：</label>
                 <select id="changePoolSelect" class="modal-input">
                     <option value="default">默认池 (default)</option>
-                    <!-- 动态加载池子选项 -->
+                    <!-- Pool options are loaded dynamically -->
                 </select>
             </div>
             <button onclick="changeKeyPool()" class="btn btn-primary">确认移动</button>
         </div>
     </div>
 
-    <!-- 🚀 BaSui：批量操作模态框（新设计）-->
+    <!-- 🚀 BaSui: Bulk action dialog (updated design)-->
     <div id="batchActionModal" class="modal">
         <div class="modal-content modal-content-large">
             <span class="close" onclick="closeModal('batchActionModal')">&times;</span>
             <h2 id="batchActionModalTitle">批量操作</h2>
             
-            <!-- 隐藏的操作类型字段 -->
+            <!-- Hidden action type field -->
             <input type="hidden" id="batchActionModalType" value="">
             
-            <!-- 目标池选择器（仅批量改池时显示）-->
+            <!-- Destination pool selector (shown only when moving keys)-->
             <div id="batchActionPoolSelector" class="form-group" style="display: none;">
                 <label for="batchActionPoolSelect">目标密钥池：</label>
                 <select id="batchActionPoolSelect" class="modal-input">
                     <option value="">-- 请选择目标池 --</option>
                     <option value="default">默认池 (default)</option>
-                    <!-- 动态加载池子选项 -->
+                    <!-- Pool options are loaded dynamically -->
                 </select>
             </div>
             
-            <!-- 筛选器 -->
+            <!-- Filters -->
             <div class="form-group">
                 <label>筛选条件：</label>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
@@ -1173,13 +1173,13 @@
                         <select id="batchModalPoolFilter" class="modal-input" onchange="batchModalFilterChanged()" style="width: auto;">
                             <option value="all">全部池</option>
                             <option value="default">默认池</option>
-                            <!-- 动态加载池子选项 -->
+                            <!-- Pool options are loaded dynamically -->
                         </select>
                     </div>
                 </div>
             </div>
             
-            <!-- 密钥列表 -->
+            <!-- Key list -->
             <div class="form-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <label>
@@ -1208,7 +1208,7 @@
                 </div>
             </div>
             
-            <!-- 操作按钮 -->
+            <!-- Action buttons -->
             <div class="modal-actions">
                 <button id="batchActionConfirmBtn" onclick="confirmBatchAction()" class="btn btn-primary" disabled>确认执行</button>
                 <button onclick="closeModal('batchActionModal')" class="btn btn-secondary">取消</button>
@@ -1216,7 +1216,7 @@
         </div>
     </div>
 
-    <!-- 🚀 导出密钥模态框（支持选择池子） -->
+    <!-- 🚀 Export keys dialog with pool selection -->
     <div id="exportKeysModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('exportKeysModal')">&times;</span>
@@ -1232,7 +1232,7 @@
                 <div id="exportPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="exportPoolGroup" class="modal-input" multiple size="5">
                         <option value="default">默认池 (default)</option>
-                        <!-- 动态加载池子选项 -->
+                        <!-- Pool options are loaded dynamically -->
                     </select>
                     <p class="hint">💡 按住 Ctrl/Cmd 可多选池子</p>
                 </div>
@@ -1267,7 +1267,7 @@
         </div>
     </div>
 
-    <!-- 🚀 批量测试模态框（支持选择池子） -->
+    <!-- 🚀 Bulk test dialog with pool selection -->
     <div id="batchTestModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchTestModal')">&times;</span>
@@ -1287,7 +1287,7 @@
                 <div id="testPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="testPoolGroup" class="modal-input">
                         <option value="default">默认池 (default)</option>
-                        <!-- 动态加载池子选项 -->
+                        <!-- Pool options are loaded dynamically -->
                     </select>
                 </div>
             </div>
@@ -1307,7 +1307,7 @@
         </div>
     </div>
 
-    <!-- 关键词过滤规则模态框 - 添加/编辑 -->
+    <!-- Keyword filter rule dialog - add or edit -->
     <div id="ruleModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('ruleModal')">&times;</span>
@@ -1315,7 +1315,7 @@
             
             <div class="form-group">
                 <label for="ruleName">规则名称：</label>
-                <input type="text" id="ruleName" class="modal-input" placeholder="例如：敏感词过滤" />
+                <input type="text" id="ruleName" class="modal-input" placeholder="Example: sensitive term filter" />
             </div>
 
             <div class="form-group">
@@ -1331,7 +1331,7 @@
 
             <div class="form-group">
                 <label for="rulePatternValue">匹配值：</label>
-                <input type="text" id="rulePatternValue" class="modal-input" placeholder="例如：敏感词" />
+                <input type="text" id="rulePatternValue" class="modal-input" placeholder="Example: sensitive term" />
                 <p class="hint" id="patternHint">💡 包含匹配：只要文本中出现该关键词就会匹配</p>
             </div>
 
@@ -1353,7 +1353,7 @@
 
             <div class="form-group" id="replacementField">
                 <label for="ruleReplacement">替换文本：</label>
-                <input type="text" id="ruleReplacement" class="modal-input" placeholder="例如：***" />
+                <input type="text" id="ruleReplacement" class="modal-input" placeholder="Example: ***" />
                 <p class="hint">💡 留空则删除匹配内容</p>
             </div>
 
@@ -1369,31 +1369,31 @@
 
             <div class="form-group" id="deleteTargetsField" style="display: none;">
                 <label for="ruleDeleteTargets">指定删除词：</label>
-                <input type="text" id="ruleDeleteTargets" class="modal-input" placeholder="例如：密码,token,secret" />
+                <input type="text" id="ruleDeleteTargets" class="modal-input" placeholder="Example: password,token,secret" />
                 <p class="hint">💡 仅在“删除指定词语”模式下生效，使用逗号或换行分隔多个词</p>
             </div>
 
             <div class="form-group" id="deleteDelimiterField" style="display: none;">
                 <label for="ruleDeleteDelimiter">段落分隔符：</label>
-                <input type="text" id="ruleDeleteDelimiter" class="modal-input" placeholder="默认：换行换行 (\\n\\n)" />
+                <input type="text" id="ruleDeleteDelimiter" class="modal-input" placeholder="Default: two newlines (\\n\\n)" />
                 <p class="hint">💡 仅在“删除整段匹配内容”模式下生效，用于拆分段落</p>
             </div>
 
             <div class="form-group" id="deleteMinLengthField" style="display: none;">
                 <label for="ruleDeleteMinLength">最小段落长度：</label>
-                <input type="number" id="ruleDeleteMinLength" class="modal-input" min="0" placeholder="默认 0，不限制" />
+                <input type="number" id="ruleDeleteMinLength" class="modal-input" min="0" placeholder="Default: 0 (no minimum)" />
                 <p class="hint">💡 仅在“删除整段”模式下生效，长度不足不会删除，避免误杀短提示</p>
             </div>
 
             <div class="form-group" id="deletePreserveKeywordsField" style="display: none;">
                 <label for="ruleDeletePreserveKeywords">保留关键词：</label>
-                <textarea id="ruleDeletePreserveKeywords" class="modal-input" rows="2" placeholder="例如：RCA,注意事项"></textarea>
+                <textarea id="ruleDeletePreserveKeywords" class="modal-input" rows="2" placeholder="Example: RCA,important notes"></textarea>
                 <p class="hint">💡 分隔符：逗号或换行；命中任意关键词的段落将保留不删除</p>
             </div>
 
             <div class="form-group">
                 <label for="ruleDescription">规则描述：</label>
-                <textarea id="ruleDescription" class="modal-input" rows="3" placeholder="描述此规则的用途..."></textarea>
+                <textarea id="ruleDescription" class="modal-input" rows="3" placeholder="Describe what this rule does..."></textarea>
             </div>
 
             <div class="form-group">
@@ -1407,7 +1407,7 @@
         </div>
     </div>
 
-    <!-- 测试规则模态框 -->
+    <!-- Test rules dialog -->
     <div id="testRuleModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('testRuleModal')">&times;</span>
@@ -1423,7 +1423,7 @@
 
             <div class="form-group">
                 <label for="testText">测试文本：</label>
-                <textarea id="testText" class="modal-input" rows="5" placeholder="输入要测试的文本..."></textarea>
+                <textarea id="testText" class="modal-input" rows="5" placeholder="Enter text to test..."></textarea>
             </div>
 
             <button onclick="runTestRule()" class="btn btn-primary">🧪 开始测试</button>

@@ -1,9 +1,9 @@
 /**
- * 请求统计模块
- * 功能：记录和查询 API 请求的 Token 使用量和请求次数
- * 支持：总统计、每日统计、按模型统计
+ * Request statistics module
+ * Record and query token usage and request counts for API calls.
+ * Supports overall, daily, and per-model statistics.
  *
- * 数据结构：
+ * Data structure:
  * {
  *   total: { tokens, requests, last_updated },
  *   daily: { "YYYY-MM-DD": { tokens, requests, last_updated } },
@@ -20,27 +20,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const STATS_FILE = path.join(__dirname, '..', 'data', 'request_stats.json');
-const DAILY_RETENTION_DAYS = 30; // 保留30天的每日数据
+const DAILY_RETENTION_DAYS = 30; // Retain 30 days of daily statistics.
 
 /**
- * 确保data目录存在
+ * Ensure the data directory exists.
  */
 function ensureDataDir() {
   const dataDir = path.dirname(STATS_FILE);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
-    logInfo(`创建data目录: ${dataDir}`);
+    logInfo(`Created data directory: ${dataDir}`);
   }
 }
 
 /**
- * 加载统计数据
+ * Load statistics.
  */
 function loadStats() {
   ensureDataDir();
 
   if (!fs.existsSync(STATS_FILE)) {
-    // 初始化空数据
+    // Initialize empty statistics.
     const emptyStats = {
       total: {
         tokens: 0,
@@ -58,7 +58,7 @@ function loadStats() {
     const data = fs.readFileSync(STATS_FILE, 'utf-8');
     return JSON.parse(data);
   } catch (error) {
-    logError('加载统计数据失败', error);
+    logError('Failed to load statistics', error);
     return {
       total: { tokens: 0, requests: 0, last_updated: new Date().toISOString() },
       daily: {},
@@ -68,20 +68,20 @@ function loadStats() {
 }
 
 /**
- * 保存统计数据
+ * Save statistics.
  */
 function saveStats(stats) {
   try {
     ensureDataDir();
     fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2), 'utf-8');
   } catch (error) {
-    logError('保存统计数据失败', error);
+    logError('Failed to save statistics', error);
   }
 }
 
 /**
- * 获取今天的日期字符串 (YYYY-MM-DD)
- * BaSui: 使用本地时区而不是UTC时区，避免凌晨切换日期不及时！
+ * Get the current date as YYYY-MM-DD.
+ * BaSui: Use local time rather than UTC so the date changes at local midnight.
  */
 function getTodayKey() {
   const now = new Date();
@@ -92,13 +92,13 @@ function getTodayKey() {
 }
 
 /**
- * 清理过期的每日数据
+ * Remove expired daily statistics.
  */
 function cleanupOldDailyStats(stats) {
   const today = new Date();
   const cutoffDate = new Date(today);
   cutoffDate.setDate(cutoffDate.getDate() - DAILY_RETENTION_DAYS);
-  // BaSui: 使用本地时区格式化日期
+  // BaSui: Format the date in local time.
   const year = cutoffDate.getFullYear();
   const month = String(cutoffDate.getMonth() + 1).padStart(2, '0');
   const day = String(cutoffDate.getDate()).padStart(2, '0');
@@ -113,20 +113,20 @@ function cleanupOldDailyStats(stats) {
   });
 
   if (cleaned) {
-    logDebug(`清理了 ${DAILY_RETENTION_DAYS} 天前的统计数据`);
+    logDebug(`Removed statistics older than ${DAILY_RETENTION_DAYS} days`);
   }
 }
 
 /**
- * 记录一次请求统计
- * @param {Object} options - 统计选项
- * @param {number} options.inputTokens - 输入Token数
- * @param {number} options.outputTokens - 输出Token数
- * @param {number} options.thinkingTokens - 推理Token数（Anthropic Extended Thinking）
- * @param {number} options.cacheCreationTokens - 缓存创建Token数
- * @param {number} options.cacheReadTokens - 缓存读取Token数
- * @param {string} options.model - 模型名称
- * @param {boolean} options.success - 是否成功
+ * Record statistics for one request.
+ * @param {Object} options - Statistics options
+ * @param {number} options.inputTokens - Input token count
+ * @param {number} options.outputTokens - Output token count
+ * @param {number} options.thinkingTokens - Thinking token count (Anthropic Extended Thinking)
+ * @param {number} options.cacheCreationTokens - Cache creation token count
+ * @param {number} options.cacheReadTokens - Cache read token count
+ * @param {string} options.model - Model name
+ * @param {boolean} options.success - Whether the request succeeded
  */
 export function recordRequest({
   inputTokens = 0,
@@ -142,12 +142,12 @@ export function recordRequest({
     const today = getTodayKey();
     const totalTokens = inputTokens + outputTokens + thinkingTokens;
 
-    // 更新总统计
+    // Update overall statistics.
     stats.total.tokens += totalTokens;
     stats.total.requests += 1;
     stats.total.last_updated = new Date().toISOString();
 
-    // 更新每日统计
+    // Update daily statistics.
     if (!stats.daily[today]) {
       stats.daily[today] = {
         tokens: 0,
@@ -179,7 +179,7 @@ export function recordRequest({
 
     stats.daily[today].last_updated = new Date().toISOString();
 
-    // 更新按模型统计
+    // Update per-model statistics.
     if (!stats.by_model[model]) {
       stats.by_model[model] = {
         total_tokens: 0,
@@ -200,29 +200,29 @@ export function recordRequest({
     stats.by_model[model].cache_creation_tokens = (stats.by_model[model].cache_creation_tokens || 0) + cacheCreationTokens;
     stats.by_model[model].cache_read_tokens = (stats.by_model[model].cache_read_tokens || 0) + cacheReadTokens;
 
-    // 清理过期数据
+    // Remove expired statistics.
     cleanupOldDailyStats(stats);
 
-    // 保存
+    // Save statistics.
     saveStats(stats);
 
-    logDebug(`记录请求统计: model=${model}, tokens=${totalTokens} (input=${inputTokens}, output=${outputTokens}, thinking=${thinkingTokens}, cache_creation=${cacheCreationTokens}, cache_read=${cacheReadTokens}), success=${success}`);
+    logDebug(`Recorded request statistics: model=${model}, tokens=${totalTokens} (input=${inputTokens}, output=${outputTokens}, thinking=${thinkingTokens}, cache_creation=${cacheCreationTokens}, cache_read=${cacheReadTokens}), success=${success}`);
   } catch (error) {
-    logError('记录请求统计失败', error);
+    logError('Failed to record request statistics', error);
   }
 }
 
 /**
- * 获取统计数据
- * @returns {Object} 统计数据
+ * Get statistics.
+ * @returns {Object} Statistics
  */
 export function getStats() {
   return loadStats();
 }
 
 /**
- * 获取今日统计
- * @returns {Object} 今日统计数据
+ * Get statistics for today.
+ * @returns {Object} Statistics for today
  */
 export function getTodayStats() {
   const stats = loadStats();
@@ -241,8 +241,8 @@ export function getTodayStats() {
 }
 
 /**
- * 获取统计摘要（用于前端显示）
- * @returns {Object} 统计摘要
+ * Get a statistics summary for the frontend.
+ * @returns {Object} Statistics summary
  */
 export function getStatsSummary() {
   const stats = loadStats();
@@ -282,20 +282,20 @@ export function getStatsSummary() {
 }
 
 /**
- * 获取最近N天的统计数据（用于趋势图）
- * @param {number} days - 天数，默认7天
- * @returns {Array} 每日统计数据数组（按日期升序）
+ * Get statistics for the last N days for the trend chart.
+ * @param {number} days - Number of days; defaults to 7
+ * @returns {Array} Daily statistics sorted by date, oldest first
  */
 export function get7DaysTrend(days = 7) {
   const stats = loadStats();
   const result = [];
   const today = new Date();
 
-  // 生成最近N天的日期列表（使用本地时区）
+  // Generate dates for the last N days in local time.
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    // BaSui: 使用本地时区格式化日期
+    // BaSui: Format the date in local time.
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -315,7 +315,7 @@ export function get7DaysTrend(days = 7) {
 
     result.push({
       date: dateKey,
-      date_formatted: `${date.getMonth() + 1}/${date.getDate()}`,  // 格式化为 MM/DD
+      date_formatted: `${date.getMonth() + 1}/${date.getDate()}`,  // Format as MM/DD.
       ...dayStats
     });
   }
@@ -324,7 +324,7 @@ export function get7DaysTrend(days = 7) {
 }
 
 /**
- * 重置统计数据（危险操作！）
+ * Reset all statistics (destructive).
  */
 export function resetStats() {
   const emptyStats = {
@@ -337,7 +337,7 @@ export function resetStats() {
     by_model: {}
   };
   saveStats(emptyStats);
-  logInfo('统计数据已重置');
+  logInfo('Statistics reset');
 }
 
 export default {

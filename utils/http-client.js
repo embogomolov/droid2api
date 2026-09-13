@@ -4,38 +4,38 @@ import fetch from 'node-fetch';
 import { logWarn, logError } from '../logger.js';
 
 /**
- * HTTP客户端连接池管理器 🚀
+ * HTTP client connection pool manager 🚀
  *
- * 性能优化核心：
- * - Keep-Alive 复用 TCP 连接（减少握手开销）
- * - 连接池管理（避免连接泄漏）
- * - 自动超时处理（防止连接挂死）
+ * Core performance optimizations:
+ * - Reuse TCP connections with keep-alive to reduce handshake overhead
+ * - Manage the connection pool to prevent connection leaks
+ * - Handle timeouts automatically to prevent stalled connections
  */
 
-// BaSui：HTTP连接池配置 - 根据你的实际并发量调整！
+// BaSui: Tune the HTTP connection pool for your actual concurrency.
 const HTTP_AGENT_OPTIONS = {
-  keepAlive: true,               // 开启 Keep-Alive
-  keepAliveMsecs: 1000,         // Keep-Alive 探测间隔
-  maxSockets: 100,              // 每个 host 最大并发连接数（单进程）
-  maxFreeSockets: 10,           // 空闲连接池大小
-  timeout: 60000,               // Socket 超时时间（60秒）
-  freeSocketTimeout: 30000      // 空闲连接超时（30秒后释放）
+  keepAlive: true,               // Enable keep-alive
+  keepAliveMsecs: 1000,         // Keep-alive probe interval
+  maxSockets: 100,              // Maximum concurrent connections per host, per process
+  maxFreeSockets: 10,           // Idle connection pool size
+  timeout: 60000,               // Socket timeout (60 seconds)
+  freeSocketTimeout: 30000      // Idle connection timeout (release after 30 seconds)
 };
 
-// BaSui：全局连接池实例（单例模式）
+// BaSui: Global connection pool instances (singletons)
 const httpAgent = new http.Agent(HTTP_AGENT_OPTIONS);
 const httpsAgent = new https.Agent(HTTP_AGENT_OPTIONS);
 
 /**
- * 使用连接池的 fetch 封装
- * @param {string} url - 请求 URL
- * @param {object} options - fetch 选项
+ * Fetch wrapper with connection pooling
+ * @param {string} url - Request URL
+ * @param {object} options - Fetch options
  * @returns {Promise<Response>}
  */
-// BaSui：自定义Fetch重试异常，方便上层判断是不是已经撞到墙了
+// BaSui: Custom retry error so callers can detect exhausted fetch attempts.
 export class FetchRetryError extends Error {
   constructor(url, attempts, lastError = null, lastStatus = null) {
-    super(`请求在 ${attempts} 次尝试后仍然失败：${url}`);
+    super(`Request failed after ${attempts} attempts: ${url}`);
     this.name = 'FetchRetryError';
     this.url = url;
     this.attempts = attempts;
@@ -73,7 +73,7 @@ function delay(ms) {
 }
 
 export async function fetchWithPool(url, options = {}) {
-  // BaSui：根据协议自动选择 agent
+  // BaSui: Select the agent based on the URL scheme.
   const agent = url.startsWith('https') ? httpsAgent : httpAgent;
 
   const {
@@ -89,7 +89,7 @@ export async function fetchWithPool(url, options = {}) {
     agent
   };
 
-  // 这些是我们自定义的控制参数，不能直接塞给fetch
+  // These custom retry options must not be passed to fetch.
   delete fetchOptions.retry;
   delete fetchOptions.maxRetries;
   delete fetchOptions.retryDelay;
@@ -127,7 +127,7 @@ export async function fetchWithPool(url, options = {}) {
         if (onRetry) {
           onRetry({ attempt, attempts, url, reason: `HTTP ${lastStatus}` });
         }
-        logWarn(`[FetchRetry] 第 ${attempt} 次请求失败(HTTP ${lastStatus})，准备再冲一次：${url}`);
+        logWarn(`[FetchRetry] Attempt ${attempt} failed (HTTP ${lastStatus}); retrying: ${url}`);
         await delay(retryDelay);
         continue;
       }
@@ -144,7 +144,7 @@ export async function fetchWithPool(url, options = {}) {
         if (onRetry) {
           onRetry({ attempt, attempts, url, reason: error.message });
         }
-        logWarn(`[FetchRetry] 第 ${attempt} 次请求炸掉(${error.message})，换个姿势重来：${url}`);
+        logWarn(`[FetchRetry] Attempt ${attempt} failed (${error.message}); retrying: ${url}`);
         await delay(retryDelay);
         continue;
       }
@@ -153,12 +153,12 @@ export async function fetchWithPool(url, options = {}) {
     }
   }
 
-  logError(`[FetchRetry] 已尝试 ${attempts} 次依旧失败，宣布阵亡：${url}`, lastError || new Error(`HTTP ${lastStatus}`));
+  logError(`[FetchRetry] All ${attempts} attempts failed; giving up: ${url}`, lastError || new Error(`HTTP ${lastStatus}`));
   throw new FetchRetryError(url, attempts, lastError, lastStatus);
 }
 
 /**
- * 获取连接池状态（用于监控）
+ * Get connection pool statistics for monitoring.
  */
 export function getPoolStats() {
   return {
@@ -176,7 +176,7 @@ export function getPoolStats() {
 }
 
 /**
- * 优雅关闭连接池（应用退出时调用）
+ * Shut down the connection pool gracefully on application exit.
  */
 export function destroyPool() {
   httpAgent.destroy();

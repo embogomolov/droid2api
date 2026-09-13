@@ -11,18 +11,18 @@ import {
   wrapAsync,
   wrapSync
 } from './admin-error-handlers.js';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 
 const router = express.Router();
 
-// 🔧 优化：adminAuth已移动到../middleware/admin-auth.js，避免重复代码
+// 🔧 Optimization: adminAuth moved to ../middleware/admin-auth.js to avoid duplicate code
 
-// 应用鉴权中间件到所有管理路由
+// Apply authentication middleware to all admin routes
 router.use(adminAuth);
 
 /**
  * GET /admin/stats
- * 获取密钥池统计信息
+ * Get key pool statistics
  */
 router.get('/stats', wrapSync((req, res) => {
   const stats = keyPoolManager.getStats();
@@ -31,13 +31,13 @@ router.get('/stats', wrapSync((req, res) => {
 
 /**
  * GET /admin/keys
- * 获取密钥列表 (支持分页和筛选，附带Token使用量信息)
- * Query参数:
- *   - page: 页码 (默认1)
- *   - limit: 每页数量 (默认10)
- *   - status: 状态筛选 (all | active | disabled | banned, 默认all)
- *   - poolGroup: 密钥池筛选 (all | default | 自定义池名, 默认all)
- *   - includeTokenUsage: 是否包含Token使用量信息 (true/false, 默认false)
+ * Get keys (with pagination, filters, and token usage information)
+ * Query parameters:
+ *   - page: Page number (default 1)
+ *   - limit: Items per page (default 10)
+ *   - status: Status filter (all | active | disabled | banned; default all)
+ *   - poolGroup: Pool filter (all | default | custom pool name; default all)
+ *   - includeTokenUsage: Include token usage information (true/false; default false)
  */
 router.get('/keys', wrapAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -48,10 +48,10 @@ router.get('/keys', wrapAsync(async (req, res) => {
 
   const result = keyPoolManager.getKeys(page, limit, status, poolGroup);
 
-  // 如果需要Token使用量信息，从token-usage数据中加载
+  // Load token-usage data if token usage information is requested
   if (includeTokenUsage) {
     try {
-      // 动态导入token-usage数据
+      // Dynamically import token-usage data
       const fs = await import('fs');
       const path = await import('path');
       const { fileURLToPath } = await import('url');
@@ -63,7 +63,7 @@ router.get('/keys', wrapAsync(async (req, res) => {
       if (fs.existsSync(tokenUsageFile)) {
         const tokenData = JSON.parse(fs.readFileSync(tokenUsageFile, 'utf-8'));
 
-        // 合并Token使用量信息到密钥列表
+        // Merge token usage information into the key list
         result.keys = result.keys.map(key => {
           const tokenInfo = tokenData.keys[key.id];
           if (tokenInfo && tokenInfo.success && tokenInfo.standard) {
@@ -93,30 +93,30 @@ router.get('/keys', wrapAsync(async (req, res) => {
 
 /**
  * GET /admin/keys/:id
- * 获取单个密钥详情
+ * Get details for a single key
  */
 /**
  * GET /admin/keys/export
- * 导出密钥为txt文件（一个密钥一行）
- * Query参数:
- *   - status: 状态筛选 (all | active | disabled | banned, 默认all)
- * BaSui：这个路由必须放在 /keys/:id 之前，不然会被误匹配！
+ * Export keys as a text file (one key per line)
+ * Query parameters:
+ *   - status: Status filter (all | active | disabled | banned; default all)
+ * BaSui: This route must precede /keys/:id to avoid being matched as a key ID!
  */
 router.get('/keys/export', wrapSync((req, res) => {
   const status = req.query.status || 'all';
 
-  // 获取所有密钥（不分页）
+  // Get all keys without pagination
   let keys = keyPoolManager.keys;
 
-  // 按状态筛选
+  // Filter by status
   if (status !== 'all') {
     keys = keys.filter(k => k.status === status);
   }
 
-  // 生成txt内容，每行一个密钥
+  // Generate text content with one key per line
   const txtContent = keys.map(k => k.key).join('\n');
 
-  // 设置响应头，触发浏览器下载
+  // Set response headers to trigger a browser download
   const timestamp = new Date().toISOString().split('T')[0];
   const filename = `keys_${status}_${timestamp}.txt`;
 
@@ -135,8 +135,8 @@ router.get('/keys/:id', wrapSync((req, res) => {
 
 /**
  * POST /admin/keys
- * 添加单个密钥
- * Body: { key: "fk-xxx", notes: "备注", poolGroup: "freebies" }
+ * Add a single key
+ * Body: { key: "fk-xxx", notes: "Notes", poolGroup: "freebies" }
  */
 router.post('/keys', wrapSync((req, res) => {
   const { key, notes, poolGroup } = req.body;
@@ -149,7 +149,7 @@ router.post('/keys', wrapSync((req, res) => {
     return sendBadRequest(res, 'Invalid key format (must start with "fk-")');
   }
 
-  // 限制notes长度
+  // Limit notes length
   const maxLength = getNotesMaxLength();
   if (notes && notes.length > maxLength) {
     return sendBadRequest(res, `Notes too long (max ${maxLength} characters)`);
@@ -164,9 +164,9 @@ router.post('/keys', wrapSync((req, res) => {
 
 /**
  * POST /admin/keys/batch
- * 批量导入密钥
+ * Import keys in bulk
  * Body: { keys: ["fk-xxx", "fk-yyy", ...], poolGroup: "freebies", autoTest: true }
- * autoTest: 是否自动测试新导入的未测试密钥（默认false）
+ * autoTest: Automatically test newly imported, untested keys (default false)
  */
 router.post('/keys/batch', wrapAsync(async (req, res) => {
   const { keys, poolGroup, autoTest } = req.body;
@@ -179,7 +179,7 @@ router.post('/keys/batch', wrapAsync(async (req, res) => {
 
   logInfo(`Admin batch imported keys: ${results.success} success, ${results.duplicate} duplicate, ${results.invalid} invalid (pool: ${poolGroup || 'default'})`);
 
-  // BaSui：如果开启自动测试，测试新导入的未测试密钥（支持402自动拉黑）
+  // BaSui: If automatic testing is enabled, test newly imported keys and automatically ban HTTP 402 failures
   let testResults = null;
   if (autoTest && results.importedKeyIds && results.importedKeyIds.length > 0) {
     logInfo(`Auto-testing ${results.importedKeyIds.length} newly imported keys...`);
@@ -195,7 +195,7 @@ router.post('/keys/batch', wrapAsync(async (req, res) => {
 
 /**
  * GET /admin/keys/banned
- * 获取所有封禁的密钥
+ * Get all banned keys
  */
 router.get('/keys/banned', wrapSync((req, res) => {
   const bannedKeys = keyPoolManager.getBannedKeys();
@@ -210,7 +210,7 @@ router.get('/keys/banned', wrapSync((req, res) => {
 
 /**
  * POST /admin/keys/:id/unban
- * 手动解封密钥
+ * Manually unban a key
  */
 router.post('/keys/:id/unban', wrapSync((req, res) => {
   const keyId = req.params.id;
@@ -226,7 +226,7 @@ router.post('/keys/:id/unban', wrapSync((req, res) => {
 
 /**
  * POST /admin/keys/check-unban
- * 手动触发自动解封检查
+ * Manually trigger an automatic unban check
  */
 router.post('/keys/check-unban', wrapAsync(async (req, res) => {
   logInfo('Admin triggered auto-unban check');
@@ -241,7 +241,7 @@ router.post('/keys/check-unban', wrapAsync(async (req, res) => {
 
 /**
  * PATCH /admin/keys/banned-config
- * 更新封禁配置
+ * Update ban settings
  */
 router.patch('/keys/banned-config', wrapSync((req, res) => {
   const { auto_unban_enabled, auto_unban_hours, retest_on_unban, max_unban_attempts } = req.body;
@@ -261,7 +261,7 @@ router.patch('/keys/banned-config', wrapSync((req, res) => {
     bannedData.config.max_unban_attempts = max_unban_attempts;
   }
   
-  // 保存配置
+  // Save settings
   const bannedKeysPath = path.join(process.cwd(), 'data', 'banned_keys.json');
   fs.writeFileSync(bannedKeysPath, JSON.stringify(bannedData, null, 2), 'utf-8');
   
@@ -271,8 +271,8 @@ router.patch('/keys/banned-config', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/keys/disabled
- * 删除所有禁用的密钥
- * BaSui：这个路由必须放在 /keys/:id 之前，不然 Express 会把 disabled 当作 id 参数！
+ * Delete all disabled keys
+ * BaSui: This route must precede /keys/:id or Express will treat disabled as an ID!
  */
 router.delete('/keys/disabled', wrapSync((req, res) => {
   const count = keyPoolManager.deleteDisabledKeys();
@@ -284,8 +284,8 @@ router.delete('/keys/disabled', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/keys/banned
- * 删除所有封禁的密钥
- * BaSui：这个路由必须放在 /keys/:id 之前，不然 Express 会把 banned 当作 id 参数！
+ * Delete all banned keys
+ * BaSui: This route must precede /keys/:id or Express will treat banned as an ID!
  */
 router.delete('/keys/banned', wrapSync((req, res) => {
   const count = keyPoolManager.deleteBannedKeys();
@@ -297,8 +297,8 @@ router.delete('/keys/banned', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/keys/:id
- * 删除单个密钥
- * BaSui：这个参数化路由必须放在具体路径路由之后，遵循Express路由匹配规则！
+ * Delete a single key
+ * BaSui: Place this parameterized route after specific routes to follow Express matching order!
  */
 router.delete('/keys/:id', wrapSync((req, res) => {
   const keyId = req.params.id;
@@ -311,14 +311,14 @@ router.delete('/keys/:id', wrapSync((req, res) => {
 
 /**
  * PATCH /admin/keys/:id/toggle
- * 切换密钥状态 (active <-> disabled)
+ * Change key status (active <-> disabled)
  * Body: { status: "active" | "disabled" }
  */
 router.patch('/keys/:id/toggle', wrapSync((req, res) => {
   const keyId = req.params.id;
   const { status } = req.body;
 
-  // 允许切换到active状态，这样可以从banned状态恢复
+  // Allow switching to active to restore a banned key
   if (!status || !['active', 'disabled'].includes(status)) {
     return sendBadRequest(res, 'Invalid status (must be "active" or "disabled")');
   }
@@ -332,8 +332,8 @@ router.patch('/keys/:id/toggle', wrapSync((req, res) => {
 
 /**
  * PATCH /admin/keys/:id/notes
- * 更新密钥备注
- * Body: { notes: "新备注" }
+ * Update key notes
+ * Body: { notes: "New notes" }
  */
 router.patch('/keys/:id/notes', wrapSync((req, res) => {
   const keyId = req.params.id;
@@ -343,7 +343,7 @@ router.patch('/keys/:id/notes', wrapSync((req, res) => {
     return sendBadRequest(res, 'Notes field is required');
   }
 
-  // 限制notes长度
+  // Limit notes length
   const maxLength = getNotesMaxLength();
   if (notes.length > maxLength) {
     return sendBadRequest(res, `Notes too long (max ${maxLength} characters)`);
@@ -358,32 +358,32 @@ router.patch('/keys/:id/notes', wrapSync((req, res) => {
 
 /**
  * PUT /admin/keys/:id
- * 完整更新密钥信息（支持修改key本身和notes）
- * Body: { key: "fk-xxx", notes: "新备注" }
- * BaSui: 这个端点支持修改密钥本身，但要小心使用！
+ * Update all key information (including the key itself and notes)
+ * Body: { key: "fk-xxx", notes: "New notes" }
+ * BaSui: This endpoint can change the key value itself; use with care!
  */
 router.put('/keys/:id', wrapSync((req, res) => {
   const keyId = req.params.id;
   const { key, notes } = req.body;
 
-  // 验证新密钥格式
+  // Validate the new key format
   if (key && !key.startsWith('fk-')) {
     return sendBadRequest(res, 'Invalid key format (must start with "fk-")');
   }
 
-  // 限制notes长度
+  // Limit notes length
   const maxLength = getNotesMaxLength();
   if (notes && notes.length > maxLength) {
     return sendBadRequest(res, `Notes too long (max ${maxLength} characters)`);
   }
 
-  // 获取现有密钥
+  // Get the existing key
   const existingKey = keyPoolManager.getKey(keyId);
 
-  // 更新密钥数据
+  // Update key data
   const updates = {};
   if (key && key !== existingKey.key) {
-    // 检查新密钥是否已存在
+    // Check whether the new key already exists
     const duplicate = keyPoolManager.keys.find(k => k.key === key && k.id !== keyId);
     if (duplicate) {
       return sendBadRequest(res, 'Key already exists in the pool');
@@ -394,7 +394,7 @@ router.put('/keys/:id', wrapSync((req, res) => {
     updates.notes = notes;
   }
 
-  // 应用更新
+  // Apply updates
   Object.assign(existingKey, updates);
   keyPoolManager.saveKeyPool();
 
@@ -405,13 +405,13 @@ router.put('/keys/:id', wrapSync((req, res) => {
 
 /**
  * POST /admin/keys/:id/test
- * 测试单个密钥是否可用
+ * Test whether a single key is available
  */
 router.post('/keys/:id/test', wrapAsync(async (req, res) => {
   const keyId = req.params.id;
   const result = await keyPoolManager.testKey(keyId);
 
-  // 日志里把详细信息都打出来
+  // Include detailed information in logs
   if (result.success) {
     logInfo(`Admin tested key: ${keyId} - SUCCESS (Status: ${result.status})`);
   } else {
@@ -423,10 +423,10 @@ router.post('/keys/:id/test', wrapAsync(async (req, res) => {
 
 /**
  * POST /admin/keys/test-all
- * 批量测试所有密钥
- * Query参数:
- *   - poolGroup: 指定池子ID (可选，不传则测试所有池)
- *   - concurrency: 并发数 (可选，默认从配置读取)
+ * Test all keys in batches
+ * Query parameters:
+ *   - poolGroup: Pool ID (optional; tests all pools when omitted)
+ *   - concurrency: Concurrency (optional; defaults to the configured value)
  */
 router.post('/keys/test-all', wrapAsync(async (req, res) => {
   const { poolGroup, concurrency } = req.query;
@@ -442,8 +442,8 @@ router.post('/keys/test-all', wrapAsync(async (req, res) => {
 
 /**
  * GET /admin/config
- * 获取完整系统配置（从 data/config.json）
- * 返回: 完整的 config.json 对象
+ * Get the full system configuration from data/config.json
+ * Returns the complete config.json object
  */
 router.get('/config', wrapSync((req, res) => {
   const fullConfig = getConfig();
@@ -452,8 +452,8 @@ router.get('/config', wrapSync((req, res) => {
 
 /**
  * GET /admin/config/key-pool
- * 获取密钥池配置（仅 key_pool 部分，用于向后兼容）
- * 返回: { algorithm, retry, autoBan, performance, multiTier }
+ * Get key pool settings only (key_pool section; backward compatibility)
+ * Returns: { algorithm, retry, autoBan, performance, multiTier }
  */
 router.get('/config/key-pool', wrapSync((req, res) => {
   const keyPoolConfig = keyPoolManager.getConfig();
@@ -462,8 +462,8 @@ router.get('/config/key-pool', wrapSync((req, res) => {
 
 /**
  * PUT /admin/config
- * 更新完整系统配置（支持部分更新，深度合并）
- * Body: 任何 config.json 的字段，例如：
+ * Update the full system configuration (supports partial updates and deep merging)
+ * Body: Any config.json fields, for example:
  *   { port: 3000, dev_mode: true, key_pool: { algorithm: "random" } }
  */
 router.put('/config', wrapSync((req, res) => {
@@ -473,7 +473,7 @@ router.put('/config', wrapSync((req, res) => {
     return sendBadRequest(res, 'Config data is required');
   }
 
-  // 如果只更新 key_pool 配置，使用 keyPoolManager 的方法（保持向后兼容）
+  // Use keyPoolManager when updating only key_pool settings for backward compatibility
   if (Object.keys(updates).length === 1 && updates.key_pool) {
     const updatedConfig = keyPoolManager.updateConfig(updates.key_pool);
     logInfo('Admin updated key_pool config', { changes: updates.key_pool });
@@ -490,7 +490,7 @@ router.put('/config', wrapSync((req, res) => {
 
 /**
  * PUT /admin/config/key-pool
- * 更新密钥池配置（仅 key_pool 部分）
+ * Update key pool settings only (key_pool section)
  * Body: { algorithm?, retry?, autoBan?, performance?, multiTier? }
  */
 router.put('/config/key-pool', wrapSync((req, res) => {
@@ -509,7 +509,7 @@ router.put('/config/key-pool', wrapSync((req, res) => {
 
 /**
  * POST /admin/config/reset
- * 重置密钥池配置为默认值
+ * Reset key pool settings to defaults
  */
 router.post('/config/reset', wrapSync((req, res) => {
   const defaultConfig = keyPoolManager.resetConfig();
@@ -521,24 +521,24 @@ router.post('/config/reset', wrapSync((req, res) => {
 
 /**
  * GET /admin/keys/export
- * 导出密钥为txt文件（一个密钥一行）
- * Query参数:
- *   - status: 状态筛选 (all | active | disabled | banned, 默认all)
- * BaSui：这个路由必须放在 /keys/:id 之前，不然会被误匹配！
+ * Export keys as a text file (one key per line)
+ * Query parameters:
+ *   - status: Status filter (all | active | disabled | banned; default all)
+ * BaSui: This route must precede /keys/:id to avoid being matched as a key ID!
  */
 
-// ========== 🚀 BaSui：多级密钥池管理 API ==========
+// ========== 🚀 BaSui: Multi-tier key pool management API ==========
 
 /**
  * GET /admin/pool-groups
- * 获取所有池子的统计信息
- * 返回示例：
+ * Get statistics for all pools
+ * Example return value:
  * [
  *   {
  *     id: "freebies",
- *     name: "白嫖池",
+ *     name: "Free-tier pool",
  *     priority: 1,
- *     description: "捡来的免费密钥",
+ *     description: "Free-tier keys",
  *     total: 50,
  *     active: 40,
  *     disabled: 5,
@@ -554,8 +554,8 @@ router.get('/pool-groups', wrapSync((req, res) => {
 
 /**
  * POST /admin/pool-groups
- * 创建新的密钥池组
- * Body: { id: "test-pool", name: "测试池", priority: 3, description: "描述" }
+ * Create a new pool group
+ * Body: { id: "test-pool", name: "Test pool", priority: 3, description: "Description" }
  */
 router.post('/pool-groups', wrapSync((req, res) => {
   const { id, name, priority, description } = req.body;
@@ -564,12 +564,12 @@ router.post('/pool-groups', wrapSync((req, res) => {
     return sendBadRequest(res, 'id, name, and priority are required');
   }
 
-  // 检查ID是否已存在
+  // Check whether the ID already exists
   if (keyPoolManager.poolGroups.find(g => g.id === id)) {
     return sendBadRequest(res, `Pool group with id "${id}" already exists`);
   }
 
-  // 创建新池子
+  // Create a new pool
   const newGroup = {
     id: id.trim(),
     name: name.trim(),
@@ -587,7 +587,7 @@ router.post('/pool-groups', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/pool-groups/:id
- * 删除密钥池组（不会删除密钥，只是移除分组）
+ * Delete a pool group (removes grouping without deleting keys)
  */
 router.delete('/pool-groups/:id', wrapSync((req, res) => {
   const groupId = req.params.id;
@@ -597,13 +597,13 @@ router.delete('/pool-groups/:id', wrapSync((req, res) => {
     return sendBadRequest(res, `Pool group "${groupId}" not found`);
   }
 
-  // 移除池子
+  // Remove the pool
   const deleted = keyPoolManager.poolGroups.splice(index, 1)[0];
 
-  // 检查有多少密钥属于这个池子
+  // Count the keys belonging to this pool
   const affectedKeys = keyPoolManager.keys.filter(k => k.poolGroup === groupId);
 
-  // 将这些密钥移到 "default" 池
+  // Move these keys to the default pool
   affectedKeys.forEach(k => k.poolGroup = 'default');
 
   keyPoolManager.saveKeyPool();
@@ -618,7 +618,7 @@ router.delete('/pool-groups/:id', wrapSync((req, res) => {
 
 /**
  * PATCH /admin/keys/:id/pool
- * 修改密钥所属池子
+ * Change the pool assigned to a key
  * Body: { poolGroup: "main" }
  */
 router.patch('/keys/:id/pool', wrapSync((req, res) => {
@@ -640,11 +640,11 @@ router.patch('/keys/:id/pool', wrapSync((req, res) => {
   sendSuccessResponse(res, key, 'Key pool changed successfully');
 }, 'change key pool'));
 
-// ========== 🚀 BaSui：批量操作 API ==========
+// ========== 🚀 BaSui: Bulk operations API ==========
 
 /**
  * PATCH /admin/keys/batch-change-pool
- * 批量修改密钥池
+ * Change pool assignments in bulk
  * Body: { keyIds: ["key1", "key2", ...], poolGroup: "main" }
  */
 router.patch('/keys/batch-change-pool', wrapSync((req, res) => {
@@ -684,7 +684,7 @@ router.patch('/keys/batch-change-pool', wrapSync((req, res) => {
 
 /**
  * PATCH /admin/keys/batch-toggle-status
- * 批量启用/禁用密钥
+ * Enable or disable keys in bulk
  * Body: { keyIds: ["key1", "key2", ...], status: "active" | "disabled" }
  */
 router.patch('/keys/batch-toggle-status', wrapSync((req, res) => {
@@ -725,7 +725,7 @@ router.patch('/keys/batch-toggle-status', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/keys/batch-delete
- * 批量删除密钥
+ * Delete keys in bulk
  * Body: { keyIds: ["key1", "key2", ...] }
  */
 router.delete('/keys/batch-delete', wrapSync((req, res) => {

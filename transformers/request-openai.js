@@ -6,12 +6,12 @@ import keywordFilter from '../utils/keyword-filter.js';
 export function transformToOpenAI(openaiRequest) {
   logDebug('Transforming OpenAI request to target OpenAI format');
   
-  // 应用关键词过滤
+  // Apply keyword filtering
   const filteredRequest = keywordFilter.filterRequest(openaiRequest);
 
-  // BaSui：上游限制 temperature 与 top_p 不能并存，保留 temperature 优先
+  // BaSui: Upstream does not allow temperature and top_p together; prefer temperature
   if (filteredRequest.temperature !== undefined && filteredRequest.top_p !== undefined) {
-    logDebug('BaSui：检测到同时携带 temperature/top_p，自动丢弃 top_p 以满足上游要求');
+    logDebug('BaSui: Both temperature and top_p were provided; dropping top_p to satisfy upstream requirements');
     delete filteredRequest.top_p;
   }
   
@@ -145,13 +145,13 @@ export function transformToOpenAI(openaiRequest) {
 }
 
 export function getOpenAIHeaders(authHeader, clientHeaders = {}) {
-  // 使用公共函数生成基础headers
+  // Use the shared function to generate base headers
   const headers = {
     ...getBaseHeaders(authHeader, clientHeaders),
     'x-api-provider': 'azure_openai'
   };
 
-  // 应用Stainless SDK默认headers
+  // Apply default Stainless SDK headers
   applyStainlessDefaults(headers, clientHeaders);
 
   return headers;

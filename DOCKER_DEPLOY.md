@@ -1,109 +1,109 @@
-# 🐳 Docker 部署指南
+# 🐳 Docker deployment guide
 
-> **droid2api v1.4.0+** - 生产级 OpenAI 兼容 API 代理服务器
+> **droid2api v1.4.0+** - A production-oriented OpenAI-compatible API proxy
 >
-> 更新时间：2025-10-13 | 支持：单容器 → Redis 缓存 → 集群模式 → K8s 部署
+> Updated: 2025-10-13 | Deployment options: single container → Redis cache → cluster mode → Kubernetes
 
 ---
 
-## 📋 目录
+## 📋 Contents
 
-- [快速开始](#-快速开始)
-- [环境变量配置](#️-环境变量配置)
-- [本地 Docker 部署](#-本地-docker-部署)
-- [数据持久化](#-数据持久化)
-- [性能优化方案](#-性能优化方案)
-- [云平台部署](#️-云平台部署)
-- [管理后台使用](#-管理后台使用)
-- [健康检查与监控](#-健康检查与监控)
-- [故障排查](#-故障排查)
-- [安全建议](#-安全建议)
+- [Quick start](#-quick-start)
+- [Environment variables](#️-environment-variables)
+- [Local Docker deployment](#-local-docker-deployment)
+- [Persistent storage](#-persistent-storage)
+- [Performance optimization](#-performance-optimization)
+- [Cloud deployment](#️-cloud-deployment)
+- [Using the admin interface](#-using-the-admin-interface)
+- [Health checks and monitoring](#-health-checks-and-monitoring)
+- [Troubleshooting](#-troubleshooting)
+- [Security recommendations](#-security-recommendations)
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick start
 
-**最简部署（3步搞定）** 😎
+**The simplest deployment in three steps** 😎
 
 ```bash
-# 1. 复制环境变量模板
+# 1. Copy the environment variable template
 cp .env.example .env
 
-# 2. 编辑 .env 文件，配置你的密钥（必需）
-# 至少配置以下两项：
-#   - ADMIN_ACCESS_KEY=your-admin-password  # 管理后台密码
-#   - FACTORY_API_KEY=fk-xxx  或  DROID_REFRESH_KEY=rt-xxx  # API 认证
+# 2. Edit .env and configure your keys (required)
+# Configure at least these two settings:
+#   - ADMIN_ACCESS_KEY=your-admin-password  # Admin password
+#   - FACTORY_API_KEY=fk-xxx  or  DROID_REFRESH_KEY=rt-xxx  # API authentication
 
-# 3. 启动服务！
+# 3. Start the service!
 docker-compose up -d
 
-# 🎉 完成！访问 http://localhost:3000 管理密钥池
+# 🎉 Done! Open http://localhost:3000 to manage the key pool
 ```
 
-**检查服务状态：**
+**Check service status:**
 ```bash
-# 查看日志
+# View logs
 docker-compose logs -f
 
-# 测试 API
+# Test the API
 curl http://localhost:3000/v1/models
 
-# 查看管理后台（需要 ADMIN_ACCESS_KEY）
+# Check the admin API (requires ADMIN_ACCESS_KEY)
 curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
 ```
 
 ---
 
-## ⚙️ 环境变量配置
+## ⚙️ Environment variables
 
-### 🔐 认证配置（五级认证系统）
+### 🔐 Authentication (five-level authentication system)
 
-droid2api 支持 **五级认证系统**（按优先级从高到低排序）：
+droid2api supports **five authentication sources**, in priority order from highest to lowest:
 
-#### 1️⃣ FACTORY_API_KEY（最高优先级，推荐生产环境）
+#### 1️⃣ FACTORY_API_KEY (highest priority, recommended for production)
 
 ```env
-FACTORY_API_KEY=fk-OaXm1XUDmmQG44QTVxpK-gK2k5eskQTEW-cGsx50XgR_dCW_IvBmpOIn3PzoDzOg
+FACTORY_API_KEY=fk-your-factory-api-key
 ```
 
-**适用场景：** 单密钥 / 个人使用 / 快速部署
-**优点：** 配置简单，Docker 友好
-**缺点：** 无轮询，无负载均衡
+**Use cases:** single key / personal use / quick deployment
+**Advantages:** simple configuration, convenient for Docker
+**Limitations:** no key rotation or load balancing
 
 ---
 
-#### 2️⃣ 密钥池管理（多密钥模式，企业推荐 ⭐）
+#### 2️⃣ Key pool management (multiple keys, recommended for enterprise use ⭐)
 
-**无需环境变量配置！** 通过管理界面添加密钥即可：
+**No environment variable required!** Add keys through the admin interface:
 
-1. 启动服务后访问 `http://localhost:3000/`
-2. 使用 `ADMIN_ACCESS_KEY` 登录管理后台
-3. 点击「添加密钥」批量导入多个 FACTORY_API_KEY
+1. Start the server and open `http://localhost:3000/`
+2. Sign in with `ADMIN_ACCESS_KEY`
+3. Use "Add Key" or bulk import to add your FACTORY_API_KEY values
 
-**优点：**
-- ✅ 支持无限密钥
-- ✅ 智能轮询算法（6种算法可选）
-- ✅ 自动封禁失效密钥
-- ✅ 负载均衡
-- ✅ 🆕 多级密钥池（v1.4.0+）
+**Advantages:**
+- ✅ No fixed key count limit
+- ✅ Six key selection algorithms
+- ✅ Automatic blocking of unusable keys within the proxy
+- ✅ Load balancing
+- ✅ 🆕 Multi-tier key pools (v1.4.0+)
 
-**轮询算法：**
-- `round-robin` - 轮询，按顺序分配
-- `random` - 随机选择
-- `least-used` - 选择使用次数最少的
-- `weighted-score` - 基于成功率的加权评分
-- `least-token-used` - 选择已使用 Token 最少的（推荐 ⭐）
-- `max-remaining` - 选择剩余 Token 最多的（推荐 ⭐）
+**Key selection algorithms:**
+- `round-robin` - Assign requests to keys in sequence
+- `random` - Select a key at random
+- `least-used` - Select the key with the fewest uses
+- `weighted-score` - Weighted score based on success rate
+- `least-token-used` - Select the key with the lowest token usage (recommended ⭐)
+- `max-remaining` - Select the key with the most tokens remaining (recommended ⭐)
 
-**🆕 多级密钥池（v1.4.0+）：**
+**🆕 Multi-tier key pools (v1.4.0+):**
 
-支持创建多个池子，按优先级自动回退：
+Create multiple pools with automatic priority-based fallback:
 
 ```json
 {
   "poolGroups": [
-    { "id": "freebies", "name": "白嫖池", "priority": 1 },
-    { "id": "main", "name": "主力池", "priority": 2 }
+    { "id": "freebies", "name": "Free pool", "priority": 1 },
+    { "id": "main", "name": "Primary pool", "priority": 2 }
   ],
   "config": {
     "multiTier": {
@@ -115,31 +115,31 @@ FACTORY_API_KEY=fk-OaXm1XUDmmQG44QTVxpK-gK2k5eskQTEW-cGsx50XgR_dCW_IvBmpOIn3PzoD
 }
 ```
 
-**工作原理：**
-- 按优先级排序池子（priority: 1 > 2 > 3）
-- 从优先级最高的池子中选择密钥
-- 如果当前池子无可用密钥，自动回退到下一个池子
-- 支持通过管理界面创建/删除池子，修改密钥所属池子
+**How it works:**
+- Sort pools by priority (1 takes precedence over 2, then 3)
+- Select a key from the highest-priority pool
+- If no key is available in that pool, fall back to the next pool
+- Create/delete pools and change key assignments through the admin interface
 
-**详细文档：** `docs/MULTI_TIER_POOL.md`
+**Documentation:** `docs/MULTI_TIER_POOL.md`
 
 ---
 
-#### 3️⃣ DROID_REFRESH_KEY（OAuth 自动刷新）
+#### 3️⃣ DROID_REFRESH_KEY (automatic OAuth refresh)
 
 ```env
 DROID_REFRESH_KEY=rt-your-refresh-token-here
 ```
 
-**适用场景：** 需要自动刷新 token / 兼容原 droid2api 项目
-**优点：** 6小时自动刷新，失败时使用旧 token 兜底
-**缺点：** 依赖 WorkOS API，需要有效的 refresh_token
+**Use cases:** automatic token refresh / compatibility with the original droid2api
+**Advantages:** refreshes every 6 hours; falls back to the old token if refresh fails
+**Limitations:** depends on the WorkOS API and requires a valid refresh_token
 
 ---
 
-#### 4️⃣ 文件认证（data/auth.json）
+#### 4️⃣ File-based authentication (data/auth.json)
 
-创建 `data/auth.json` 文件：
+Create `data/auth.json`:
 ```json
 {
   "refresh_token": "rt-your-refresh-token",
@@ -148,129 +148,129 @@ DROID_REFRESH_KEY=rt-your-refresh-token-here
 }
 ```
 
-**适用场景：** 向后兼容 / 跨项目共享认证
+**Use cases:** backward compatibility / sharing authentication across projects
 
 ---
 
-#### 5️⃣ 客户端 Authorization Header（透传模式）
+#### 5️⃣ Client Authorization header (pass-through mode)
 
-**无需配置！** 客户端请求时直接携带 `Authorization: Bearer fk-xxx`
+**No server configuration required!** Clients send `Authorization: Bearer fk-xxx` with their requests.
 
 ---
 
-### 🔑 管理后台配置（强烈推荐）
+### 🔑 Admin access (strongly recommended)
 
 ```env
 ADMIN_ACCESS_KEY=your-secure-admin-password-change-me-123
 ```
 
-**作用：** 保护管理接口 `/admin/*` 和 Web 管理界面
+**Purpose:** protects the `/admin/*` endpoints and the web admin interface
 
-**安全提示：**
-- ⚠️ 请务必修改默认值！
-- ✅ 使用强密码（至少16位，包含字母+数字+符号）
-- ✅ 生产环境不要使用 `123`、`admin` 等弱密码
+**Security notes:**
+- ⚠️ Change the default value!
+- ✅ Use a strong password (at least 16 characters, including letters, digits, and symbols)
+- ✅ Avoid weak passwords such as `123` or `admin` in production
 
 ---
 
-### 🛡️ 客户端访问控制（可选）
+### 🛡️ Client access control (optional)
 
 ```env
 API_ACCESS_KEY=your-api-access-key-for-clients
 ```
 
-**作用：** 客户端访问 `/v1/*` API 时需要携带此密钥
-**用法：** 请求头 `Authorization: Bearer your-api-access-key-for-clients`
+**Purpose:** clients must supply this key to access the `/v1/*` API
+**Usage:** request header `Authorization: Bearer your-api-access-key-for-clients`
 
 ---
 
-### 🚀 服务器配置（可选）
+### 🚀 Server settings (optional)
 
 ```env
-PORT=3000                  # 服务端口（默认3000）
-NODE_ENV=production        # 运行环境（development/production）
+PORT=3000                  # Server port (default: 3000)
+NODE_ENV=production        # Runtime environment (development/production)
 ```
 
-**NODE_ENV 说明：**
-- `production`（推荐）- 简洁日志 + 文件日志（`logs/` 目录），自动按天轮换
-- `development` - 详细控制台日志，不写入文件
+**NODE_ENV values:**
+- `production` (recommended) - Concise console logs and file logs in `logs/`, rotated daily
+- `development` - Detailed console logs without file output
 
 ---
 
-### 🎯 密钥池配置（可选）
+### 🎯 Key pool settings (optional)
 
 ```env
-# 密钥选择算法（默认 round-robin）
+# Key selection algorithm (default: round-robin)
 KEY_POOL_ALGORITHM=round-robin
 
-# 重试配置
+# Retry settings
 KEY_POOL_RETRY_ENABLED=true
 KEY_POOL_RETRY_MAX=3
 KEY_POOL_RETRY_DELAY_MS=1000
 
-# 自动封禁配置
+# Automatic key blocking within the proxy
 KEY_POOL_AUTO_BAN_ENABLED=true
 KEY_POOL_ERROR_THRESHOLD=5
 KEY_POOL_BAN_402=true
 KEY_POOL_BAN_401=false
 
-# 性能配置
+# Performance settings
 KEY_POOL_CONCURRENT_LIMIT=100
 KEY_POOL_REQUEST_TIMEOUT_MS=10000
 ```
 
 ---
 
-### 🔥 Redis 缓存配置（可选，性能优化）
+### 🔥 Redis caching (optional, for performance)
 
 ```env
-REDIS_HOST=127.0.0.1       # Redis 服务器地址
-REDIS_PORT=6379            # Redis 端口
-REDIS_PASSWORD=            # Redis 密码（如果设置了）
-REDIS_DB=0                 # Redis 数据库编号（0-15）
+REDIS_HOST=127.0.0.1       # Redis server address
+REDIS_PORT=6379            # Redis port
+REDIS_PASSWORD=            # Redis password, if configured
+REDIS_DB=0                 # Redis database number (0-15)
 ```
 
-**启用 Redis 可提升性能 30-50%！** 适合高并发场景（日均请求 > 50万）
+**Redis can improve performance by 30-50%!** Suitable for high concurrency (more than 500,000 requests/day on average).
 
 ---
 
-### ⚡ 集群模式配置（可选，极致性能）
+### ⚡ Cluster mode (optional, for maximum performance)
 
 ```env
-CLUSTER_MODE=true          # 启用集群模式
-CLUSTER_WORKERS=4          # Worker 进程数（默认等于CPU核心数）
+CLUSTER_MODE=true          # Enable cluster mode
+CLUSTER_WORKERS=4          # Worker count (defaults to CPU core count)
 ```
 
-**启用集群模式可提升性能 N 倍！** （N = CPU核心数），适合超高并发场景（日均请求 > 100万）
+**Cluster mode can deliver N times the performance!** N is the CPU core count. Suitable for very high concurrency (more than 1,000,000 requests/day on average).
 
 ---
 
-## 🐳 本地 Docker 部署
+## 🐳 Local Docker deployment
 
-### 方式 1：Docker Compose（推荐 ⭐）
+### Method 1: Docker Compose (recommended ⭐)
 
-**最简单的方式！** 一键启动服务：
+**The simplest method:** start the service with one command:
 
 ```bash
-# 1. 创建 .env 文件（参考 .env.example）
+# 1. Create .env using .env.example
 cp .env.example .env
 
-# 2. 编辑 .env 文件，配置你的密钥
-# 至少配置：
+# 2. Edit .env and configure your keys
+# Configure at least:
 #   - ADMIN_ACCESS_KEY
-#   - FACTORY_API_KEY 或 DROID_REFRESH_KEY
+#   - FACTORY_API_KEY or DROID_REFRESH_KEY
 
-# 3. 启动服务
+# 3. Start the service
 docker-compose up -d
 
-# 4. 查看日志
+# 4. View logs
 docker-compose logs -f
 
-# 5. 停止服务
+# 5. Stop the service
 docker-compose down
 ```
 
-**docker-compose.yml 说明：**
+**docker-compose.yml configuration:**
 ```yaml
 version: '3.8'
 
@@ -281,16 +281,16 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # 认证配置（按优先级选择其一）
+      # Authentication (choose one method in priority order)
       - FACTORY_API_KEY=${FACTORY_API_KEY}
       - DROID_REFRESH_KEY=${DROID_REFRESH_KEY}
       - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY}
       - API_ACCESS_KEY=${API_ACCESS_KEY}
-      # 服务配置
+      # Server settings
       - PORT=${PORT:-3000}
       - NODE_ENV=${NODE_ENV:-production}
     volumes:
-      # 可选：持久化数据
+      # Optional: persistent data
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
@@ -304,15 +304,15 @@ services:
 
 ---
 
-### 方式 2：原生 Docker 命令
+### Method 2: Docker commands
 
-**手动构建和运行容器：**
+**Build and run the container manually:**
 
 ```bash
-# 1. 构建镜像
+# 1. Build the image
 docker build -t droid2api:latest .
 
-# 2. 运行容器（使用 FACTORY_API_KEY）
+# 2. Run the container with FACTORY_API_KEY
 docker run -d \
   --name droid2api \
   -p 3000:3000 \
@@ -321,7 +321,7 @@ docker run -d \
   -e NODE_ENV="production" \
   droid2api:latest
 
-# 或使用 DROID_REFRESH_KEY
+# Or use DROID_REFRESH_KEY
 docker run -d \
   --name droid2api \
   -p 3000:3000 \
@@ -330,32 +330,32 @@ docker run -d \
   -e NODE_ENV="production" \
   droid2api:latest
 
-# 3. 查看日志
+# 3. View logs
 docker logs -f droid2api
 
-# 4. 停止容器
+# 4. Stop the container
 docker stop droid2api
 docker rm droid2api
 ```
 
 ---
 
-## 💾 数据持久化
+## 💾 Persistent storage
 
-### 为什么需要数据持久化？
+### Why use persistent storage?
 
-**容器重启会丢失数据！** 包括：
-- `data/key_pool.json` - 密钥池数据（所有添加的密钥）
-- `data/token_usage.json` - Token 使用量统计
-- `logs/` - 日志文件
+**Container replacement can lose data without persistent storage!** This includes:
+- `data/key_pool.json` - Key pool data (all keys you have added)
+- `data/token_usage.json` - Token usage statistics
+- `logs/` - Log files
 
-**生产环境强烈推荐挂载数据卷！** 🔥
+**Mounting data volumes is strongly recommended for production!** 🔥
 
 ---
 
-### 方式 1：Docker Compose 数据卷
+### Method 1: Docker Compose volumes
 
-**修改 `docker-compose.yml`：**
+**Edit `docker-compose.yml`:**
 
 ```yaml
 version: '3.8'
@@ -369,9 +369,9 @@ services:
       - FACTORY_API_KEY=${FACTORY_API_KEY}
       - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY}
     volumes:
-      # 持久化数据目录（推荐）
+      # Persistent data directory (recommended)
       - data-volume:/app/data
-      # 持久化日志目录（可选）
+      # Persistent log directory (optional)
       - logs-volume:/app/logs
     restart: unless-stopped
 
@@ -380,12 +380,12 @@ volumes:
   logs-volume:
 ```
 
-**启动服务：**
+**Start the service:**
 ```bash
 docker-compose up -d
 ```
 
-**查看数据卷：**
+**Inspect volumes:**
 ```bash
 docker volume ls
 docker volume inspect droid2api_data-volume
@@ -393,14 +393,14 @@ docker volume inspect droid2api_data-volume
 
 ---
 
-### 方式 2：Docker 原生数据卷
+### Method 2: Docker volumes
 
 ```bash
-# 1. 创建数据卷
+# 1. Create volumes
 docker volume create droid2api-data
 docker volume create droid2api-logs
 
-# 2. 运行容器并挂载数据卷
+# 2. Run the container with the volumes mounted
 docker run -d \
   --name droid2api \
   -p 3000:3000 \
@@ -410,16 +410,16 @@ docker run -d \
   -v droid2api-logs:/app/logs \
   droid2api:latest
 
-# 3. 查看数据卷内容
+# 3. Inspect volume contents
 docker exec droid2api ls /app/data
 docker exec droid2api cat /app/data/key_pool.json
 ```
 
 ---
 
-### 方式 3：绑定挂载（开发环境）
+### Method 3: bind mounts (development)
 
-**直接挂载宿主机目录：**
+**Mount host directories directly:**
 
 ```bash
 docker run -d \
@@ -431,51 +431,51 @@ docker run -d \
   droid2api:latest
 ```
 
-**优点：** 直接在宿主机查看和编辑文件
-**缺点：** 跨平台路径问题（Windows 路径格式不同）
+**Advantages:** view and edit files directly on the host
+**Limitations:** platform-specific paths (Windows uses a different path format)
 
 ---
 
-## 🚀 性能优化方案
+## 🚀 Performance optimization
 
-droid2api 支持从单机到集群的渐进式扩展，根据负载选择合适的优化方案！
+droid2api supports gradual scaling from a single server to a cluster. Choose an approach based on your workload.
 
-### 📊 性能对比总览
+### 📊 Performance overview
 
-| 部署方式 | 吞吐量(RPS) | 延迟 | 成本 | 复杂度 | 适用日均请求量 |
+| Deployment | Throughput (RPS) | Latency | Cost | Complexity | Average daily requests |
 |----------|-------------|------|------|--------|---------------|
-| **阶段1：单容器（默认）** | 2000+ | 50ms | $ | ⭐ | < 50万 |
-| **阶段2：单容器 + Redis** | 3000+ | 30ms | $$ | ⭐⭐ | 50-100万 |
-| **阶段3：集群 + Redis** | 10000+ | 30ms | $$$ | ⭐⭐⭐ | 100-200万 |
-| **阶段4：Nginx + 多服务器** | 20000+ | 30ms | $$$$ | ⭐⭐⭐⭐ | > 200万 |
+| **Stage 1: single container (default)** | 2000+ | 50ms | $ | ⭐ | < 500,000 |
+| **Stage 2: single container + Redis** | 3000+ | 30ms | $$ | ⭐⭐ | 500,000-1,000,000 |
+| **Stage 3: cluster + Redis** | 10000+ | 30ms | $$$ | ⭐⭐⭐ | 1,000,000-2,000,000 |
+| **Stage 4: Nginx + multiple servers** | 20000+ | 30ms | $$$$ | ⭐⭐⭐⭐ | > 2,000,000 |
 
 ---
 
-### ⚡ 阶段 1：基础优化（默认启用，零配置）
+### ⚡ Stage 1: basic optimizations (enabled by default, no configuration)
 
-**已内置优化：**
-- ✅ HTTP Keep-Alive 连接池 - 复用TCP连接，减少70%握手开销
-- ✅ 异步批量文件写入 - 不阻塞主线程，减少100%磁盘I/O等待
+**Built-in optimizations:**
+- ✅ HTTP Keep-Alive connection pooling - Reuses TCP connections, reducing handshake overhead by 70%
+- ✅ Asynchronous batch file writes - Avoids blocking the main thread and eliminates disk I/O wait there
 
-**性能提升：**
-- 延迟降低：250ms → 50ms（⬇️ 80%）
-- 吞吐量提升：500 → 2000+ RPS（⬆️ 300%）
-- CPU占用降低：60-80% → 40-60%
+**Performance improvements:**
+- Lower latency: 250ms → 50ms (⬇️ 80%)
+- Higher throughput: 500 → 2000+ RPS (⬆️ 300%)
+- Lower CPU utilization: 60-80% → 40-60%
 
-**部署方式：**
+**Deployment:**
 ```bash
-docker-compose up -d  # 无需额外配置！
+docker-compose up -d  # No additional configuration required!
 ```
 
-**适用场景：** 个人使用 / 小型项目（< 50万请求/天）
+**Use cases:** personal use / small projects (< 500,000 requests/day)
 
 ---
 
-### 🔥 阶段 2：Redis 缓存（高并发场景）
+### 🔥 Stage 2: Redis caching (high concurrency)
 
-**适用场景：** 日均请求 > 50万
+**Use case:** more than 500,000 requests/day on average
 
-**docker-compose.yml 配置：**
+**docker-compose.yml configuration:**
 ```yaml
 version: '3.8'
 
@@ -487,7 +487,7 @@ services:
     environment:
       - FACTORY_API_KEY=${FACTORY_API_KEY}
       - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY}
-      # 启用 Redis 缓存
+      # Enable Redis caching
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
@@ -510,32 +510,32 @@ volumes:
   redis-data:
 ```
 
-**启动方式：**
+**Start the service:**
 ```bash
-# 1. 安装 Redis 包（在构建镜像前）
+# 1. Install the Redis package before building the image
 npm install redis
 
-# 2. 启动服务（自动连接Redis）
+# 2. Start the service (connects to Redis automatically)
 docker-compose up -d
 
-# 3. 验证 Redis 连接
+# 3. Verify the Redis configuration
 docker exec droid2api sh -c 'echo "Redis enabled: $(env | grep REDIS)"'
 ```
 
-**效果：**
-- 密钥池访问延迟降低 90%（5-10ms → 0.5-1ms）
-- 吞吐量提升至 3000+ RPS（⬆️ 50%）
-- 支持集群模式的状态共享
+**Benefits:**
+- 90% lower key pool access latency (5-10ms → 0.5-1ms)
+- Throughput increases to 3000+ RPS (⬆️ 50%)
+- Shared state for cluster mode
 
-**优雅降级：** Redis 不可用时自动降级到文件模式，系统继续正常运行 ✅
+**Graceful fallback:** if Redis is unavailable, the system switches to file storage and continues running ✅
 
 ---
 
-### 🚄 阶段 3：集群模式（超高并发场景）
+### 🚄 Stage 3: cluster mode (very high concurrency)
 
-**适用场景：** 日均请求 > 100万
+**Use case:** more than 1,000,000 requests/day on average
 
-#### 方案 1：Docker Swarm 集群
+#### Option 1: Docker Swarm cluster
 
 **docker-stack.yml：**
 ```yaml
@@ -550,10 +550,10 @@ services:
       - FACTORY_API_KEY=${FACTORY_API_KEY}
       - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY}
       - REDIS_HOST=redis
-      - CLUSTER_MODE=true  # 启用集群模式
+      - CLUSTER_MODE=true  # Enable cluster mode
       - CLUSTER_WORKERS=4
     deploy:
-      replicas: 4  # 4个容器实例
+      replicas: 4  # Four container instances
       resources:
         limits:
           cpus: '1'
@@ -574,33 +574,33 @@ volumes:
   redis-data:
 ```
 
-**部署方式：**
+**Deployment:**
 ```bash
-# 1. 初始化 Swarm
+# 1. Initialize Swarm
 docker swarm init
 
-# 2. 部署集群
+# 2. Deploy the cluster
 docker stack deploy -c docker-stack.yml droid2api
 
-# 3. 查看状态
+# 3. Check status
 docker service ls
 docker service ps droid2api_droid2api
 
-# 4. 扩容（增加到 8 个实例）
+# 4. Scale up to 8 instances
 docker service scale droid2api_droid2api=8
 
-# 5. 查看日志
+# 5. View logs
 docker service logs -f droid2api_droid2api
 ```
 
-**效果：**
-- 吞吐量提升至 10000+ RPS
-- 自动负载均衡
-- 故障自动恢复
+**Benefits:**
+- Throughput increases to 10000+ RPS
+- Automatic load balancing
+- Automatic recovery from failures
 
 ---
 
-#### 方案 2：Kubernetes 部署（企业推荐 ⭐）
+#### Option 2: Kubernetes deployment (recommended for enterprise use ⭐)
 
 **droid2api-deployment.yaml：**
 ```yaml
@@ -728,51 +728,51 @@ spec:
       storage: 1Gi
 ```
 
-**部署方式：**
+**Deployment:**
 ```bash
-# 1. 创建 Secret
+# 1. Create a Secret
 kubectl create secret generic droid2api-secrets \
   --from-literal=factory-api-key='your_factory_api_key' \
   --from-literal=admin-access-key='your-admin-password'
 
-# 2. 部署 Redis
+# 2. Deploy Redis
 kubectl apply -f redis-deployment.yaml
 
-# 3. 部署 droid2api
+# 3. Deploy droid2api
 kubectl apply -f droid2api-deployment.yaml
 
-# 4. 查看状态
+# 4. Check status
 kubectl get pods
 kubectl get svc droid2api-service
 
-# 5. 查看日志
+# 5. View logs
 kubectl logs -f deployment/droid2api
 
-# 6. 扩容（增加到 8 个实例）
+# 6. Scale up to 8 instances
 kubectl scale deployment/droid2api --replicas=8
 
-# 7. 获取外部 IP
+# 7. Get the external IP address
 kubectl get svc droid2api-service
 ```
 
-**效果：**
-- 吞吐量提升至 10000+ RPS
-- 自动负载均衡（Kubernetes Service）
-- 滚动更新（零停机部署）
-- 自动伸缩（HPA）
+**Benefits:**
+- Throughput increases to 10000+ RPS
+- Automatic load balancing (Kubernetes Service)
+- Rolling updates (zero-downtime deployment)
+- Autoscaling (HPA)
 
 ---
 
-### 🌐 阶段 4：Nginx 负载均衡 + 多服务器
+### 🌐 Stage 4: Nginx load balancing with multiple servers
 
-**适用场景：** 日均请求 > 200万
+**Use case:** more than 2,000,000 requests/day on average
 
 **nginx.conf：**
 ```nginx
 upstream droid2api_cluster {
-  least_conn;  # 最少连接数算法
+  least_conn;  # Least-connections algorithm
 
-  # 多个 droid2api 实例
+  # Multiple droid2api instances
   server droid2api-1:3000;
   server droid2api-2:3000;
   server droid2api-3:3000;
@@ -793,18 +793,18 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # 超时设置
+    # Timeouts
     proxy_connect_timeout 60s;
     proxy_send_timeout 60s;
     proxy_read_timeout 60s;
 
-    # 缓冲设置
+    # Buffer settings
     proxy_buffering on;
     proxy_buffer_size 4k;
     proxy_buffers 8 4k;
   }
 
-  # 健康检查端点
+  # Health check endpoint
   location /health {
     access_log off;
     return 200 "OK\n";
@@ -878,30 +878,30 @@ volumes:
   redis-data:
 ```
 
-**启动方式：**
+**Start the service:**
 ```bash
 docker-compose -f docker-compose-nginx.yml up -d
 ```
 
-**效果：**
-- 吞吐量 > 20000 RPS
-- 多机房容灾
-- 水平扩展
+**Benefits:**
+- Throughput above 20000 RPS
+- Disaster recovery across data centers
+- Horizontal scaling
 
 ---
 
-### 💡 镜像优化：多阶段构建
+### 💡 Image optimization: multi-stage builds
 
-**优化 Dockerfile（减小镜像大小）：**
+**An optimized Dockerfile for a smaller image:**
 
 ```dockerfile
-# 阶段 1：构建依赖
+# Stage 1: build dependencies
 FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
-# 阶段 2：生产运行
+# Stage 2: production runtime
 FROM node:24-alpine
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
@@ -910,84 +910,84 @@ EXPOSE 3000
 CMD ["node", "server.js"]
 ```
 
-**效果：**
-- 镜像大小：从 500MB 减小到 150MB（⬇️ 70%）
-- 构建速度：提升 50%（利用缓存）
-- 安全性：不包含开发依赖
+**Benefits:**
+- Image size decreases from 500MB to 150MB (⬇️ 70%)
+- Builds are 50% faster through caching
+- Security: excludes development dependencies
 
 ---
 
-## ☁️ 云平台部署
+## ☁️ Cloud deployment
 
-### Render.com 部署（最简单 ⭐）
+### Render.com deployment (simplest ⭐)
 
-**一键部署，自动检测 Dockerfile！**
+**One-click deployment with automatic Dockerfile detection!**
 
-1. 在 Render 创建新的 Web Service
-2. 连接你的 GitHub 仓库
-3. 配置：
+1. Create a new Web Service on Render
+2. Connect your GitHub repository
+3. Configure:
    - **Environment**: Docker
-   - **Branch**: main（或你的分支）
+   - **Branch**: main (or your branch)
    - **Port**: 3000
-4. 添加环境变量：
-   - `FACTORY_API_KEY`: 固定API密钥（推荐）
-   - `ADMIN_ACCESS_KEY`: 管理后台密码
-5. 点击 "Create Web Service"
+4. Add environment variables:
+   - `FACTORY_API_KEY`: fixed API key (recommended)
+   - `ADMIN_ACCESS_KEY`: admin password
+5. Click "Create Web Service"
 
-**Render 自动提供：**
-- ✅ HTTPS 证书（自动续期）
-- ✅ 健康检查
-- ✅ 自动重启
-- ✅ 免费域名
-
----
-
-### Railway 部署
-
-1. 在 Railway 创建新项目
-2. 选择 "Deploy from GitHub repo"
-3. 选择你的仓库
-4. Railway 会自动检测 Dockerfile
-5. 添加环境变量：
-   - `FACTORY_API_KEY`: 固定API密钥（推荐）
-   - `ADMIN_ACCESS_KEY`: 管理后台密码
-6. 部署完成后会自动分配域名
+**Render provides automatically:**
+- ✅ HTTPS certificates with automatic renewal
+- ✅ Health checks
+- ✅ Automatic restarts
+- ✅ A free domain
 
 ---
 
-### Fly.io 部署
+### Railway deployment
+
+1. Create a new Railway project
+2. Select "Deploy from GitHub repo"
+3. Select your repository
+4. Railway detects the Dockerfile automatically
+5. Add environment variables:
+   - `FACTORY_API_KEY`: fixed API key (recommended)
+   - `ADMIN_ACCESS_KEY`: admin password
+6. A domain is assigned automatically after deployment
+
+---
+
+### Fly.io deployment
 
 ```bash
-# 1. 安装 Fly CLI
+# 1. Install the Fly CLI
 curl -L https://fly.io/install.sh | sh
 
-# 2. 登录
+# 2. Sign in
 fly auth login
 
-# 3. 初始化应用（在项目目录）
+# 3. Initialize the application from the project directory
 fly launch
 
-# 4. 设置环境变量
+# 4. Set environment variables
 fly secrets set FACTORY_API_KEY="your_factory_api_key_here"
 fly secrets set ADMIN_ACCESS_KEY="your-admin-password"
 
-# 5. 部署
+# 5. Deploy
 fly deploy
 
-# 6. 查看状态
+# 6. Check status
 fly status
 fly logs
 ```
 
 ---
 
-### Google Cloud Run 部署
+### Google Cloud Run deployment
 
 ```bash
-# 1. 构建并推送镜像
+# 1. Build and push the image
 gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/droid2api
 
-# 2. 部署到 Cloud Run
+# 2. Deploy to Cloud Run
 gcloud run deploy droid2api \
   --image gcr.io/YOUR_PROJECT_ID/droid2api \
   --platform managed \
@@ -999,28 +999,28 @@ gcloud run deploy droid2api \
   --memory 512Mi \
   --cpu 1
 
-# 3. 查看 URL
+# 3. Get the URL
 gcloud run services describe droid2api --region us-central1
 ```
 
 ---
 
-### AWS ECS 部署
+### AWS ECS deployment
 
 ```bash
-# 1. 创建 ECR 仓库
+# 1. Create an ECR repository
 aws ecr create-repository --repository-name droid2api
 
-# 2. 构建并推送镜像
+# 2. Build and push the image
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
 docker build -t droid2api .
 docker tag droid2api:latest YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/droid2api:latest
 docker push YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/droid2api:latest
 
-# 3. 创建 ECS 任务定义
+# 3. Create the ECS task definition
 aws ecs register-task-definition --cli-input-json file://ecs-task-definition.json
 
-# 4. 创建 ECS 服务
+# 4. Create the ECS service
 aws ecs create-service \
   --cluster your-cluster-name \
   --service-name droid2api \
@@ -1073,109 +1073,109 @@ aws ecs create-service \
 
 ---
 
-## 🎮 管理后台使用
+## 🎮 Using the admin interface
 
-### Web 管理界面
+### Web admin interface
 
-**访问地址：** `http://localhost:3000/` 或 `http://your-domain.com/`
+**Address:** `http://localhost:3000/` or `http://your-domain.com/`
 
-**登录：** 使用 `ADMIN_ACCESS_KEY` 作为密码（请求头 `x-admin-key`）
+**Sign in:** use `ADMIN_ACCESS_KEY` as the password (sent in the `x-admin-key` header)
 
-**主要功能：**
-- 📊 **密钥池统计** - 查看总数、可用、禁用、封禁密钥数量
-- 🆕 **多级密钥池管理** - 创建/删除池子，修改密钥所属池子
-- 🎯 **Token使用量监控** - 实时显示总Token使用量、今日使用量、请求统计
-- ➕ **添加密钥** - 单个添加或批量导入密钥（自动识别Provider类型）
-- 🧪 **测试密钥** - 单个测试或批量测试所有密钥可用性
-- 📤 **导出密钥** - 按状态筛选导出为 txt 文件
-- 🗑️ **删除密钥** - 单个删除或批量删除禁用/封禁密钥
-- ⚙️ **配置管理** - 调整轮询算法、重试机制、性能参数
-- 📈 **使用量统计** - Token使用热力图、成功率排行、每日/每小时统计
+**Main features:**
+- 📊 **Key pool statistics** - Counts of total, available, disabled, and proxy-blocked keys
+- 🆕 **Multi-tier key pools** - Create/delete pools and change key assignments
+- 🎯 **Token usage monitoring** - Live total usage, today's usage, and request statistics
+- ➕ **Add keys** - Add individually or import in bulk (provider type detected automatically)
+- 🧪 **Test keys** - Check key availability individually or in batches
+- 📤 **Export keys** - Filter by status and export to a txt file
+- 🗑️ **Delete keys** - Delete individually or bulk-delete disabled/proxy-blocked keys
+- ⚙️ **Configuration** - Adjust key selection, retries, and performance settings
+- 📈 **Usage statistics** - Token usage heatmaps, success-rate rankings, and daily/hourly statistics
 
 ---
 
-### 管理 API 接口
+### Admin API
 
-**所有管理接口需要在请求头中添加 `x-admin-key` 认证：**
+**All admin endpoints require the `x-admin-key` authentication header:**
 
 ```bash
 curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
 ```
 
-#### 密钥池管理接口
+#### Key pool endpoints
 
 ```bash
-# 获取密钥池统计
+# Get key pool statistics
 curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
 
-# 获取密钥列表（支持分页和状态筛选）
+# List keys (supports pagination and status filtering)
 curl -H "x-admin-key: your-admin-key" "http://localhost:3000/admin/keys?status=active&page=1&limit=20"
 
-# 添加单个密钥
+# Add one key
 curl -X POST -H "x-admin-key: your-admin-key" \
   -H "Content-Type: application/json" \
-  -d '{"key": "fk-xxx", "notes": "主力密钥", "poolGroup": "main"}' \
+  -d '{"key": "fk-xxx", "notes": "Primary key", "poolGroup": "main"}' \
   http://localhost:3000/admin/keys
 
-# 批量导入密钥
+# Import keys in bulk
 curl -X POST -H "x-admin-key: your-admin-key" \
   -H "Content-Type: application/json" \
   -d '{"keys": ["fk-xxx", "fk-yyy"], "poolGroup": "freebies"}' \
   http://localhost:3000/admin/keys/batch
 
-# 删除密钥
+# Delete a key
 curl -X DELETE -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/keys/key_1234567890
 
-# 切换密钥状态（active/disabled）
+# Toggle key status (active/disabled)
 curl -X PATCH -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/keys/key_1234567890/toggle
 
-# 测试单个密钥
+# Test one key
 curl -X POST -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/keys/key_1234567890/test
 
-# 批量测试所有密钥
+# Batch-test all keys
 curl -X POST -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/keys/test-all
 
-# 导出密钥为txt文件（按状态筛选）
+# Export keys to a txt file, filtered by status
 curl -H "x-admin-key: your-admin-key" \
   "http://localhost:3000/admin/keys/export?status=active"
 ```
 
-#### 🆕 多级密钥池接口（v1.4.0+）
+#### 🆕 Multi-tier key pool endpoints (v1.4.0+)
 
 ```bash
-# 获取所有密钥池及统计信息
+# Get all pools and their statistics
 curl -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/pool-groups
 
-# 创建新的密钥池
+# Create a pool
 curl -X POST -H "x-admin-key: your-admin-key" \
   -H "Content-Type: application/json" \
-  -d '{"id": "premium", "name": "付费池", "priority": 3}' \
+  -d '{"id": "premium", "name": "Paid pool", "priority": 3}' \
   http://localhost:3000/admin/pool-groups
 
-# 删除密钥池（密钥自动迁移到 default 池）
+# Delete a pool (keys move to the default pool automatically)
 curl -X DELETE -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/pool-groups/premium
 
-# 修改密钥所属的池子
+# Change a key's pool
 curl -X PATCH -H "x-admin-key: your-admin-key" \
   -H "Content-Type: application/json" \
   -d '{"poolGroup": "main"}' \
   http://localhost:3000/admin/keys/key_1234567890/pool
 ```
 
-#### 配置管理接口
+#### Configuration endpoints
 
 ```bash
-# 获取轮询配置
+# Get key selection settings
 curl -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/config
 
-# 更新轮询配置
+# Update key selection settings
 curl -X PUT -H "x-admin-key: your-admin-key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1186,94 +1186,94 @@ curl -X PUT -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/config
 ```
 
-#### Token 使用量接口
+#### Token usage endpoints
 
 ```bash
-# 获取Token使用量统计
+# Get token usage statistics
 curl -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/token/usage
 
-# 获取使用量汇总
+# Get a usage summary
 curl -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/token/summary
 
-# 手动触发同步
+# Trigger synchronization manually
 curl -X POST -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/token/sync
 
-# 清理过期数据
+# Clean up expired data
 curl -X POST -H "x-admin-key: your-admin-key" \
   http://localhost:3000/admin/token/cleanup
 ```
 
 ---
 
-## 🩺 健康检查与监控
+## 🩺 Health checks and monitoring
 
-### 健康检查端点
+### Health check endpoints
 
-**容器启动后，可以通过以下端点检查服务状态：**
+**After the container starts, use these endpoints to check service status:**
 
 ```bash
-# 检查服务基本状态
+# Check basic service availability
 curl http://localhost:3000/
 
-# 获取可用模型列表
+# List available models
 curl http://localhost:3000/v1/models
 
-# 检查管理后台（需要 ADMIN_ACCESS_KEY）
+# Check the admin API (requires ADMIN_ACCESS_KEY)
 curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
 ```
 
 ---
 
-### 日志系统
+### Logging
 
-droid2api 使用智能日志系统：
+droid2api logs according to its runtime mode:
 
-**生产模式（NODE_ENV=production）：**
-- 控制台：简洁日志
-- 文件：详细日志写入 `logs/droid2api_YYYY-MM-DD.log`
-- 自动按天轮换
+**Production mode (NODE_ENV=production):**
+- Console: concise logs
+- Files: detailed logs in `logs/droid2api_YYYY-MM-DD.log`
+- Automatic daily rotation
 
-**开发模式（NODE_ENV=development）：**
-- 控制台：详细日志
-- 文件：不写入
+**Development mode (NODE_ENV=development):**
+- Console: detailed logs
+- Files: no file output
 
 ---
 
-### 查看日志
+### Viewing logs
 
-#### Docker Compose 方式
+#### Docker Compose
 
 ```bash
-# 实时查看容器日志
+# Follow container logs in real time
 docker-compose logs -f
 
-# 查看最近 100 行
+# View the last 100 lines
 docker-compose logs --tail=100
 
-# 查看特定服务日志
+# View logs for a specific service
 docker-compose logs -f droid2api
 
-# 查看文件日志（如果挂载了卷）
+# Read log files if a volume is mounted
 docker exec droid2api ls /app/logs
 docker exec droid2api cat /app/logs/droid2api_2025-10-13.log
 ```
 
-#### Docker 命令方式
+#### Docker commands
 
 ```bash
-# 实时查看容器日志
+# Follow container logs in real time
 docker logs -f droid2api
 
-# 查看最近 100 行
+# View the last 100 lines
 docker logs --tail=100 droid2api
 
-# 导出日志到文件
+# Export logs to a file
 docker logs droid2api > droid2api.log 2>&1
 
-# 访问容器内部日志文件
+# Access log files inside the container
 docker exec -it droid2api sh
 cd logs
 ls -lh
@@ -1282,17 +1282,17 @@ cat droid2api_2025-10-13.log
 
 ---
 
-### 集成监控工具
+### Monitoring integrations
 
-**推荐集成：**
+**Suggested integrations:**
 
-- **Prometheus + Grafana** - 指标监控
-- **Datadog** - 全栈监控
-- **New Relic** - APM性能监控
-- **Sentry** - 错误追踪
-- **ELK Stack** - 日志聚合分析
+- **Prometheus + Grafana** - Metrics monitoring
+- **Datadog** - Full-stack monitoring
+- **New Relic** - Application performance monitoring
+- **Sentry** - Error tracking
+- **ELK Stack** - Log aggregation and analysis
 
-**Prometheus 示例配置：**
+**Example Prometheus configuration:**
 ```yaml
 scrape_configs:
   - job_name: 'droid2api'
@@ -1302,108 +1302,108 @@ scrape_configs:
 
 ---
 
-## 🔧 故障排查
+## 🔧 Troubleshooting
 
-### 容器无法启动
+### Container fails to start
 
-**查看日志：**
+**Check logs:**
 ```bash
 docker logs droid2api
-# 或
+# Or
 docker-compose logs
 ```
 
-**常见问题：**
-1. ❌ 缺少认证配置（`FACTORY_API_KEY` 或 `DROID_REFRESH_KEY`）
-   - **解决：** 在 `.env` 文件中配置至少一个认证方式
+**Common issues:**
+1. ❌ Missing authentication configuration (`FACTORY_API_KEY` or `DROID_REFRESH_KEY`)
+   - **Resolution:** configure at least one authentication method in `.env`
 
-2. ❌ API密钥或 refresh token 无效或过期
-   - **解决：** 检查密钥是否正确，获取新的密钥
+2. ❌ API key or refresh token is invalid or expired
+   - **Resolution:** verify the key and obtain a new one
 
-3. ❌ 端口 3000 已被占用
-   - **解决：** 修改 `docker-compose.yml` 中的端口映射：`"3001:3000"`
+3. ❌ Port 3000 is already in use
+   - **Resolution:** change the port mapping in `docker-compose.yml` to `"3001:3000"`
 
-4. ❌ `ADMIN_ACCESS_KEY` 未设置或使用默认值
-   - **解决：** 设置强密码，不要使用 `123`、`admin` 等弱密码
+4. ❌ `ADMIN_ACCESS_KEY` is unset or still has its default value
+   - **Resolution:** set a strong password; avoid weak values such as `123` or `admin`
 
-5. ❌ 数据卷权限问题
-   - **解决：** `chmod -R 777 data logs`
-
----
-
-### API 请求返回 401
-
-**原因：** API密钥或 refresh token 过期或无效
-
-**解决方案：**
-1. 如果使用 `FACTORY_API_KEY`：检查密钥是否有效
-2. 如果使用 `DROID_REFRESH_KEY`：获取新的 refresh token
-3. 更新 `.env` 文件中的环境变量
-4. 重启容器：`docker-compose restart`
+5. ❌ Volume permission issues
+   - **Resolution:** `chmod -R 777 data logs`
 
 ---
 
-### 容器频繁重启
+### API requests return 401
 
-**检查健康检查日志和应用日志：**
+**Cause:** API key or refresh token is expired or invalid
+
+**Resolution:**
+1. With `FACTORY_API_KEY`, check whether the key is valid
+2. With `DROID_REFRESH_KEY`, obtain a new refresh token
+3. Update the environment variables in `.env`
+4. Restart the container: `docker-compose restart`
+
+---
+
+### Container restarts frequently
+
+**Inspect health check and application logs:**
 ```bash
 docker inspect droid2api | grep -A 10 "Health"
 docker logs --tail=50 droid2api
 ```
 
-**可能原因：**
-- 内存不足（OOM）
-  - **解决：** 增加内存限制：`memory: 1024M`
+**Possible causes:**
+- Out of memory (OOM)
+  - **Resolution:** increase the memory limit to `memory: 1024M`
 
-- API key 刷新失败
-  - **解决：** 检查网络连接，切换到 `FACTORY_API_KEY`
+- API key refresh fails
+  - **Resolution:** check network connectivity or switch to `FACTORY_API_KEY`
 
-- 配置文件错误
-  - **解决：** 检查 `data/config.json` 格式
+- Invalid configuration file
+  - **Resolution:** check the format of `data/config.json`
 
 ---
 
-### Redis 连接失败
+### Redis connection fails
 
-**症状：** 日志显示 `Redis connection error`
+**Symptom:** logs show `Redis connection error`
 
-**解决方案：**
-1. 检查 Redis 容器是否运行：
+**Resolution:**
+1. Check that the Redis container is running:
    ```bash
    docker ps | grep redis
    ```
 
-2. 检查 Redis 连接配置：
+2. Check the Redis connection settings:
    ```bash
    docker exec droid2api env | grep REDIS
    ```
 
-3. 手动测试 Redis 连接：
+3. Test the Redis connection manually:
    ```bash
    docker exec redis redis-cli ping
    ```
 
-4. 如果 Redis 不可用，系统会自动降级到文件模式 ✅
+4. If Redis is unavailable, the system automatically falls back to file storage ✅
 
 ---
 
-### 密钥池数据丢失
+### Key pool data is lost
 
-**原因：** 容器重启，数据未持久化
+**Cause:** the container was replaced without persistent storage
 
-**解决方案：**
-1. 立即备份 `data/key_pool.json`：
+**Resolution:**
+1. Back up `data/key_pool.json` immediately:
    ```bash
    docker cp droid2api:/app/data/key_pool.json ./backup_key_pool.json
    ```
 
-2. 修改 `docker-compose.yml` 挂载数据卷：
+2. Edit `docker-compose.yml` to mount a volume:
    ```yaml
    volumes:
      - data-volume:/app/data
    ```
 
-3. 恢复备份数据：
+3. Restore the backup:
    ```bash
    docker cp ./backup_key_pool.json droid2api:/app/data/key_pool.json
    docker-compose restart
@@ -1411,59 +1411,59 @@ docker logs --tail=50 droid2api
 
 ---
 
-## 🔒 安全建议
+## 🔒 Security recommendations
 
-### 🚨 高优先级（必须做）
+### 🚨 High priority (required)
 
-1. **不要将 `.env` 文件提交到 Git**
+1. **Do not commit `.env` to Git**
    ```bash
-   # 确保 .gitignore 包含：
+   # Make sure .gitignore contains:
    .env
    data/
    logs/
    ```
 
-2. **必须设置强 `ADMIN_ACCESS_KEY`**
-   - ✅ 至少16位
-   - ✅ 包含字母+数字+符号
-   - ❌ 不要使用 `123`、`admin`、`password` 等弱密码
+2. **Set a strong `ADMIN_ACCESS_KEY`**
+   - ✅ At least 16 characters
+   - ✅ Include letters, digits, and symbols
+   - ❌ Avoid weak passwords such as `123`, `admin`, or `password`
 
-3. **使用 secrets 管理敏感信息**
+3. **Use secrets management for sensitive information**
    - Docker Secrets
    - Kubernetes Secrets
    - GitHub Secrets（CI/CD）
 
-4. **定期备份 `data/key_pool.json`** 密钥池数据
+4. **Back up `data/key_pool.json` regularly** to preserve key pool data
    ```bash
-   # 每天自动备份
+   # Automatic daily backup
    0 2 * * * docker cp droid2api:/app/data/key_pool.json /backup/key_pool_$(date +\%Y\%m\%d).json
    ```
 
 ---
 
-### 🔐 中优先级（推荐做）
+### 🔐 Medium priority (recommended)
 
-5. **生产环境推荐使用 `FACTORY_API_KEY`**（更稳定，无需刷新）
+5. **Use `FACTORY_API_KEY` in production** for greater stability without refresh
 
-6. **启用 HTTPS**（云平台通常自动提供）
-   - Nginx + Let's Encrypt 证书
+6. **Enable HTTPS** (often provided automatically by cloud platforms)
+   - Nginx with Let's Encrypt certificates
    - Cloudflare CDN
-   - 云平台内置 SSL
+   - Built-in cloud platform SSL
 
-7. **限制管理后台访问来源**
-   - 通过防火墙配置白名单
-   - 通过云平台配置 IP 白名单
-   - 使用 VPN 访问管理后台
+7. **Restrict access to the admin interface**
+   - Configure a firewall allowlist
+   - Configure a cloud platform IP allowlist
+   - Access the admin interface through a VPN
 
-8. **使用数据卷持久化** 密钥池和日志数据
+8. **Use volumes to persist** key pool data and logs
 
 ---
 
-### 🛡️ 低优先级（最佳实践）
+### 🛡️ Low priority (best practices)
 
-9. **定期更新 API 密钥和 refresh token**
+9. **Rotate API keys and refresh tokens regularly**
 
-10. **启用容器资源限制**
+10. **Enable container resource limits**
     ```yaml
     deploy:
       resources:
@@ -1472,54 +1472,54 @@ docker logs --tail=50 droid2api
           memory: 512M
     ```
 
-11. **定期更新 Docker 镜像**
+11. **Update Docker images regularly**
     ```bash
     docker-compose pull
     docker-compose up -d
     ```
 
-12. **启用审计日志**
-    - 记录所有管理操作
-    - 记录密钥使用情况
-    - 定期审查日志
+12. **Enable audit logging**
+    - Record all admin operations
+    - Record key usage
+    - Review logs regularly
 
 ---
 
-## 📚 相关文档
+## 📚 Related documentation
 
-- **主文档** - [README.md](README.md)
-- **架构总览** - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **多级密钥池** - [docs/MULTI_TIER_POOL.md](docs/MULTI_TIER_POOL.md)
-- **AI 上下文文档** - [CLAUDE.md](CLAUDE.md)
+- **Main documentation** - [README.md](README.md)
+- **Architecture overview** - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Multi-tier key pools** - [docs/MULTI_TIER_POOL.md](docs/MULTI_TIER_POOL.md)
+- **AI context documentation** - [CLAUDE.md](CLAUDE.md)
 
 ---
 
-## 🎉 总结
+## 🎉 Wrap-up
 
-恭喜你！现在你已经掌握了 droid2api 的 Docker 部署方法！🚀
+You now know how to deploy droid2api with Docker! 🚀
 
-**快速回顾：**
+**Quick recap:**
 
-| 需求 | 推荐方案 |
+| Requirement | Suggested deployment |
 |------|----------|
-| 个人使用 | Docker Compose + FACTORY_API_KEY |
-| 多密钥管理 | Docker Compose + 密钥池 |
-| 高并发（< 50万/天） | 单容器（默认优化） |
-| 高并发（50-100万/天） | 单容器 + Redis |
-| 超高并发（> 100万/天） | 集群模式 + Redis |
-| 企业生产环境 | Kubernetes + Redis + 多级密钥池 |
+| Personal use | Docker Compose + FACTORY_API_KEY |
+| Multiple keys | Docker Compose + key pool |
+| High concurrency (< 500,000/day) | Single container with default optimizations |
+| High concurrency (500,000-1,000,000/day) | Single container + Redis |
+| Very high concurrency (> 1,000,000/day) | Cluster mode + Redis |
+| Enterprise production | Kubernetes + Redis + multi-tier key pools |
 
-**最佳实践检查清单：**
-- [ ] 配置强 `ADMIN_ACCESS_KEY`
-- [ ] 配置至少一个 API 认证方式
-- [ ] 挂载数据卷持久化数据
-- [ ] 启用 HTTPS
-- [ ] 定期备份 `key_pool.json`
-- [ ] 查看日志监控运行状态
+**Best-practice checklist:**
+- [ ] Configure a strong `ADMIN_ACCESS_KEY`
+- [ ] Configure at least one API authentication method
+- [ ] Mount volumes for persistent storage
+- [ ] Enable HTTPS
+- [ ] Back up `key_pool.json` regularly
+- [ ] Monitor service health through logs
 
-**遇到问题？**
-- 查看 [故障排查](#-故障排查) 章节
-- 提交 Issue 到项目仓库
-- 加入社区讨论
+**Need help?**
+- Read [Troubleshooting](#-troubleshooting)
+- Open an issue in the project repository
+- Join the community discussion
 
-祝你使用愉快！💪🎊
+Enjoy using droid2api! 💪🎊

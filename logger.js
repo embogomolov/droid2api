@@ -6,30 +6,30 @@ import { isDevMode, getMaxJsonLogSize } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 日志目录配置
+// Log directory configuration
 const LOG_DIR = path.join(__dirname, 'logs');
 
-// BaSui：确保日志目录存在
+// BaSui: Ensure the log directory exists
 function ensureLogDir() {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
   }
 }
 
-// BaSui：获取当前日期的日志文件名
+// BaSui: Get the log filename for the current date
 function getLogFileName() {
   const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   return path.join(LOG_DIR, `droid2api_${date}.log`);
 }
 
-// BaSui：格式化时间戳
+// BaSui: Format a timestamp
 function getTimestamp() {
   return new Date().toISOString();
 }
 
 /**
- * BaSui：智能JSON序列化 - 大对象截断，小对象美化
- * 避免疯狂序列化大对象导致性能下降！
+ * BaSui: Smart JSON serialization: truncate large objects and pretty-print small ones
+ * Avoid performance degradation from repeatedly serializing large objects!
  */
 function smartStringify(data, isConsole = false) {
   if (!data) return '';
@@ -38,33 +38,33 @@ function smartStringify(data, isConsole = false) {
     const jsonStr = JSON.stringify(data);
     const maxSize = getMaxJsonLogSize();
     
-    // 控制台输出时使用更小的限制
+    // Use a smaller limit for console output
     const consoleMaxSize = isConsole ? Math.min(maxSize, 500) : maxSize;
 
-    // 如果对象太大，只输出摘要
+    // Output only a summary when the object is too large
     if (jsonStr.length > consoleMaxSize) {
       const summary = {
         _truncated: true,
         _original_size: jsonStr.length,
         _preview: jsonStr.substring(0, consoleMaxSize) + '...',
-        _hint: isConsole ? '完整内容已写入日志文件' : undefined
+        _hint: isConsole ? 'Full content has been written to the log file' : undefined
       };
       return JSON.stringify(summary, null, 2);
     }
 
-    // 正常大小的对象，美化输出
+    // Pretty-print objects of normal size
     return JSON.stringify(data, null, 2);
   } catch (error) {
-    return `[JSON序列化失败: ${error.message}]`;
+    return `[JSON serialization failed: ${error.message}]`;
   }
 }
 
 /**
- * BaSui：写入日志文件
- * 使用追加模式，避免覆盖已有日志
+ * BaSui: Write to the log file
+ * Append to avoid overwriting existing logs
  */
 function writeToFile(level, message, data = null) {
-  // BaSui：开发模式也写文件，保留完整日志！
+  // BaSui: Also write files in development mode to retain full logs!
 
   try {
     ensureLogDir();
@@ -77,50 +77,50 @@ function writeToFile(level, message, data = null) {
       logLine += `${smartStringify(data)}\n`;
     }
 
-    logLine += '\n'; // BaSui：每条日志之间空一行，方便阅读
+    logLine += '\n'; // BaSui: Separate entries with a blank line for readability
 
     fs.appendFileSync(logFile, logLine, 'utf-8');
   } catch (error) {
-    // BaSui：文件写入失败不应该影响主程序！只在控制台报个错
-    console.error(`[文件日志写入失败] ${error.message}`);
+    // BaSui: File logging failures must not disrupt the application; report them to the console only
+    console.error(`[Failed to write to the log file] ${error.message}`);
   }
 }
 
 export function logInfo(message, data = null) {
   const isDev = isDevMode();
 
-  // BaSui：控制台输出
+  // BaSui: Console output
   if (isDev) {
-    // 开发模式：详细输出（但缩短过长内容）
+    // Development mode: detailed output (with long content truncated)
     console.log(`\x1b[36m[INFO]\x1b[0m ${message}`);
     if (data) {
       console.log(smartStringify(data, true));
     }
   }
-  // 生产模式：不输出到控制台，只写入文件
+  // Production mode: write to files only, without console output
 
-  // BaSui：写文件（完整内容）
+  // BaSui: Write to a file (full content)
   writeToFile('INFO', message, data);
 }
 
 export function logWarn(message, data = null) {
   const isDev = isDevMode();
 
-  // BaSui：警告日志始终输出到控制台
+  // BaSui: Always output warnings to the console
   console.warn(`\x1b[33m[WARN]\x1b[0m ${message}`);
   
   if (data && isDev) {
     console.warn(smartStringify(data, true));
   }
 
-  // BaSui：警告日志需要写文件，方便追踪潜在问题
+  // BaSui: Write warnings to a file to help investigate potential issues
   writeToFile('WARN', message, data);
 }
 
 export function logDebug(message, data = null) {
   const isDev = isDevMode();
 
-  // BaSui：DEBUG日志只在开发模式输出到控制台
+  // BaSui: DEBUG logs are output to the console only in development mode
   if (isDev) {
     console.log(`\x1b[90m[DEBUG]\x1b[0m ${message}`);
     if (data) {
@@ -128,24 +128,24 @@ export function logDebug(message, data = null) {
     }
   }
 
-  // BaSui：生产模式也要写文件，方便排查问题
+  // BaSui: Also write files in production mode for troubleshooting
   writeToFile('DEBUG', message, data);
 }
 
 export function logError(message, error = null) {
   const isDev = isDevMode();
 
-  // BaSui：错误日志始终输出到控制台
+  // BaSui: Always output errors to the console
   console.error(`\x1b[31m[ERROR]\x1b[0m ${message}`);
 
   if (error) {
     if (isDev) {
-      // 开发模式：完整错误堆栈（但过长时截断）
+      // Development mode: full error stack (truncated if too long)
       if (error instanceof Error) {
         const stack = error.stack || error.message;
-        // 堆栈太长时截断
+        // Truncate excessively long stacks
         if (stack && stack.length > 1000) {
-          console.error(stack.substring(0, 1000) + '\n... [堆栈已截断，完整内容见日志文件]');
+          console.error(stack.substring(0, 1000) + '\n... [Stack truncated; see the log file for full details]');
         } else {
           console.error(error);
         }
@@ -153,12 +153,12 @@ export function logError(message, error = null) {
         console.error(smartStringify(error, true));
       }
     } else {
-      // 生产模式：简单错误信息
+      // Production mode: concise error messages
       console.error(error.message || error);
     }
   }
 
-  // BaSui：错误日志必须写文件！方便排查生产问题！
+  // BaSui: Always write error logs to files for production troubleshooting!
   writeToFile('ERROR', message, error);
 }
 
@@ -166,7 +166,7 @@ export function logRequest(method, url, headers = null, body = null) {
   const isDev = isDevMode();
 
   if (isDev) {
-    // 开发模式：详细的请求日志
+    // Development mode: detailed request logs
     console.log(`\n${'='.repeat(80)}`);
     console.log(`[REQUEST] ${method} ${url}`);
     if (headers) {
@@ -177,9 +177,9 @@ export function logRequest(method, url, headers = null, body = null) {
     }
     console.log('='.repeat(80) + '\n');
   }
-  // 生产模式：不输出到控制台，只写入文件
+  // Production mode: write to files only, without console output
 
-  // BaSui：生产模式写详细的请求日志到文件
+  // BaSui: Write detailed request logs to files in production mode
   const requestData = { method, url, headers, body };
   writeToFile('REQUEST', `${method} ${url}`, requestData);
 }
@@ -188,7 +188,7 @@ export function logResponse(status, headers = null, body = null) {
   const isDev = isDevMode();
 
   if (isDev) {
-    // 开发模式：详细的响应日志
+    // Development mode: detailed response logs
     console.log(`\n${'-'.repeat(80)}`);
     console.log(`[RESPONSE] Status: ${status}`);
     if (headers) {
@@ -199,12 +199,12 @@ export function logResponse(status, headers = null, body = null) {
     }
     console.log('-'.repeat(80) + '\n');
   }
-  // 生产模式：不输出到控制台，只写入文件
+  // Production mode: write to files only, without console output
 
-  // BaSui：生产模式写详细的响应日志到文件
+  // BaSui: Write detailed response logs to files in production mode
   const responseData = { status, headers, body };
   writeToFile('RESPONSE', `Status: ${status}`, responseData);
 }
 
-// BaSui：别名导出，兼容旧代码
+// BaSui: Export an alias for compatibility with legacy code
 export const logWarning = logWarn;

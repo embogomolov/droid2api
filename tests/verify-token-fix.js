@@ -1,38 +1,38 @@
 /**
- * Token 计算修复验证脚本
+ * Token counting fix verification script
  *
- * 功能：
- * 1. 发起多次 Anthropic 流式请求
- * 2. 获取本地统计数据（GET /admin/token/summary）
- * 3. 获取 Factory API 真实用量（GET /admin/balance/factory/{keyId}）
- * 4. 对比两边数据，验证修复效果
+ * Features:
+ * 1. Send multiple streaming requests to an Anthropic model.
+ * 2. Fetch local statistics (GET /admin/stats/summary).
+ * 3. Fetch actual Factory usage (GET /admin/token/usage/{keyId}?forceRefresh=true).
+ * 4. Compare local and provider statistics to evaluate the fix.
  *
- * 使用方法：
+ * Usage:
  *   node tests/verify-token-fix.js
  */
 
 import fetch from 'node-fetch';
 import { config } from 'dotenv';
 
-// 加载环境变量
+// Load environment variables.
 config();
 
-// 配置
+// Configuration
 const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 const ACCESS_KEY = process.env.API_ACCESS_KEY || 'your-access-key';
 const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY || 'your-admin-key';
-const TEST_REQUESTS_COUNT = 5; // 发起5次测试请求
+const TEST_REQUESTS_COUNT = 5; // Send 5 test requests.
 
-// 测试提示词（简短，节约Token）
+// Short test prompts to minimize token usage.
 const TEST_PROMPTS = [
-  '你好，请用一句话介绍你自己。',
-  '用一句话解释什么是人工智能。',
-  '推荐一本编程书籍，一句话说明理由。',
-  '用一句话描述你最喜欢的编程语言。',
-  '给初学者一个编程建议，一句话。'
+  'Hello, introduce yourself in one sentence.',
+  'Explain artificial intelligence in one sentence.',
+  'Recommend a programming book and explain why in one sentence.',
+  'Describe your favorite programming language in one sentence.',
+  'Give a beginner one piece of programming advice in a single sentence.'
 ];
 
-// 颜色输出辅助函数
+// Colored output helpers
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -48,11 +48,11 @@ function log(message, color = 'reset') {
 }
 
 /**
- * 发起单个流式请求
+ * Send a single streaming request.
  */
 async function sendStreamingRequest(prompt, index) {
-  log(`\n📤 [请求 ${index + 1}/${TEST_REQUESTS_COUNT}] 发起流式请求...`, 'blue');
-  log(`   提示词: "${prompt}"`, 'cyan');
+  log(`\n📤 [Request ${index + 1}/${TEST_REQUESTS_COUNT}] Sending streaming request...`, 'blue');
+  log(`   Prompt: "${prompt}"`, 'cyan');
 
   try {
     const response = await fetch(`${API_BASE}/v1/chat/completions`, {
@@ -65,20 +65,20 @@ async function sendStreamingRequest(prompt, index) {
         model: 'claude-sonnet-4-5-20250929',
         messages: [{ role: 'user', content: prompt }],
         stream: true,
-        max_tokens: 150 // 限制输出长度，节约Token
+        max_tokens: 150 // Limit output length to reduce token usage.
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      log(`   ❌ 请求失败: ${response.status} ${errorText}`, 'red');
+      log(`   ❌ Request failed: ${response.status} ${errorText}`, 'red');
       return { success: false, error: errorText };
     }
 
     let fullResponse = '';
     let chunkCount = 0;
 
-    // 读取流式响应
+    // Read the streaming response.
     const reader = response.body;
     for await (const chunk of reader) {
       const lines = chunk.toString().split('\n');
@@ -92,27 +92,27 @@ async function sendStreamingRequest(prompt, index) {
               chunkCount++;
             }
           } catch (e) {
-            // 忽略解析错误
+            // Ignore parsing errors.
           }
         }
       }
     }
 
-    log(`   ✅ 请求成功！收到 ${chunkCount} 个数据块`, 'green');
-    log(`   响应内容: "${fullResponse.substring(0, 100)}..."`, 'cyan');
+    log(`   ✅ Request succeeded. Received ${chunkCount} chunks`, 'green');
+    log(`   Response content: "${fullResponse.substring(0, 100)}..."`, 'cyan');
     return { success: true, response: fullResponse, chunkCount };
 
   } catch (error) {
-    log(`   ❌ 请求异常: ${error.message}`, 'red');
+    log(`   ❌ Request error: ${error.message}`, 'red');
     return { success: false, error: error.message };
   }
 }
 
 /**
- * 获取本地统计数据（使用 request-stats.js 模块）
+ * Fetch local statistics from the request-stats.js module.
  */
 async function getLocalStats() {
-  log('\n📊 获取本地统计数据...', 'blue');
+  log('\n📊 Fetching local statistics...', 'blue');
 
   try {
     const response = await fetch(`${API_BASE}/admin/stats/summary`, {
@@ -127,20 +127,20 @@ async function getLocalStats() {
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.message || '获取统计数据失败');
+      throw new Error(result.message || 'Failed to fetch statistics');
     }
 
-    log('   ✅ 本地统计数据获取成功', 'green');
+    log('   ✅ Local statistics retrieved successfully', 'green');
     return result.data;
 
   } catch (error) {
-    log(`   ❌ 获取本地统计失败: ${error.message}`, 'red');
+    log(`   ❌ Failed to fetch local statistics: ${error.message}`, 'red');
     throw error;
   }
 }
 
 /**
- * 获取密钥列表
+ * Fetch the key list.
  */
 async function getKeyList() {
   try {
@@ -155,22 +155,22 @@ async function getKeyList() {
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.message || '获取密钥列表失败');
+      throw new Error(result.message || 'Failed to fetch the key list');
     }
 
     return result.data?.keys || [];
 
   } catch (error) {
-    log(`   ❌ 获取密钥列表失败: ${error.message}`, 'red');
+    log(`   ❌ Failed to fetch the key list: ${error.message}`, 'red');
     throw error;
   }
 }
 
 /**
- * 获取 Factory API 真实用量（通过 /admin/token/usage/:keyId?forceRefresh=true）
+ * Fetch actual Factory usage via /admin/token/usage/:keyId?forceRefresh=true.
  */
 async function getFactoryUsage(keyId) {
-  log(`\n🌐 获取 Factory API 真实用量 (keyId: ${keyId})...`, 'blue');
+  log(`\n🌐 Fetching actual Factory usage (keyId: ${keyId})...`, 'blue');
 
   try {
     const response = await fetch(`${API_BASE}/admin/token/usage/${keyId}?forceRefresh=true`, {
@@ -185,62 +185,62 @@ async function getFactoryUsage(keyId) {
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.message || 'Factory API 查询失败');
+      throw new Error(result.message || 'Factory API query failed');
     }
 
-    log('   ✅ Factory API 数据获取成功', 'green');
+    log('   ✅ Factory API data retrieved successfully', 'green');
     return result.data;
 
   } catch (error) {
-    log(`   ❌ 获取 Factory API 数据失败: ${error.message}`, 'red');
+    log(`   ❌ Failed to fetch Factory API data: ${error.message}`, 'red');
     throw error;
   }
 }
 
 /**
- * 对比分析两边数据
+ * Compare local and provider data.
  */
 function compareData(localStats, factoryUsage) {
-  log('\n📋 ========== 数据对比分析 ==========', 'bright');
+  log('\n📋 ========== Usage comparison ==========', 'bright');
 
-  log('\n【本地统计】', 'yellow');
-  log(`  总请求数: ${localStats.total_requests}`);
-  log(`  总 Token 数: ${localStats.total_tokens}`);
-  log(`  今日请求数: ${localStats.today_requests}`);
-  log(`  今日 Token 数: ${localStats.today_tokens}`);
-  log(`  今日输入 Token: ${localStats.today_input_tokens}`);
-  log(`  今日输出 Token: ${localStats.today_output_tokens}`);
+  log('\n[Local statistics]', 'yellow');
+  log(`  Total requests: ${localStats.total_requests}`);
+  log(`  Total tokens: ${localStats.total_tokens}`);
+  log(`  Requests today: ${localStats.today_requests}`);
+  log(`  Tokens today: ${localStats.today_tokens}`);
+  log(`  Input tokens today: ${localStats.today_input_tokens}`);
+  log(`  Output tokens today: ${localStats.today_output_tokens}`);
 
-  log('\n【Factory API 真实用量】', 'yellow');
+  log('\n[Actual Factory usage]', 'yellow');
   if (factoryUsage.success && factoryUsage.standard) {
     const std = factoryUsage.standard;
-    log(`  总配额: ${std.totalAllowance.toLocaleString()} tokens`);
-    log(`  已使用: ${std.orgTotalTokensUsed.toLocaleString()} tokens`);
-    log(`  剩余: ${std.remaining.toLocaleString()} tokens`);
-    log(`  使用率: ${(std.usedRatio * 100).toFixed(2)}%`);
+    log(`  Total allowance: ${std.totalAllowance.toLocaleString()} tokens`);
+    log(`  Used: ${std.orgTotalTokensUsed.toLocaleString()} tokens`);
+    log(`  Remaining: ${std.remaining.toLocaleString()} tokens`);
+    log(`  Usage ratio: ${(std.usedRatio * 100).toFixed(2)}%`);
   } else {
-    log(`  ❌ Factory API 查询失败: ${factoryUsage.message || '未知错误'}`, 'red');
+    log(`  ❌ Factory API query failed: ${factoryUsage.message || 'Unknown error'}`, 'red');
   }
 
-  // 计算差异
+  // Calculate the difference.
   if (factoryUsage.success && factoryUsage.standard) {
     const localTotal = localStats.total_tokens;
     const factoryTotal = factoryUsage.standard.orgTotalTokensUsed;
     const diff = Math.abs(localTotal - factoryTotal);
     const diffPercent = factoryTotal > 0 ? (diff / factoryTotal * 100).toFixed(2) : 0;
 
-    log('\n【差异分析】', 'yellow');
-    log(`  本地统计总 Token: ${localTotal.toLocaleString()}`);
-    log(`  Factory 真实用量: ${factoryTotal.toLocaleString()}`);
-    log(`  绝对差异: ${diff.toLocaleString()} tokens`);
-    log(`  相对差异: ${diffPercent}%`);
+    log('\n[Difference analysis]', 'yellow');
+    log(`  Local total tokens: ${localTotal.toLocaleString()}`);
+    log(`  Actual Factory usage: ${factoryTotal.toLocaleString()}`);
+    log(`  Absolute difference: ${diff.toLocaleString()} tokens`);
+    log(`  Relative difference: ${diffPercent}%`);
 
     if (diffPercent < 1) {
-      log('\n✅ 结论: Token 计算非常准确！差异小于 1%！', 'green');
+      log('\n✅ Result: Token counts are highly accurate; the difference is below 1%.', 'green');
     } else if (diffPercent < 5) {
-      log('\n⚠️  结论: Token 计算基本准确，差异在 5% 以内', 'yellow');
+      log('\n⚠️  Result: Token counts are reasonably accurate; the difference is below 5%.', 'yellow');
     } else {
-      log('\n❌ 结论: Token 计算存在较大偏差，建议进一步检查', 'red');
+      log('\n❌ Result: Token counts differ significantly; further investigation is recommended.', 'red');
     }
   }
 
@@ -248,73 +248,73 @@ function compareData(localStats, factoryUsage) {
 }
 
 /**
- * 主函数
+ * Main function
  */
 async function main() {
-  log('\n🚀 ========== Token 计算修复验证脚本 ==========', 'bright');
-  log(`   API 地址: ${API_BASE}`, 'cyan');
-  log(`   测试请求数: ${TEST_REQUESTS_COUNT}`, 'cyan');
+  log('\n🚀 ========== Token counting fix verification script ==========', 'bright');
+  log(`   API URL: ${API_BASE}`, 'cyan');
+  log(`   Test request count: ${TEST_REQUESTS_COUNT}`, 'cyan');
   log('===============================================\n', 'bright');
 
   try {
-    // 第一步：记录测试前的统计数据
-    log('📌 步骤 1: 获取测试前的基准数据', 'yellow');
+    // Step 1: Record statistics before the test.
+    log('📌 Step 1: Fetch baseline statistics', 'yellow');
     const statsBefore = await getLocalStats();
-    log(`   测试前总请求数: ${statsBefore.total_requests}`, 'cyan');
-    log(`   测试前总 Token 数: ${statsBefore.total_tokens}`, 'cyan');
+    log(`   Total requests before the test: ${statsBefore.total_requests}`, 'cyan');
+    log(`   Total tokens before the test: ${statsBefore.total_tokens}`, 'cyan');
 
-    // 第二步：发起测试请求
-    log('\n📌 步骤 2: 发起测试请求', 'yellow');
+    // Step 2: Send test requests.
+    log('\n📌 Step 2: Send test requests', 'yellow');
     let successCount = 0;
     for (let i = 0; i < TEST_REQUESTS_COUNT; i++) {
       const prompt = TEST_PROMPTS[i % TEST_PROMPTS.length];
       const result = await sendStreamingRequest(prompt, i);
       if (result.success) successCount++;
 
-      // 每次请求间隔1秒，避免速率限制
+      // Wait 1 second between requests to avoid rate limits.
       if (i < TEST_REQUESTS_COUNT - 1) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-    log(`\n   ✅ 完成 ${successCount}/${TEST_REQUESTS_COUNT} 个请求`, successCount === TEST_REQUESTS_COUNT ? 'green' : 'yellow');
+    log(`\n   ✅ Completed ${successCount}/${TEST_REQUESTS_COUNT} requests successfully`, successCount === TEST_REQUESTS_COUNT ? 'green' : 'yellow');
 
-    // 等待统计数据更新（给服务器1秒时间处理）
-    log('\n⏱️  等待统计数据更新...', 'cyan');
+    // Wait for statistics to update (allow 2 seconds for server processing).
+    log('\n⏱️  Waiting for statistics to update...', 'cyan');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // 第三步：获取测试后的统计数据
-    log('\n📌 步骤 3: 获取测试后的统计数据', 'yellow');
+    // Step 3: Fetch statistics after the test.
+    log('\n📌 Step 3: Fetch statistics after the test', 'yellow');
     const statsAfter = await getLocalStats();
-    log(`   测试后总请求数: ${statsAfter.total_requests}`, 'cyan');
-    log(`   测试后总 Token 数: ${statsAfter.total_tokens}`, 'cyan');
-    log(`   新增请求数: ${statsAfter.total_requests - statsBefore.total_requests}`, 'green');
-    log(`   新增 Token 数: ${statsAfter.total_tokens - statsBefore.total_tokens}`, 'green');
+    log(`   Total requests after the test: ${statsAfter.total_requests}`, 'cyan');
+    log(`   Total tokens after the test: ${statsAfter.total_tokens}`, 'cyan');
+    log(`   Requests added: ${statsAfter.total_requests - statsBefore.total_requests}`, 'green');
+    log(`   Tokens added: ${statsAfter.total_tokens - statsBefore.total_tokens}`, 'green');
 
-    // 第四步：获取密钥列表（用于查询 Factory API）
-    log('\n📌 步骤 4: 获取密钥信息', 'yellow');
+    // Step 4: Fetch the key list for the Factory API query.
+    log('\n📌 Step 4: Fetch key information', 'yellow');
     const keys = await getKeyList();
     if (keys.length === 0) {
-      throw new Error('密钥池为空！');
+      throw new Error('The key pool is empty.');
     }
     const firstKey = keys[0];
-    log(`   使用密钥: ${firstKey.id}`, 'cyan');
+    log(`   Using key: ${firstKey.id}`, 'cyan');
 
-    // 第五步：获取 Factory API 真实用量
-    log('\n📌 步骤 5: 查询 Factory API 真实用量', 'yellow');
+    // Step 5: Fetch actual Factory usage.
+    log('\n📌 Step 5: Query actual Factory usage', 'yellow');
     const factoryUsage = await getFactoryUsage(firstKey.id);
 
-    // 第六步：对比分析
-    log('\n📌 步骤 6: 对比分析', 'yellow');
+    // Step 6: Compare the data.
+    log('\n📌 Step 6: Compare the data', 'yellow');
     compareData(statsAfter, factoryUsage);
 
-    log('✅ 验证脚本执行完成！', 'green');
+    log('✅ Verification script completed.', 'green');
 
   } catch (error) {
-    log(`\n❌ 脚本执行失败: ${error.message}`, 'red');
+    log(`\n❌ Script failed: ${error.message}`, 'red');
     console.error(error);
     process.exit(1);
   }
 }
 
-// 执行主函数
+// Run the main function.
 main();

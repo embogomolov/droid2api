@@ -1,8 +1,8 @@
 /**
- * Token使用量管理器
- * 负责记录、统计和持久化token使用数据
- * 
- * BaSui: 使用新的准确token计算算法来追踪使用量
+ * Token usage manager
+ * Record, aggregate, and persist token usage data.
+ *
+ * BaSui: Track usage with the updated token counting algorithm.
  */
 
 import fs from 'fs';
@@ -15,7 +15,7 @@ import { AsyncFileWriter } from './async-file-writer.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Token使用量数据文件
+// Token usage data file
 const TOKEN_USAGE_FILE = path.join(__dirname, '..', 'data', 'token_usage_detail.json');
 
 class TokenUsageManager {
@@ -24,17 +24,17 @@ class TokenUsageManager {
     this.fileWriter = new AsyncFileWriter(TOKEN_USAGE_FILE);
     this.pendingWrites = false;
     
-    // 定期保存数据
+    // Save data periodically.
     this.saveInterval = setInterval(() => {
       if (this.pendingWrites) {
         this.saveData();
         this.pendingWrites = false;
       }
-    }, 30000); // 每30秒保存一次
+    }, 30000); // Save every 30 seconds.
   }
 
   /**
-   * 加载已有的使用量数据
+   * Load existing usage data.
    */
   loadData() {
     try {
@@ -43,16 +43,16 @@ class TokenUsageManager {
         return JSON.parse(content);
       }
     } catch (error) {
-      logError('加载token使用量数据失败', error);
+      logError('Failed to load token usage data', error);
     }
 
-    // 初始数据结构
+    // Initial data structure
     return {
-      keys: {},        // 按密钥ID存储的使用量
-      models: {},      // 按模型存储的使用量
-      daily: {},       // 按日期存储的使用量
-      hourly: {},      // 按小时存储的使用量
-      total: {         // 总体统计
+      keys: {},        // Usage by key ID
+      models: {},      // Usage by model
+      daily: {},       // Usage by date
+      hourly: {},      // Usage by hour
+      total: {         // Overall statistics
         requests: 0,
         prompt_tokens: 0,
         completion_tokens: 0,
@@ -68,37 +68,37 @@ class TokenUsageManager {
   }
 
   /**
-   * 保存数据到文件
+   * Save data to disk.
    */
   saveData() {
     try {
       this.usageData.last_updated = new Date().toISOString();
       this.fileWriter.write(this.usageData);
-      logDebug('Token使用量数据已保存');
+      logDebug('Token usage data saved');
     } catch (error) {
-      logError('保存token使用量数据失败', error);
+      logError('Failed to save token usage data', error);
     }
   }
 
   /**
-   * 记录token使用量
-   * @param {Object} params - 记录参数
-   * @param {string} params.keyId - 密钥ID
-   * @param {string} params.model - 模型名称
-   * @param {Object} params.usage - token使用量对象
-   * @param {Object} params.estimated - 预估的token使用量
-   * @param {number} params.latency - 请求延迟（毫秒）
+   * Record token usage.
+   * @param {Object} params - Parameters for recording usage
+   * @param {string} params.keyId - Key ID
+   * @param {string} params.model - Model name
+   * @param {Object} params.usage - Token usage object
+   * @param {Object} params.estimated - Estimated token usage
+   * @param {number} params.latency - Request latency in milliseconds
    */
   recordUsage({ keyId, model, usage, estimated, latency }) {
     try {
-      // 标准化token统计
+      // Normalize token statistics.
       const normalizedUsage = normalizeTokenStats(usage);
       
       const now = new Date();
       const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
       const hourKey = `${dateKey}T${now.getHours().toString().padStart(2, '0')}`; // YYYY-MM-DDTHH
 
-      // 更新密钥统计
+      // Update per-key statistics.
       if (keyId) {
         if (!this.usageData.keys[keyId]) {
           this.usageData.keys[keyId] = this.createEmptyStats();
@@ -106,7 +106,7 @@ class TokenUsageManager {
         this.updateStats(this.usageData.keys[keyId], normalizedUsage, latency);
       }
 
-      // 更新模型统计
+      // Update per-model statistics.
       if (model) {
         if (!this.usageData.models[model]) {
           this.usageData.models[model] = this.createEmptyStats();
@@ -114,42 +114,42 @@ class TokenUsageManager {
         this.updateStats(this.usageData.models[model], normalizedUsage, latency);
       }
 
-      // 更新每日统计
+      // Update daily statistics.
       if (!this.usageData.daily[dateKey]) {
         this.usageData.daily[dateKey] = this.createEmptyStats();
       }
       this.updateStats(this.usageData.daily[dateKey], normalizedUsage, latency);
 
-      // 更新每小时统计
+      // Update hourly statistics.
       if (!this.usageData.hourly[hourKey]) {
         this.usageData.hourly[hourKey] = this.createEmptyStats();
       }
       this.updateStats(this.usageData.hourly[hourKey], normalizedUsage, latency);
 
-      // 更新总体统计
+      // Update overall statistics.
       this.updateStats(this.usageData.total, normalizedUsage, latency);
 
-      // 计算估算成本（基于简化的定价模型）
+      // Estimate cost using a simplified pricing model.
       const estimatedCost = this.calculateCost(normalizedUsage, model);
       this.usageData.total.estimated_cost += estimatedCost;
 
-      // 如果有预估值，记录准确率
+      // Record estimation accuracy if an estimate is available.
       if (estimated) {
         this.recordAccuracy(normalizedUsage, estimated);
       }
 
-      // 标记需要保存
+      // Mark data as needing to be saved.
       this.pendingWrites = true;
 
-      logDebug(`Token使用已记录 - 密钥: ${keyId}, 模型: ${model}, 总tokens: ${normalizedUsage.total_tokens}`);
+      logDebug(`Token usage recorded - key: ${keyId}, model: ${model}, total tokens: ${normalizedUsage.total_tokens}`);
 
     } catch (error) {
-      logError('记录token使用量失败', error);
+      logError('Failed to record token usage', error);
     }
   }
 
   /**
-   * 创建空的统计对象
+   * Create an empty statistics object.
    */
   createEmptyStats() {
     return {
@@ -169,7 +169,7 @@ class TokenUsageManager {
   }
 
   /**
-   * 更新统计数据
+   * Update statistics.
    */
   updateStats(stats, usage, latency) {
     stats.requests++;
@@ -190,10 +190,10 @@ class TokenUsageManager {
   }
 
   /**
-   * 计算估算成本（简化版）
+   * Estimate cost using simplified pricing.
    */
   calculateCost(usage, model) {
-    // 简化的成本模型（美元/1M tokens）
+    // Simplified cost model (USD per 1M tokens)
     const pricing = {
       'claude-sonnet-4-20250514': { input: 3, output: 15 },
       'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
@@ -211,7 +211,7 @@ class TokenUsageManager {
   }
 
   /**
-   * 记录预估准确率
+   * Record estimation accuracy.
    */
   recordAccuracy(actual, estimated) {
     if (!this.usageData.accuracy) {
@@ -233,7 +233,7 @@ class TokenUsageManager {
     acc.total_diff_prompt += promptDiff;
     acc.total_diff_completion += completionDiff;
 
-    // 计算平均准确率
+    // Calculate average accuracy.
     if (actual.prompt_tokens > 0) {
       const promptAccuracy = 1 - (promptDiff / actual.prompt_tokens);
       acc.avg_accuracy_prompt = ((acc.avg_accuracy_prompt * (acc.samples - 1)) + promptAccuracy) / acc.samples;
@@ -246,7 +246,7 @@ class TokenUsageManager {
   }
 
   /**
-   * 获取使用量摘要
+   * Get a usage summary.
    */
   getSummary() {
     const today = new Date().toISOString().split('T')[0];
@@ -262,21 +262,21 @@ class TokenUsageManager {
   }
 
   /**
-   * 获取指定密钥的使用量
+   * Get usage for a specific key.
    */
   getKeyUsage(keyId) {
     return this.usageData.keys[keyId] || null;
   }
 
   /**
-   * 获取指定模型的使用量
+   * Get usage for a specific model.
    */
   getModelUsage(model) {
     return this.usageData.models[model] || null;
   }
 
   /**
-   * 获取日期范围内的使用量
+   * Get usage within a date range.
    */
   getUsageByDateRange(startDate, endDate) {
     const result = {};
@@ -294,21 +294,21 @@ class TokenUsageManager {
   }
 
   /**
-   * 清理旧数据（保留最近30天）
+   * Remove old data, keeping the last 30 days.
    */
   cleanupOldData() {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
 
-    // 清理每日数据
+    // Remove old daily data.
     Object.keys(this.usageData.daily).forEach(dateKey => {
       if (dateKey < cutoffDate) {
         delete this.usageData.daily[dateKey];
       }
     });
 
-    // 清理每小时数据（只保留7天）
+    // Remove old hourly data, keeping only 7 days.
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const hourCutoff = sevenDaysAgo.toISOString().substring(0, 13); // YYYY-MM-DDTHH
@@ -320,11 +320,11 @@ class TokenUsageManager {
     });
 
     this.pendingWrites = true;
-    logInfo('已清理旧的token使用量数据');
+    logInfo('Removed old token usage data');
   }
 
   /**
-   * 销毁管理器
+   * Dispose of the manager.
    */
   destroy() {
     if (this.saveInterval) {
@@ -336,10 +336,10 @@ class TokenUsageManager {
   }
 }
 
-// 创建单例
+// Create the singleton instance.
 const tokenUsageManager = new TokenUsageManager();
 
-// 定期清理旧数据（每天一次）
+// Remove old data once a day.
 setInterval(() => {
   tokenUsageManager.cleanupOldData();
 }, 24 * 60 * 60 * 1000);

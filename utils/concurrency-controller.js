@@ -1,6 +1,6 @@
 /**
- * 并发控制器
- * 防止竞态条件和资源争抢
+ * Concurrency controller
+ * Prevent race conditions and resource contention.
  */
 
 import { logInfo, logError, logWarn } from '../logger.js';
@@ -13,13 +13,13 @@ class ConcurrencyController {
     this.running = 0;
     this.taskIdCounter = 0;
     
-    // 锁机制
+    // Lock tracking
     this.locks = new Map();
     this.lockWaiters = new Map();
   }
   
   /**
-   * 获取唯一的任务ID（线程安全）
+   * Allocate a unique task ID synchronously within this process.
    */
   getNextId() {
     const id = this.taskIdCounter;
@@ -28,9 +28,9 @@ class ConcurrencyController {
   }
   
   /**
-   * 执行并发任务
-   * @param {Function} task - 要执行的任务函数
-   * @param {string} taskName - 任务名称
+   * Execute a task subject to the concurrency limit.
+   * @param {Function} task - Task function to execute
+   * @param {string} taskName - Task name
    */
   async execute(task, taskName = 'unnamed') {
     const taskId = this.getNextId();
@@ -61,7 +61,7 @@ class ConcurrencyController {
   }
   
   /**
-   * 处理队列中的任务
+   * Process queued tasks.
    */
   processQueue() {
     while (this.queue.length > 0 && this.running < this.maxConcurrent) {
@@ -71,9 +71,9 @@ class ConcurrencyController {
   }
   
   /**
-   * 获取互斥锁
-   * @param {string} resource - 资源标识
-   * @param {number} timeout - 超时时间（毫秒）
+   * Acquire an exclusive lock.
+   * @param {string} resource - Resource identifier
+   * @param {number} timeout - Timeout in milliseconds
    */
   async acquireLock(resource, timeout = 5000) {
     const startTime = Date.now();
@@ -83,7 +83,7 @@ class ConcurrencyController {
         throw new Error(`Lock acquisition timeout for resource: ${resource}`);
       }
       
-      // 等待锁释放
+      // Wait for the lock to be released.
       if (!this.lockWaiters.has(resource)) {
         this.lockWaiters.set(resource, []);
       }
@@ -93,7 +93,7 @@ class ConcurrencyController {
       });
     }
     
-    // 获取锁
+    // Acquire the lock.
     this.locks.set(resource, Date.now());
     return {
       release: () => this.releaseLock(resource)
@@ -101,13 +101,13 @@ class ConcurrencyController {
   }
   
   /**
-   * 释放锁
-   * @param {string} resource - 资源标识
+   * Release the lock.
+   * @param {string} resource - Resource identifier
    */
   releaseLock(resource) {
     this.locks.delete(resource);
     
-    // 通知等待者
+    // Notify a waiter.
     const waiters = this.lockWaiters.get(resource);
     if (waiters && waiters.length > 0) {
       const waiter = waiters.shift();
@@ -120,7 +120,7 @@ class ConcurrencyController {
   }
   
   /**
-   * 获取当前状态
+   * Get the current status.
    */
   getStatus() {
     return {
@@ -133,7 +133,7 @@ class ConcurrencyController {
   }
   
   /**
-   * 等待所有任务完成
+   * Wait for all tasks to complete.
    */
   async waitAll() {
     while (this.running > 0 || this.queue.length > 0) {
@@ -142,7 +142,7 @@ class ConcurrencyController {
   }
 }
 
-// 创建全局实例
+// Create the global instance.
 const globalController = new ConcurrencyController(100);
 
 export default ConcurrencyController;

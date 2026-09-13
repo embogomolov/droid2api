@@ -1,5 +1,5 @@
 /**
- * 测试Factory余额管理功能
+ * Test Factory balance management
  */
 import 'dotenv/config';
 import { getFactoryBalanceManager } from './balance/factory-balance-manager.js';
@@ -7,54 +7,54 @@ import keyPoolManager from './auth.js';
 import { logInfo, logError } from './logger.js';
 
 async function test() {
-    logInfo('========== 开始测试Factory余额管理功能 ==========');
+    logInfo('========== Start testing Factory balance management ==========');
 
     try {
-        // 初始化管理器
+        // Initialize the manager
         const manager = getFactoryBalanceManager();
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 等待初始化
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for initialization
 
-        // 1. 测试添加Factory密钥
-        logInfo('\n1. 测试添加Factory密钥...');
+        // 1. Test adding a Factory key
+        logInfo('\n1. Test adding a Factory key...');
         const testKey = 'fk-test-' + Date.now();
         try {
-            const keyObj = keyPoolManager.addKey(testKey, '测试密钥');
-            logInfo(`添加密钥成功: ${keyObj.id} (Provider: ${keyObj.provider})`);
+            const keyObj = keyPoolManager.addKey(testKey, 'Test key');
+            logInfo(`Key added successfully: ${keyObj.id} (Provider: ${keyObj.provider})`);
         } catch (e) {
-            logInfo(`密钥已存在或添加失败: ${e.message}`);
+            logInfo(`Key already exists or could not be added: ${e.message}`);
         }
 
-        // 2. 测试获取余额汇总
-        logInfo('\n2. 测试获取余额汇总...');
+        // 2. Test retrieving the balance summary
+        logInfo('\n2. Test retrieving the balance summary...');
         const summary = manager.getBalanceSummary();
-        logInfo(`余额汇总:`, summary);
+        logInfo(`Balance summary:`, summary);
 
-        // 3. 测试单个密钥余额查询（使用缓存）
-        logInfo('\n3. 测试单个密钥余额查询（缓存）...');
+        // 3. Test querying one key balance using the cache
+        logInfo('\n3. Test querying one cached key balance...');
         const factoryKeys = keyPoolManager.keys.filter(k => k.provider === 'factory');
         if (factoryKeys.length > 0) {
             const testKeyObj = factoryKeys[0];
             const balance = await manager.getBalance(testKeyObj.api_key || testKeyObj.key, false);
-            logInfo(`密钥 ${testKeyObj.id} 余额:`, balance);
+            logInfo(`Key ${testKeyObj.id} balance:`, balance);
         } else {
-            logInfo('没有Factory密钥可供测试');
+            logInfo('No Factory keys available for testing');
         }
 
-        // 4. 测试强制刷新余额
-        logInfo('\n4. 测试强制刷新余额...');
+        // 4. Test forcing a balance refresh
+        logInfo('\n4. Test forcing a balance refresh...');
         if (factoryKeys.length > 0) {
             const testKeyObj = factoryKeys[0];
             const balance = await manager.getBalance(testKeyObj.api_key || testKeyObj.key, true);
-            logInfo(`密钥 ${testKeyObj.id} 刷新后余额:`, balance);
+            logInfo(`Key ${testKeyObj.id} refreshed balance:`, balance);
         }
 
-        // 5. 测试同步所有余额
-        logInfo('\n5. 测试同步所有余额...');
+        // 5. Test synchronizing all balances
+        logInfo('\n5. Test synchronizing all balances...');
         const syncResult = await manager.syncAllBalances();
-        logInfo(`同步结果:`, syncResult);
+        logInfo(`Synchronization results:`, syncResult);
 
-        // 6. 测试使用量记录
-        logInfo('\n6. 测试使用量记录...');
+        // 6. Test usage recording
+        logInfo('\n6. Test usage recording...');
         if (factoryKeys.length > 0) {
             const testKeyObj = factoryKeys[0];
             manager.recordUsage(testKeyObj.api_key || testKeyObj.key, {
@@ -63,45 +63,45 @@ async function test() {
                 completion_tokens: 50
             });
             const usage = manager.getUsageStats(testKeyObj.api_key || testKeyObj.key);
-            logInfo(`密钥 ${testKeyObj.id} 使用量:`, usage);
+            logInfo(`Key ${testKeyObj.id} usage:`, usage);
         }
 
-        // 7. 测试数据持久化
-        logInfo('\n7. 测试数据持久化...');
+        // 7. Test data persistence
+        logInfo('\n7. Test data persistence...');
         await manager.saveCache();
-        logInfo('数据已保存到文件');
+        logInfo('Data saved to file');
 
-        // 8. 测试缓存加载
-        logInfo('\n8. 测试缓存加载...');
+        // 8. Test loading cached data
+        logInfo('\n8. Test loading cached data...');
         await manager.loadCache();
         const summaryAfterLoad = manager.getBalanceSummary();
-        logInfo(`加载后的汇总:`, summaryAfterLoad);
+        logInfo(`Summary after loading:`, summaryAfterLoad);
 
-        // 9. 测试清理过期数据
-        logInfo('\n9. 测试清理过期数据...');
+        // 9. Test removing expired data
+        logInfo('\n9. Test removing expired data...');
         manager.cleanupOldData();
-        logInfo('过期数据已清理');
+        logInfo('Expired data removed');
 
-        // 10. 测试定时同步
-        logInfo('\n10. 定时同步配置...');
-        logInfo(`同步间隔: ${manager.syncInterval / 60000}分钟`);
-        logInfo(`上次同步: ${manager.lastSyncTime || '未同步'}`);
+        // 10. Test scheduled synchronization
+        logInfo('\n10. Scheduled synchronization settings...');
+        logInfo(`Sync interval: ${manager.syncInterval / 60000} minutes`);
+        logInfo(`Last sync: ${manager.lastSyncTime || 'Not synced'}`);
 
-        logInfo('\n========== 测试完成 ==========');
+        logInfo('\n========== Tests complete ==========');
 
-        // 停止自动同步（测试环境）
+        // Stop automatic synchronization in the test environment
         manager.stopAutoSync();
 
     } catch (error) {
-        logError(`测试失败: ${error.message}`, error);
+        logError(`Test failed: ${error.message}`, error);
     }
 
-    // 退出进程
+    // Exit the process
     process.exit(0);
 }
 
-// 运行测试
+// Run tests
 test().catch(error => {
-    logError('测试异常:', error);
+    logError('Test error:', error);
     process.exit(1);
 });

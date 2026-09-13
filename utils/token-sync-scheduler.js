@@ -1,7 +1,7 @@
 /**
- * Token 统计自动同步调度器
- * BaSui: 定期查询 Factory API，同步真实的 Token 使用量
- * 帮助发现本地统计与服务商的差异
+ * Automatic token usage synchronization scheduler
+ * BaSui: Periodically query the Factory API to synchronize actual token usage.
+ * Identify discrepancies between local and provider usage statistics.
  */
 
 import { logInfo, logDebug, logError, logWarn } from '../logger.js';
@@ -15,9 +15,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SYNC_DATA_FILE = path.join(__dirname, '..', 'data', 'token_usage.json');
-const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000; // 5 分钟
-const MIN_SYNC_INTERVAL = 1 * 60 * 1000; // 最小 1 分钟
-const MAX_SYNC_INTERVAL = 60 * 60 * 1000; // 最大 1 小时
+const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const MIN_SYNC_INTERVAL = 1 * 60 * 1000; // Minimum: 1 minute
+const MAX_SYNC_INTERVAL = 60 * 60 * 1000; // Maximum: 1 hour
 
 let syncIntervalId = null;
 let syncInProgress = false;
@@ -30,7 +30,7 @@ let syncStats = {
 };
 
 /**
- * 加载缓存的 Token 使用量数据
+ * Load cached token usage data.
  * @returns {Object}
  */
 function loadSyncData() {
@@ -41,13 +41,13 @@ function loadSyncData() {
     const data = fs.readFileSync(SYNC_DATA_FILE, 'utf-8');
     return JSON.parse(data);
   } catch (error) {
-    logError('加载 Token 使用量缓存失败', error);
+    logError('Failed to load the token usage cache', error);
     return { keys: {} };
   }
 }
 
 /**
- * 保存 Token 使用量数据到缓存
+ * Save token usage data to the cache.
  * @param {Object} data
  */
 function saveSyncData(data) {
@@ -57,19 +57,19 @@ function saveSyncData(data) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
     fs.writeFileSync(SYNC_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    logDebug('Token 使用量缓存已保存');
+    logDebug('Token usage cache saved');
   } catch (error) {
-    logError('保存 Token 使用量缓存失败', error);
+    logError('Failed to save the token usage cache', error);
   }
 }
 
 /**
- * 执行一次 Token 同步（查询 Factory API）
- * @returns {Promise<Object>} 同步结果
+ * Synchronize token usage once by querying the Factory API.
+ * @returns {Promise<Object>} Synchronization result
  */
 async function performSync() {
   if (syncInProgress) {
-    logDebug('Token 同步已在进行中，跳过此次同步');
+    logDebug('Token synchronization is already in progress; skipping this run');
     return { skipped: true };
   }
 
@@ -77,9 +77,9 @@ async function performSync() {
   syncStats.totalSyncs++;
 
   try {
-    logInfo('🔄 开始同步 Factory API Token 使用量...');
+    logInfo('🔄 Synchronizing token usage from the Factory API...');
 
-    // 获取所有活跃密钥
+    // Get all active keys.
     const allKeys = keyPoolManager.keys;
     const activeKeys = allKeys.filter(k => k.status === 'active');
 
@@ -88,12 +88,12 @@ async function performSync() {
       return { skipped: true, reason: 'no_active_keys' };
     }
 
-    logDebug(`查询 ${activeKeys.length} 个活跃密钥的 Token 使用量`);
+    logDebug(`Querying token usage for ${activeKeys.length} active keys`);
 
-    // 加载现有缓存
+    // Load the existing cache.
     const syncData = loadSyncData();
 
-    // 查询所有活跃密钥（限制并发数）
+    // Query active keys sequentially to limit concurrency.
     let successCount = 0;
     let failCount = 0;
 
@@ -107,10 +107,10 @@ async function performSync() {
             last_sync: new Date().toISOString()
           };
           successCount++;
-          logDebug(`✅ 密钥 ${keyObj.id.substring(0, 20)}... 同步成功`);
+          logDebug(`✅ Key ${keyObj.id.substring(0, 20)}... synchronized successfully`);
         } else {
           failCount++;
-          logWarn(`⚠️ 密钥 ${keyObj.id.substring(0, 20)}... 查询失败: ${usage.message}`);
+          logWarn(`⚠️ Usage query failed for key ${keyObj.id.substring(0, 20)}...: ${usage.message}`);
 
           // 保留失败信息
           syncData.keys[keyObj.id] = {
@@ -120,7 +120,7 @@ async function performSync() {
         }
       } catch (error) {
         failCount++;
-        logError(`❌ 密钥 ${keyObj.id.substring(0, 20)}... 查询异常`, error);
+        logError(`❌ Usage query raised an error for key ${keyObj.id.substring(0, 20)}...`, error);
 
         // 记录错误
         syncData.keys[keyObj.id] = {
@@ -131,17 +131,17 @@ async function performSync() {
         };
       }
 
-      // 避免触发速率限制，每个密钥间隔 200ms
+      // Wait 200 ms between keys to avoid rate limits.
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    // 保存到缓存
+    // Save to the cache.
     saveSyncData(syncData);
 
     lastSyncTime = new Date();
     syncStats.successfulSyncs++;
 
-    logInfo(`✅ Token 同步完成: ${successCount} 成功, ${failCount} 失败`);
+    logInfo(`✅ Token synchronization complete: ${successCount} succeeded, ${failCount} failed`);
 
     return {
       success: true,
@@ -154,7 +154,7 @@ async function performSync() {
   } catch (error) {
     syncStats.failedSyncs++;
     syncStats.lastError = error.message;
-    logError('❌ Token 同步失败', error);
+    logError('❌ Token synchronization failed', error);
 
     return {
       success: false,
@@ -166,11 +166,11 @@ async function performSync() {
 }
 
 /**
- * 启动 Token 自动同步调度器
+ * Start the automatic token synchronization scheduler.
  * @param {Object} options
- * @param {number} options.intervalMs - 同步间隔（毫秒）
- * @param {boolean} options.immediate - 是否立即执行一次同步
- * @returns {boolean} 是否启动成功
+ * @param {number} options.intervalMs - Synchronization interval in milliseconds
+ * @param {boolean} options.immediate - Whether to synchronize immediately
+ * @returns {boolean} Whether the scheduler started successfully
  */
 export function startTokenSyncScheduler(options = {}) {
   const {
@@ -178,31 +178,31 @@ export function startTokenSyncScheduler(options = {}) {
     immediate = true
   } = options;
 
-  // 验证间隔时间
+  // Validate the interval.
   if (intervalMs < MIN_SYNC_INTERVAL || intervalMs > MAX_SYNC_INTERVAL) {
-    logWarn(`⚠️ Token 同步间隔必须在 ${MIN_SYNC_INTERVAL / 1000}s 到 ${MAX_SYNC_INTERVAL / 1000}s 之间，使用默认值 ${DEFAULT_SYNC_INTERVAL / 1000}s`);
+    logWarn(`⚠️ Token synchronization interval must be between ${MIN_SYNC_INTERVAL / 1000}s and ${MAX_SYNC_INTERVAL / 1000}s; using the default of ${DEFAULT_SYNC_INTERVAL / 1000}s`);
     return startTokenSyncScheduler({ ...options, intervalMs: DEFAULT_SYNC_INTERVAL });
   }
 
-  // 如果已经启动，先停止
+  // Stop the existing scheduler before restarting.
   if (syncIntervalId) {
-    logWarn('Token 同步调度器已在运行，先停止旧的调度器');
+    logWarn('Token synchronization scheduler is already running; stopping the existing scheduler first');
     stopTokenSyncScheduler();
   }
 
-  logInfo(`🚀 启动 Token 自动同步调度器，间隔: ${intervalMs / 1000}s (${Math.floor(intervalMs / 60000)} 分钟)`);
+  logInfo(`🚀 Starting automatic token synchronization; interval: ${intervalMs / 1000}s (${Math.floor(intervalMs / 60000)} minutes)`);
 
-  // 立即执行一次同步
+  // Synchronize immediately.
   if (immediate) {
     performSync().catch(error => {
-      logError('初始 Token 同步失败', error);
+      logError('Initial token synchronization failed', error);
     });
   }
 
-  // 设置定时器
+  // Set up the timer.
   syncIntervalId = setInterval(() => {
     performSync().catch(error => {
-      logError('定时 Token 同步失败', error);
+      logError('Scheduled token synchronization failed', error);
     });
   }, intervalMs);
 
@@ -210,29 +210,29 @@ export function startTokenSyncScheduler(options = {}) {
 }
 
 /**
- * 停止 Token 自动同步调度器
+ * Stop the automatic token synchronization scheduler.
  */
 export function stopTokenSyncScheduler() {
   if (syncIntervalId) {
     clearInterval(syncIntervalId);
     syncIntervalId = null;
-    logInfo('🛑 Token 自动同步调度器已停止');
+    logInfo('🛑 Automatic token synchronization scheduler stopped');
     return true;
   }
   return false;
 }
 
 /**
- * 手动触发一次同步（无论调度器是否启动）
- * @returns {Promise<Object>} 同步结果
+ * Synchronize manually, whether or not the scheduler is running.
+ * @returns {Promise<Object>} Synchronization result
  */
 export async function triggerManualSync() {
-  logInfo('🔄 手动触发 Token 同步...');
+  logInfo('🔄 Starting manual token synchronization...');
   return await performSync();
 }
 
 /**
- * 获取同步状态信息
+ * Get synchronization status.
  * @returns {Object}
  */
 export function getSyncStatus() {
@@ -245,8 +245,8 @@ export function getSyncStatus() {
 }
 
 /**
- * 获取缓存的 Token 使用量数据
- * @param {string} keyId - 密钥 ID（可选）
+ * Get cached token usage data.
+ * @param {string} keyId - Key ID (optional)
  * @returns {Object}
  */
 export function getCachedTokenUsage(keyId = null) {

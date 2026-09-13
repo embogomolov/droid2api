@@ -1,19 +1,19 @@
-// ========== 🚀 BaSui：多级密钥池管理功能 (Multi-Tier Pool Groups) ==========
-// 检查依赖：确保adminKey已定义
+// ========== Multi-tier key pool management (BaSui) ==========
+// Check dependencies: adminKey must be defined
 if (typeof adminKey === 'undefined') {
-    console.error('❌ pool-groups.js 需要在 app.js 之后加载！adminKey未定义');
+    console.error('❌ Load pool-groups.js after app.js; adminKey is undefined.');
 }
 
-// 全局池子数据
+// Global pool data
 let poolGroupsData = [];
 let currentChangePoolKeyId = null;
 
 /**
- * 加载并显示池子统计信息
+ * Load and display pool statistics
  */
 async function loadPoolGroups() {
     try {
-        // 并行获取密钥池统计和Token使用量统计
+        // Fetch key pool and token usage statistics concurrently
         const [poolResponse, tokenResponse] = await Promise.all([
             fetch('/admin/pool-groups', {
                 headers: { 'x-admin-key': adminKey }
@@ -24,20 +24,20 @@ async function loadPoolGroups() {
         ]);
 
         if (!poolResponse.ok) {
-            throw new Error(`加载池子失败: ${poolResponse.status}`);
+            throw new Error(`Failed to load pools: ${poolResponse.status}`);
         }
 
         const poolResult = await poolResponse.json();
         if (poolResult.success) {
             poolGroupsData = poolResult.data || [];
             
-            // 如果Token统计请求成功，合并数据
+            // Merge token statistics when the request succeeds
             if (tokenResponse.ok) {
                 const tokenResult = await tokenResponse.json();
                 if (tokenResult.success) {
                     const tokenPools = tokenResult.data.pools;
                     
-                    // 将Token统计数据合并到密钥池数据中
+                    // Merge token statistics into the key pool data
                     poolGroupsData.forEach(pool => {
                         const tokenStats = tokenPools[pool.id];
                         if (tokenStats) {
@@ -58,23 +58,23 @@ async function loadPoolGroups() {
             updatePoolGroupSelects();
         }
     } catch (err) {
-        console.error('加载密钥池失败:', err);
-        // 静默失败，不影响其他功能
+        console.error('Failed to load key pools:', err);
+        // Fail quietly without disrupting other features
     }
 }
 
 /**
- * 渲染池子卡片
+ * Render pool cards
  */
 function renderPoolGroups() {
     const container = document.getElementById('poolGroupsContainer');
     const grid = document.getElementById('poolGroupsGrid');
 
-    // 🆕 始终显示容器（即使没有池组，也要显示"创建密钥池"按钮）
+    // 🆕 Always show the container so Create pool remains available even with no pools
     container.style.display = 'block';
 
     if (!poolGroupsData || poolGroupsData.length === 0) {
-        // 显示空状态提示
+        // Show the empty state
         grid.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(255,255,255,0.95); border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <div style="font-size: 3em; margin-bottom: 15px;">🎯</div>
@@ -88,7 +88,7 @@ function renderPoolGroups() {
         return;
     }
 
-    // 按优先级排序
+    // Sort by priority
     const sortedGroups = [...poolGroupsData].sort((a, b) => a.priority - b.priority);
 
     grid.innerHTML = sortedGroups.map(group => {
@@ -100,21 +100,21 @@ function renderPoolGroups() {
             statusClass = 'pool-group-warning';
         }
 
-        // Token使用量显示 - 优化版
+        // Optimized token usage display
         let tokenStatsHtml = '';
         if (group.token_stats && group.token_stats.keys_with_data > 0) {
             const { total_used, total_limit, total_remaining, percentage } = group.token_stats;
             const percentNum = parseFloat(percentage);
-            let tokenColor = '#10b981';  // 绿色
+            let tokenColor = '#10b981';  // Green
             let tokenBgColor = 'rgba(16, 185, 129, 0.1)';
             if (percentNum > 80) {
-                tokenColor = '#ef4444';  // 红色
+                tokenColor = '#ef4444';  // Red
                 tokenBgColor = 'rgba(239, 68, 68, 0.1)';
             } else if (percentNum > 60) {
-                tokenColor = '#f59e0b';  // 橙色
+                tokenColor = '#f59e0b';  // Orange
                 tokenBgColor = 'rgba(245, 158, 11, 0.1)';
             } else if (percentNum > 40) {
-                tokenColor = '#fbbf24';  // 黄色
+                tokenColor = '#fbbf24';  // Yellow
                 tokenBgColor = 'rgba(251, 191, 36, 0.1)';
             }
 
@@ -166,7 +166,7 @@ function renderPoolGroups() {
                         <h3>${group.name}</h3>
                     </div>
                     <div class="pool-group-actions">
-                        <button onclick="deletePoolGroup('${group.id}')" class="btn btn-danger btn-sm" title="删除池子">
+                        <button onclick="deletePoolGroup('${group.id}')" class="btn btn-danger btn-sm" title="Delete pool">
                             🗑️
                         </button>
                     </div>
@@ -203,15 +203,15 @@ function renderPoolGroups() {
 }
 
 /**
- * 刷新池子数据
+ * Refresh pool data
  */
 async function refreshPoolGroups() {
     await loadPoolGroups();
-    alert('✅ 密钥池数据已刷新！');
+    alert('✅ Key pool data refreshed.');
 }
 
 /**
- * 显示创建池子模态框
+ * Show the Create pool dialog
  */
 function showCreatePoolModal() {
     document.getElementById('newPoolId').value = '';
@@ -222,7 +222,7 @@ function showCreatePoolModal() {
 }
 
 /**
- * 创建新池子
+ * Create a new pool
  */
 async function createPool() {
     const id = document.getElementById('newPoolId').value.trim();
@@ -230,24 +230,24 @@ async function createPool() {
     const priority = parseInt(document.getElementById('newPoolPriority').value);
     const description = document.getElementById('newPoolDescription').value.trim();
 
-    // 验证输入
+    // Validate input
     if (!id) {
-        alert('❌ 请输入池子ID');
+        alert('❌ Enter a pool ID');
         return;
     }
 
     if (!/^[a-z0-9-]+$/i.test(id)) {
-        alert('❌ 池子ID只能包含英文字母、数字和短横线');
+        alert('❌ Pool IDs may contain only ASCII letters, digits, and hyphens.');
         return;
     }
 
     if (!name) {
-        alert('❌ 请输入池子名称');
+        alert('❌ Enter a pool name');
         return;
     }
 
     if (!priority || priority < 1 || priority > 100) {
-        alert('❌ 优先级必须在 1-100 之间');
+        alert('❌ Priority must be between 1 and 100.');
         return;
     }
 
@@ -263,25 +263,25 @@ async function createPool() {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || `创建失败: ${response.status}`);
+            throw new Error(error.message || `Failed to create pool: ${response.status}`);
         }
 
-        alert('✅ 密钥池创建成功！');
+        alert('✅ Key pool created.');
         closeModal('createPoolModal');
         await loadPoolGroups();
     } catch (err) {
-        alert('❌ 创建失败: ' + err.message);
+        alert('❌ Failed to create pool: ' + err.message);
     }
 }
 
 /**
- * 删除池子
+ * Delete pool
  */
 async function deletePoolGroup(groupId) {
     const group = poolGroupsData.find(g => g.id === groupId);
     if (!group) return;
 
-    if (!confirm(`确认删除密钥池 "${group.name}"？\n\n该池子的 ${group.total} 个密钥将移动到 default 池。`)) {
+    if (!confirm(`Delete key pool "${group.name}"?\n\nIts ${group.total} keys will be moved to the default pool.`)) {
         return;
     }
 
@@ -295,30 +295,30 @@ async function deletePoolGroup(groupId) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || `删除失败: ${response.status}`);
+            throw new Error(error.message || `Failed to delete: ${response.status}`);
         }
 
         const result = await response.json();
-        alert(`✅ 密钥池已删除！\n${result.data.affected_keys} 个密钥已移动到 default 池。`);
+        alert(`✅ Key pool deleted.\nMoved ${result.data.affected_keys} keys to the default pool.`);
         await loadPoolGroups();
-        await refreshData();  // 刷新密钥列表
+        await refreshData();  // Refresh the key list
     } catch (err) {
-        alert('❌ 删除失败: ' + err.message);
+        alert('❌ Failed to delete: ' + err.message);
     }
 }
 
 /**
- * 更新筛选下拉框的池子选项
+ * Update pool options in the filter
  */
 function updatePoolFilterDropdown() {
     const select = document.getElementById('poolGroupFilter');
     if (!select) return;
 
-    // 保存当前选中值
+    // Save the current selection
     const currentValue = select.value;
 
-    // 清空并重新填充
-    select.innerHTML = '<option value="all">全部池子</option>';
+    // Clear and repopulate
+    select.innerHTML = '<option value="all">All pools</option>';
 
     poolGroupsData.forEach(group => {
         const option = document.createElement('option');
@@ -327,92 +327,92 @@ function updatePoolFilterDropdown() {
         select.appendChild(option);
     });
 
-    // 恢复选中值
+    // Restore the selection
     select.value = currentValue;
 }
 
 /**
- * 更新所有池子选择下拉框
+ * Update all pool selectors
  */
 function updatePoolGroupSelects() {
-    // 更新添加密钥模态框的下拉框
+    // Update the pool selector in the Add key dialog
     const newKeyPoolSelect = document.getElementById('newKeyPoolGroup');
     if (newKeyPoolSelect) {
         const currentValue = newKeyPoolSelect.value;
-        newKeyPoolSelect.innerHTML = '<option value="">默认池 (default)</option>';
+        newKeyPoolSelect.innerHTML = '<option value="">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             newKeyPoolSelect.appendChild(option);
         });
 
         newKeyPoolSelect.value = currentValue;
     }
 
-    // 更新修改池子模态框的下拉框
+    // Update the destination selector in the Move pool dialog
     const changePoolSelect = document.getElementById('changePoolSelect');
     if (changePoolSelect) {
         const currentValue = changePoolSelect.value;
-        changePoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+        changePoolSelect.innerHTML = '<option value="default">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             changePoolSelect.appendChild(option);
         });
 
         changePoolSelect.value = currentValue;
     }
 
-    // 🆕 更新批量导入模态框的下拉框
+    // 🆕 Update the pool selector in the bulk import dialog
     const batchImportPoolSelect = document.getElementById('batchImportPoolGroup');
     if (batchImportPoolSelect) {
         const currentValue = batchImportPoolSelect.value;
-        batchImportPoolSelect.innerHTML = '<option value="">默认池 (default)</option>';
+        batchImportPoolSelect.innerHTML = '<option value="">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             batchImportPoolSelect.appendChild(option);
         });
 
         batchImportPoolSelect.value = currentValue;
     }
 
-    // 🆕 更新编辑密钥模态框的下拉框
+    // 🆕 Update the pool selector in the Edit key dialog
     const editKeyPoolSelect = document.getElementById('editKeyPoolGroup');
     if (editKeyPoolSelect) {
         const currentValue = editKeyPoolSelect.value;
-        editKeyPoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+        editKeyPoolSelect.innerHTML = '<option value="default">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             editKeyPoolSelect.appendChild(option);
         });
 
         editKeyPoolSelect.value = currentValue;
     }
 
-    // 🆕 更新导出密钥模态框的下拉框（多选）
+    // 🆕 Update the pool multiselect in the Export keys dialog
     const exportPoolSelect = document.getElementById('exportPoolGroup');
     if (exportPoolSelect) {
         const selectedValues = Array.from(exportPoolSelect.selectedOptions || []).map(option => option.value);
-        exportPoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+        exportPoolSelect.innerHTML = '<option value="default">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             exportPoolSelect.appendChild(option);
         });
 
-        // 恢复多选框的选中状态
+        // Restore selected options
         selectedValues.forEach(value => {
             const option = exportPoolSelect.querySelector(`option[value="${value}"]`);
             if (option) {
@@ -421,16 +421,16 @@ function updatePoolGroupSelects() {
         });
     }
 
-    // 🆕 更新批量测试模态框的下拉框
+    // 🆕 Update the pool selector in the bulk test dialog
     const testPoolSelect = document.getElementById('testPoolGroup');
     if (testPoolSelect) {
         const currentValue = testPoolSelect.value;
-        testPoolSelect.innerHTML = '<option value="default">默认池 (default)</option>';
+        testPoolSelect.innerHTML = '<option value="default">Default pool (default)</option>';
 
         poolGroupsData.forEach(group => {
             const option = document.createElement('option');
             option.value = group.id;
-            option.textContent = `${group.name} (优先级 ${group.priority})`;
+            option.textContent = `${group.name} (Priority ${group.priority})`;
             testPoolSelect.appendChild(option);
         });
 
@@ -439,23 +439,23 @@ function updatePoolGroupSelects() {
 }
 
 /**
- * 显示修改密钥池模态框
+ * Show the Move pool dialog
  */
 function showChangePoolModal(keyId) {
     currentChangePoolKeyId = keyId;
     document.getElementById('changePoolKeyId').textContent = keyId;
-    updatePoolGroupSelects();  // 确保下拉框是最新的
+    updatePoolGroupSelects();  // Keep the selector up to date
     showModal('changePoolModal');
 }
 
 /**
- * 修改密钥所属池子
+ * Move a key to another pool
  */
 async function changeKeyPool() {
     const poolGroup = document.getElementById('changePoolSelect').value;
 
     if (!currentChangePoolKeyId) {
-        alert('❌ 密钥ID丢失');
+        alert('❌ Missing key ID');
         return;
     }
 
@@ -471,21 +471,21 @@ async function changeKeyPool() {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || `修改失败: ${response.status}`);
+            throw new Error(error.message || `Failed to move key: ${response.status}`);
         }
 
-        alert('✅ 密钥池已修改！');
+        alert('✅ Key moved to the selected pool.');
         closeModal('changePoolModal');
         currentChangePoolKeyId = null;
         await refreshData();
         await loadPoolGroups();
     } catch (err) {
-        alert('❌ 修改失败: ' + err.message);
+        alert('❌ Failed to move key: ' + err.message);
     }
 }
 
 /**
- * 修改 addKey 函数，支持池子选择
+ * Extend addKey to support pool selection
  */
 const originalAddKey = window.addKey;
 window.addKey = async function() {
@@ -494,12 +494,12 @@ window.addKey = async function() {
     const poolGroup = document.getElementById('newKeyPoolGroup').value || null;
 
     if (!key) {
-        alert('请输入密钥');
+        alert('Enter a key');
         return;
     }
 
     if (!key.startsWith('fk-')) {
-        alert('密钥格式错误，必须以 fk- 开头');
+        alert('Invalid key format. Keys must begin with fk-.');
         return;
     }
 
@@ -515,51 +515,51 @@ window.addKey = async function() {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.message || `添加失败: ${response.status}`);
+            throw new Error(error.message || `Failed to add key: ${response.status}`);
         }
 
-        alert('添加成功');
+        alert('Key added successfully');
         closeModal('addKeyModal');
         refreshData();
         loadPoolGroups();
     } catch (err) {
-        alert('添加失败: ' + err.message);
+        alert('Failed to add key: ' + err.message);
     }
 };
 
 /**
- * 修改 renderKeysTable，添加池子列显示
+ * Extend renderKeysTable to display the pool column
  */
 const originalRenderKeysTable = window.renderKeysTable;
 window.renderKeysTable = function(keys) {
     const tbody = document.getElementById('keysTableBody');
 
     if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="loading">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" class="loading">No data available</td></tr>';
         return;
     }
 
     tbody.innerHTML = keys.map(key => {
-        // 生成测试结果的详细显示
+        // Build detailed test result labels
         let testResultHtml = '';
         if (key.last_test_result === 'success') {
-            testResultHtml = '<span class="test-success">✅ 测试通过</span>';
+            testResultHtml = '<span class="test-success">✅ Test passed</span>';
         } else if (key.last_test_result === 'failed') {
             let statusCode = '';
-            let errorMsg = key.last_error || '未知错误';
+            let errorMsg = key.last_error || 'Unknown error';
             if (key.last_error && key.last_error.includes(':')) {
                 const parts = key.last_error.split(':');
                 statusCode = parts[0].trim();
                 errorMsg = parts.slice(1).join(':').trim();
             }
 
-            const statusText = statusCode ? getStatusMessage(parseInt(statusCode)) : '测试失败';
+            const statusText = statusCode ? getStatusMessage(parseInt(statusCode)) : 'Test failed';
             testResultHtml = `<span class="test-failed" title="${escapeHtml(errorMsg)}">❌ ${statusText}${statusCode ? ` (${statusCode})` : ''}</span>`;
         } else {
-            testResultHtml = '<span class="test-untested">⏸️ 未测试</span>';
+            testResultHtml = '<span class="test-untested">⏸️ Not tested</span>';
         }
 
-        // 计算成功率
+        // Calculate success rate
         const totalRequests = key.total_requests || key.usage_count || 0;
         const errorCount = key.error_count || 0;
         const successRequests = key.success_requests !== undefined
@@ -594,11 +594,11 @@ window.renderKeysTable = function(keys) {
             `;
         }
 
-        // 🎯 密钥池标签显示
+        // 🎯 Display key pool labels
         const poolGroup = key.poolGroup || 'default';
         const poolGroupName = poolGroupsData.find(g => g.id === poolGroup)?.name || poolGroup;
         const poolGroupHtml = `
-            <span class="pool-group-badge" title="所属密钥池">
+            <span class="pool-group-badge" title="Assigned key pool">
                 ${poolGroupName}
             </span>
             <button onclick="showChangePoolModal('${key.id}')" class="btn btn-info btn-sm" style="margin-top: 5px;">
@@ -636,7 +636,7 @@ window.renderKeysTable = function(keys) {
 };
 
 /**
- * 修改 filterChanged，支持池子筛选
+ * Extend filterChanged to support pool filtering
  */
 const originalFilterChanged = window.filterChanged;
 window.filterChanged = function() {
@@ -644,20 +644,20 @@ window.filterChanged = function() {
     const poolGroupFilter = document.getElementById('poolGroupFilter')?.value || 'all';
 
     currentStatus = statusFilter;
-    currentPoolGroup = poolGroupFilter;  // BaSui: 修复筛选功能 - 必须更新currentPoolGroup变量
+    currentPoolGroup = poolGroupFilter;  // BaSui: Fix filtering by updating currentPoolGroup
     currentPage = 1;
 
-    // 调用fetchKeys，它会使用currentPoolGroup参数进行筛选
+    // Call fetchKeys, which filters using currentPoolGroup
     fetchKeys();
 };
 
-// ===== 📥 导出密钥功能 =====
+// ===== 📥 Key export =====
 
 /**
- * 显示导出密钥模态框
+ * Show the Export keys dialog
  */
 async function showExportKeysModal() {
-    // BaSui: 先确保池子数据已加载，再更新选择器
+    // BaSui: Load pool data before updating the selector
     if (!poolGroupsData || poolGroupsData.length === 0) {
         await loadPoolGroups();
     }
@@ -666,7 +666,7 @@ async function showExportKeysModal() {
 }
 
 /**
- * 切换"全部池"选项
+ * Toggle the All pools option
  */
 function toggleExportAllPools() {
     const allPoolsChecked = document.getElementById('exportAllPools').checked;
@@ -675,7 +675,7 @@ function toggleExportAllPools() {
 }
 
 /**
- * 确认导出密钥
+ * Confirm key export
  */
 async function confirmExportKeys() {
     try {
@@ -688,7 +688,7 @@ async function confirmExportKeys() {
             const select = document.getElementById('exportPoolGroup');
             poolGroups = Array.from(select.selectedOptions).map(opt => opt.value);
             if (poolGroups.length === 0) {
-                alert('请至少选择一个池子！');
+                alert('Select at least one pool.');
                 return;
             }
         }
@@ -726,20 +726,20 @@ async function confirmExportKeys() {
         window.URL.revokeObjectURL(downloadUrl);
 
         closeModal('exportKeysModal');
-        alert(`✅ 导出成功！文件名: ${filename}`);
+        alert(`✅ Export complete. Filename: ${filename}`);
     } catch (error) {
-        console.error('❌ 导出失败:', error);
-        alert(`导出失败: ${error.message}`);
+        console.error('❌ Export failed:', error);
+        alert(`Export failed: ${error.message}`);
     }
 }
 
-// ===== 🧪 批量测试功能 =====
+// ===== 🧪 Bulk testing =====
 
 /**
- * 显示批量测试模态框
+ * Show the bulk test dialog
  */
 async function showBatchTestModal() {
-    // BaSui: 先确保池子数据已加载，再更新选择器
+    // BaSui: Load pool data before updating the selector
     if (!poolGroupsData || poolGroupsData.length === 0) {
         await loadPoolGroups();
     }
@@ -749,7 +749,7 @@ async function showBatchTestModal() {
 }
 
 /**
- * 切换测试池子选项
+ * Toggle the pool selection for testing
  */
 function toggleTestPoolOptions() {
     const testSpecific = document.querySelector('input[name="testPool"][value="specific"]').checked;
@@ -758,7 +758,7 @@ function toggleTestPoolOptions() {
 }
 
 /**
- * 确认批量测试
+ * Confirm bulk testing
  */
 async function confirmBatchTest() {
     try {
@@ -772,7 +772,7 @@ async function confirmBatchTest() {
         }
 
         const resultDiv = document.getElementById('testResult');
-        resultDiv.innerHTML = '<div class="loading">🧪 正在测试中，请稍候...</div>';
+        resultDiv.innerHTML = '<div class="loading">🧪 Testing, please wait...</div>';
 
         let url = `/admin/keys/test-all?concurrency=${concurrency}`;
         if (poolGroup) {
@@ -793,14 +793,14 @@ async function confirmBatchTest() {
         const data = result.data;
 
         let message = '<div class="result-summary success">';
-        message += '<h3>🎉 批量测试完成</h3>';
-        message += `<p>📊 总密钥数: ${data.total} 个</p>`;
-        message += `<p>🔍 已测试: ${data.tested} 个</p>`;
-        message += `<p>✅ 测试通过: ${data.success} 个</p>`;
-        message += `<p>❌ 测试失败: ${data.failed} 个</p>`;
-        message += `<p>🚫 自动封禁: ${data.banned} 个</p>`;
+        message += '<h3>🎉 Bulk test complete</h3>';
+        message += `<p>📊 Total keys: ${data.total}</p>`;
+        message += `<p>🔍 Tested: ${data.tested}</p>`;
+        message += `<p>✅ Passed: ${data.success}</p>`;
+        message += `<p>❌ Failed: ${data.failed}</p>`;
+        message += `<p>🚫 Automatically blocked by proxy: ${data.banned}</p>`;
         if (data.banned > 0) {
-            message += '<p class="hint">💡 提示: 已自动封禁余额不足的密钥</p>';
+            message += '<p class="hint">💡 Keys with insufficient balance were automatically blocked by the proxy.</p>';
         }
         message += '</div>';
 
@@ -813,13 +813,13 @@ async function confirmBatchTest() {
             }, 2000);
         }
     } catch (error) {
-        console.error('❌ 批量测试失败:', error);
+        console.error('❌ Bulk test failed:', error);
         const resultDiv = document.getElementById('testResult');
-        resultDiv.innerHTML = `<div class="result-summary error">❌ 测试失败: ${error.message}</div>`;
+        resultDiv.innerHTML = `<div class="result-summary error">❌ Test failed: ${error.message}</div>`;
     }
 }
 
-// 监听单选按钮变化
+// Listen for radio button changes
 document.addEventListener('DOMContentLoaded', () => {
     const testPoolRadios = document.querySelectorAll('input[name="testPool"]');
     testPoolRadios.forEach(radio => {
@@ -827,9 +827,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// 页面加载时初始化池子数据
+// Initialize pool data on page load
 window.addEventListener('DOMContentLoaded', () => {
-    // 等待主程序的 autoAuthenticate 完成后加载池子
+    // Load pools after the main autoAuthenticate handler completes
     setTimeout(() => {
         if (adminKey) {
             loadPoolGroups();
@@ -837,4 +837,4 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 1000);
 });
 
-console.log('✅ 多级密钥池管理功能已加载 - BaSui');
+console.log('✅ Multi-tier key pool management loaded - BaSui');

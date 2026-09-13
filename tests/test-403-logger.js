@@ -1,13 +1,13 @@
 /**
- * BaSui：测试 403 错误日志记录功能
- * 
- * 使用方法：
+ * BaSui: test HTTP 403 error logging
+ *
+ * Usage:
  * node tests/test-403-logger.js
  */
 
 import { log403Error } from '../utils/error-403-logger.js';
 
-// 模拟一个 OpenAI 格式的请求
+// Mock an OpenAI-format request
 const mockOpenAIRequest = {
   model: "claude-sonnet-4-5-20250929",
   stream: true,
@@ -33,7 +33,7 @@ const mockOpenAIRequest = {
   max_tokens: 2000
 };
 
-// 模拟一个 Anthropic 格式的请求
+// Mock an Anthropic-format request
 const mockAnthropicRequest = {
   model: "claude-sonnet-4-5-20250929",
   stream: false,
@@ -61,7 +61,7 @@ const mockAnthropicRequest = {
   }
 };
 
-// 模拟请求头
+// Mock request headers
 const mockHeaders = {
   "authorization": "Bearer FAKE-KEY-FOR-TESTING-ONLY",
   "content-type": "application/json",
@@ -71,15 +71,15 @@ const mockHeaders = {
   "user-agent": "droid2api-test"
 };
 
-console.log('开始测试 403 错误日志记录功能...\n');
+console.log('Start testing HTTP 403 error logging...\n');
 
-// 测试 1: OpenAI 格式请求的 403 错误
-console.log('【测试 1】记录 OpenAI 格式请求的 403 错误');
+// Test 1: HTTP 403 error for an OpenAI-format request
+console.log('[Test 1] Log an HTTP 403 error for an OpenAI-format request');
 log403Error({
   requestId: 'req-test-001',
   keyId: 'TEST-KEY-ID-001',
   originalRequest: mockOpenAIRequest,
-  transformedRequest: mockAnthropicRequest, // 转换后的格式
+  transformedRequest: mockAnthropicRequest, // Transformed format
   headers: mockHeaders,
   endpoint: 'https://api.factory.ai/v1/messages',
   errorDetails: JSON.stringify({
@@ -90,10 +90,10 @@ log403Error({
   }, null, 2)
 });
 
-console.log('✓ 测试 1 完成\n');
+console.log('✓ Test 1 complete\n');
 
-// 测试 2: Anthropic 格式请求的 403 错误
-console.log('【测试 2】记录 Anthropic 格式请求的 403 错误');
+// Test 2: HTTP 403 error for an Anthropic-format request
+console.log('[Test 2] Log an HTTP 403 error for an Anthropic-format request');
 log403Error({
   requestId: 'req-test-002',
   keyId: 'TEST-KEY-ID-002',
@@ -109,10 +109,10 @@ log403Error({
   }, null, 2)
 });
 
-console.log('✓ 测试 2 完成\n');
+console.log('✓ Test 2 complete\n');
 
-// 测试 3: 复杂消息历史的 403 错误
-console.log('【测试 3】记录复杂消息历史的 403 错误');
+// Test 3: HTTP 403 error with a complex message history
+console.log('[Test 3] Log an HTTP 403 error with a complex message history');
 const complexRequest = {
   model: "claude-sonnet-4-5-20250929",
   stream: true,
@@ -152,17 +152,17 @@ log403Error({
   errorDetails: 'HTTP 403 Forbidden: Model access denied for your organization'
 });
 
-console.log('✓ 测试 3 完成\n');
+console.log('✓ Test 3 complete\n');
 
 console.log('='.repeat(80));
-console.log('所有测试完成！');
+console.log('All tests complete!');
 console.log('='.repeat(80));
-console.log('\n请查看日志文件：logs/403_errors.log\n');
-console.log('日志文件包含：');
-console.log('  - 请求ID、密钥ID、端点等基本信息');
-console.log('  - 系统提示词（从 system 字段或 messages 中提取）');
-console.log('  - 用户提示词（所有 user role 的消息）');
-console.log('  - 完整消息历史（便于调试）');
-console.log('  - 转换后的请求（如果有格式转换）');
-console.log('  - 请求头信息（密钥已脱敏）');
-console.log('  - 错误详情\n');
+console.log('\nCheck the log file: logs/403_errors.log\n');
+console.log('The log file contains:');
+console.log('  - Basic information such as request ID, key ID, and endpoint');
+console.log('  - System prompt (extracted from the system field or messages)');
+console.log('  - User prompts (all messages with the user role)');
+console.log('  - Full message history for debugging');
+console.log('  - Transformed request, if the format was converted');
+console.log('  - Request headers with keys redacted');
+console.log('  - Error details\n');

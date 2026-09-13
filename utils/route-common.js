@@ -1,6 +1,6 @@
 /**
- * 路由公共函数
- * 提取routes.js中的重复代码
+ * Shared route helpers
+ * Common logic extracted from routes.js
  */
 
 import { logError, logDebug, logInfo } from '../logger.js';
@@ -8,9 +8,9 @@ import { log403Error } from './error-403-logger.js';
 import keyPoolManager from '../auth.js';
 
 /**
- * 获取API密钥
- * @param {Request} req - 请求对象
- * @param {Response} res - 响应对象
+ * Get an API key.
+ * @param {Request} req - Request object
+ * @param {Response} res - Response object
  * @returns {Promise<{authHeader: string, currentKeyId: string}|null>}
  */
 export async function getApiKey(req, res) {
@@ -24,10 +24,10 @@ export async function getApiKey(req, res) {
       currentKeyId = keyResult.keyId;
     } catch (error) {
       logError('Failed to get API key from pool', error);
-      // 🔧 修复：添加headersSent检查
+      // 🔧 Fix: Check headersSent before sending a response.
       if (!res.headersSent) {
         res.status(500).json({
-          error: '密钥池错误',
+          error: 'Key pool error',
           message: error.message
         });
       }
@@ -39,11 +39,11 @@ export async function getApiKey(req, res) {
 }
 
 /**
- * 处理402错误（余额不足）
- * @param {Response} res - 响应对象
- * @param {string} currentKeyId - 当前密钥ID
- * @param {string} errorText - 错误文本
- * @returns {boolean} - 是否已处理
+ * Handle HTTP 402 (insufficient credits).
+ * @param {Response} res - Response object
+ * @param {string} currentKeyId - Current key ID
+ * @param {string} errorText - Error text
+ * @returns {boolean} - Whether the error was handled
  */
 export function handle402Error(res, currentKeyId, errorText) {
   if (currentKeyId) {
@@ -61,8 +61,8 @@ export function handle402Error(res, currentKeyId, errorText) {
 }
 
 /**
- * 处理403错误（禁止访问）
- * @param {Object} params - 参数对象
+ * Handle HTTP 403 (forbidden).
+ * @param {Object} params - Parameter object
  */
 export async function handle403Error({
   res, 
@@ -75,7 +75,7 @@ export async function handle403Error({
 }) {
   logError(`403 Forbidden error with key: ${currentKeyId}`, new Error(errorText));
   
-  // 记录403错误日志
+  // Log the HTTP 403 error.
   await log403Error({
     keyId: currentKeyId,
     endpoint: req.path,
@@ -93,7 +93,7 @@ export async function handle403Error({
   if (!res.headersSent) {
     res.status(403).json({
       error: 'Forbidden',
-      message: '请求被拒绝，可能触发了内容策略',
+      message: 'Request denied, possibly due to a content policy restriction',
       details: errorText
     });
   }
@@ -101,11 +101,11 @@ export async function handle403Error({
 }
 
 /**
- * 处理其他HTTP错误
- * @param {Response} res - 响应对象
- * @param {Response} response - 上游响应
- * @param {string} errorText - 错误文本
- * @returns {boolean} - 是否已处理
+ * Handle other HTTP errors.
+ * @param {Response} res - Response object
+ * @param {Response} response - Upstream response
+ * @param {string} errorText - Error text
+ * @returns {boolean} - Whether the error was handled
  */
 export function handleHttpError(res, response, errorText) {
   if (!res.headersSent) {
@@ -119,7 +119,7 @@ export function handleHttpError(res, response, errorText) {
 }
 
 /**
- * 处理流式响应的Token统计
+ * Initialize token statistics for a streaming response.
  */
 export function createTokenStats() {
   return {
@@ -132,7 +132,7 @@ export function createTokenStats() {
 }
 
 /**
- * 记录调试日志
+ * Write debug logs.
  */
 export function logClientHeaders(clientHeaders) {
   logDebug('Client headers received', {
@@ -144,11 +144,11 @@ export function logClientHeaders(clientHeaders) {
 }
 
 /**
- * 验证模型配置
- * @param {Request} req - 请求对象
- * @param {Response} res - 响应对象
- * @param {Object} models - 模型配置
- * @param {Object} endpoints - 端点配置
+ * Validate the model configuration.
+ * @param {Request} req - Request object
+ * @param {Response} res - Response object
+ * @param {Object} models - Model configuration
+ * @param {Object} endpoints - Endpoint configuration
  * @returns {{model: Object, endpoint: Object, modelId: string}|null}
  */
 export function validateModel(req, res, models, endpoints) {
@@ -181,7 +181,7 @@ export function validateModel(req, res, models, endpoints) {
 }
 
 /**
- * 设置流式响应头
+ * Set streaming response headers.
  */
 export function setStreamingHeaders(res) {
   res.setHeader('Content-Type', 'text/event-stream');

@@ -5,7 +5,7 @@ export class OpenAIResponseTransformer {
     this.model = model;
     this.requestId = requestId || `chatcmpl-${Date.now()}`;
     this.created = Math.floor(Date.now() / 1000);
-    // BaSui：跟踪工具调用状态
+    // BaSui: Track tool call state
     this.currentToolCalls = [];
     this.toolCallIndex = 0;
   }
@@ -45,9 +45,9 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
-    // BaSui：处理工具调用开始事件
+    // BaSui: Handle tool call start events
     if (eventType === 'response?.tool_calls?.start') {
-      // 🔧 修复：使用原子操作防止竞态条件
+      // 🔧 Fix: use atomic operations to prevent race conditions
       const currentIndex = this.toolCallIndex;
       this.toolCallIndex = currentIndex + 1;
       const toolCall = {
@@ -63,7 +63,7 @@ export class OpenAIResponseTransformer {
       return this.createToolCallChunk(toolCall, true);
     }
 
-    // BaSui：处理工具调用参数增量
+    // BaSui: Handle tool call argument deltas
     if (eventType === 'response?.tool_calls?.delta' || eventType === 'response?.function_call?.delta') {
       const argumentsDelta = eventData.delta || eventData.arguments || '';
       const index = eventData.index !== undefined ? eventData.index : this.toolCallIndex - 1;
@@ -75,7 +75,7 @@ export class OpenAIResponseTransformer {
       return null;
     }
 
-    // BaSui：处理工具调用完成
+    // BaSui: Handle tool call completion
     if (eventType === 'response?.tool_calls?.done' || eventType === 'response?.function_call?.done') {
       return null;
     }
@@ -123,7 +123,7 @@ export class OpenAIResponseTransformer {
     return `data: ${JSON.stringify(chunk)}\n\n`;
   }
 
-  // BaSui：创建工具调用的OpenAI格式chunk
+  // BaSui: Create an OpenAI-format tool call chunk
   createToolCallChunk(toolCall, isStart = false, argumentsDelta = '') {
     const chunk = {
       id: this.requestId,
@@ -168,23 +168,23 @@ export class OpenAIResponseTransformer {
   async *transformStream(sourceStream) {
     let buffer = '';
     let currentEvent = null;
-    // BaSui：添加buffer大小保护，防止内存溢出（最大10KB未处理行）
+    // BaSui: Guard buffer size to prevent excessive memory use (maximum 10 KB of unprocessed lines)
     const MAX_BUFFER_SIZE = 10 * 1024;
 
     try {
       for await (const chunk of sourceStream) {
-        // BaSui：优化 - 避免超大chunk直接toString可能的性能问题
+        // BaSui: Optimization: avoid potential overhead from calling toString on very large chunks
         const chunkStr = chunk.toString();
         buffer += chunkStr;
 
-        // BaSui：内存保护 - 如果buffer过大说明没有换行符，截断并警告
+        // BaSui: Memory protection: an oversized buffer indicates missing newlines; truncate and warn
         if (buffer.length > MAX_BUFFER_SIZE) {
           logDebug(`⚠️ Buffer size exceeded ${MAX_BUFFER_SIZE} bytes, truncating`);
-          buffer = buffer.slice(-MAX_BUFFER_SIZE); // 保留最后10KB
+          buffer = buffer.slice(-MAX_BUFFER_SIZE); // Keep the last 10KB
         }
 
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留最后不完整的行
+        buffer = lines.pop() || ''; // Keep the final incomplete line
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -195,12 +195,12 @@ export class OpenAIResponseTransformer {
           if (parsed.type === 'event') {
             currentEvent = parsed.value;
           } else if (parsed.type === 'data') {
-            // BaSui：如果没有event行，使用默认值，避免丢失数据
+            // BaSui: Use a default when no event line is present to avoid dropping data
             const eventType = currentEvent || 'response.data';
             const transformed = this.transformEvent(eventType, parsed.value);
             if (transformed) {
               yield transformed;
-              // BaSui：优化 - yield后立即释放引用，帮助GC
+              // BaSui: Optimization: release references immediately after yield to help GC
             }
             currentEvent = null;
           }

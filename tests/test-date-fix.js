@@ -1,9 +1,9 @@
 /**
- * 测试日期修复
- * 验证本地时区 vs UTC 时区
+ * Test the date-handling fix
+ * Compare the local time zone with UTC
  */
 
-// 测试修改后的 getTodayKey 函数（本地时区）
+// Test the updated getTodayKey function (local time zone)
 function getTodayKeyLocal() {
   const now = new Date();
   const year = now.getFullYear();
@@ -12,44 +12,44 @@ function getTodayKeyLocal() {
   return `${year}-${month}-${day}`;
 }
 
-// 测试修改前的 getTodayKey 函数（UTC时区）
+// Test the previous getTodayKey function (UTC)
 function getTodayKeyUTC() {
   return new Date().toISOString().split('T')[0];
 }
 
 console.log('='.repeat(80));
-console.log('📅 日期修复测试');
+console.log('📅 Date-handling fix test');
 console.log('='.repeat(80));
 console.log('');
 
-console.log('当前时间信息：');
-console.log('  Windows 本地时间:', new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
-console.log('  UTC 时间:', new Date().toISOString());
+console.log('Current time information:');
+console.log('  Windows local time:', new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+console.log('  UTC time:', new Date().toISOString());
 console.log('');
 
-console.log('日期 Key 对比：');
-console.log('  修改前（UTC时区）:', getTodayKeyUTC());
-console.log('  修改后（本地时区）:', getTodayKeyLocal());
+console.log('Date key comparison:');
+console.log('  Before the fix (UTC):', getTodayKeyUTC());
+console.log('  After the fix (local time zone):', getTodayKeyLocal());
 console.log('');
 
-console.log('时区差异：');
+console.log('Time-zone difference:');
 const utcDate = getTodayKeyUTC();
 const localDate = getTodayKeyLocal();
 if (utcDate !== localDate) {
-  console.log('  ⚠️  UTC 时区与本地时区日期不同！');
-  console.log('  这就是为什么"今日Token"没有自动清零的原因！');
+  console.log('  ⚠️  UTC and the local time zone have different dates!');
+  console.log('  This explains why "Tokens today" did not reset automatically!');
 } else {
-  console.log('  ✅ UTC 时区与本地时区日期相同！');
+  console.log('  ✅ UTC and the local time zone have the same date!');
 }
 console.log('');
 
-console.log('修复说明：');
-console.log('  1. 修改了 utils/daily-reset-scheduler.js 的 getTodayKey()');
-console.log('  2. 修改了 utils/request-stats.js 的 getTodayKey()');
-console.log('  3. 所有日期相关函数都使用本地时区');
-console.log('  4. 重启服务器后，调度器将正确识别日期切换！');
+console.log('Fix details:');
+console.log('  1. Updated getTodayKey() in utils/daily-reset-scheduler.js');
+console.log('  2. Updated getTodayKey() in utils/request-stats.js');
+console.log('  3. All date-related functions use the local time zone');
+console.log('  4. Restart the server so the scheduler detects date changes correctly!');
 console.log('');
 
 console.log('='.repeat(80));
-console.log('✅ 测试完成！请重启服务器以应用修复。');
+console.log('✅ Tests complete! Restart the server to apply the fix.');
 console.log('='.repeat(80));

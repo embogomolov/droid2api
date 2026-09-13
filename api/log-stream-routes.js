@@ -1,8 +1,8 @@
 /**
- * 实时日志流路由 - SSE (Server-Sent Events)
+ * Live log streaming routes - SSE (Server-Sent Events)
  *
  * @author BaSui
- * @description 提供实时日志推送API，支持日志筛选和历史查询
+ * @description Provide live log streaming with filtering and history queries
  */
 
 import { Router } from 'express';
@@ -11,30 +11,30 @@ import { generateUUID } from '../utils/uuid.js';
 
 const router = Router();
 
-// 🔧 SSE 连接管理（修复 BaSui：之前忘了定义这俩变量！）
+// 🔧 SSE Connection management (fix, BaSui: these two variables were previously missing!)
 const activeConnections = new Map(); // key: connectionId, value: { req, res, startTime }
-let connectionCounter = 0; // 连接计数器（用于统计）
+let connectionCounter = 0; // Connection counter (for statistics)
 
 /**
- * SSE 日志流端点
+ * SSE Log streaming endpoint
  * GET /admin/logs/stream
  *
- * 查询参数：
- * - level: 日志级别筛选（info/warn/error/debug，多个用逗号分隔）
- * - keyword: 关键词筛选（模糊匹配URL、消息内容）
+ * Query parameters:
+ * - level: Log level filter (info/warn/error/debug; comma-separated for multiple levels)
+ * - keyword: Keyword filter (substring matching against URLs and message text)
  */
 router.get('/logs/stream', (req, res) => {
-  // 🔒 设置SSE响应头
+  // 🔒 Set SSE response headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Nginx兼容
+  res.setHeader('X-Accel-Buffering', 'no'); // Nginx compatibility
 
-  // 📋 获取筛选参数
+  // 📋 Get filter parameters
   const levelFilter = req.query.level ? req.query.level.split(',') : null;
   const keywordFilter = req.query.keyword ? req.query.keyword.toLowerCase() : null;
 
-  // 🆔 生成连接 ID（修复 BaSui：给每个连接一个唯一标识）
+  // 🆔 Generate a connection ID (fix, BaSui: give each connection a unique identifier)
   const connectionId = generateUUID();
   connectionCounter++;
   activeConnections.set(connectionId, {
@@ -45,18 +45,18 @@ router.get('/logs/stream', (req, res) => {
     keywordFilter,
   });
 
-  console.log(`[SSE] 新客户端连接 - ID: ${connectionId}, IP: ${req.ip}, 筛选: level=${levelFilter}, keyword=${keywordFilter}, 当前连接数: ${activeConnections.size}`);
+  console.log(`[SSE] New client connected - ID: ${connectionId}, IP: ${req.ip}, filters: level=${levelFilter}, keyword=${keywordFilter}, active connections: ${activeConnections.size}`);
 
   /**
-   * 日志筛选函数
+   * Log filter function
    */
   function shouldSendLog(logEntry) {
-    // 级别筛选
+    // Level filter
     if (levelFilter && !levelFilter.includes(logEntry.level)) {
       return false;
     }
 
-    // 关键词筛选
+    // Keyword filter
     if (keywordFilter) {
       const searchableText = JSON.stringify(logEntry).toLowerCase();
       if (!searchableText.includes(keywordFilter)) {
@@ -68,21 +68,21 @@ router.get('/logs/stream', (req, res) => {
   }
 
   /**
-   * 发送SSE事件
+   * Send an SSE event
    */
   function sendSSE(data) {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
   /**
-   * 发送心跳包（每30秒）
+   * Send a heartbeat every 30 seconds
    */
   const heartbeatInterval = setInterval(() => {
     res.write(': heartbeat\n\n');
   }, 30000);
 
   /**
-   * 日志监听器
+   * Log listener
    */
   const logListener = (logEntry) => {
     if (shouldSendLog(logEntry)) {
@@ -90,10 +90,10 @@ router.get('/logs/stream', (req, res) => {
     }
   };
 
-  // 🎯 注册日志监听器
+  // 🎯 Register the log listener
   logEmitter.on('log', logListener);
 
-  // 📦 发送历史日志（最近100条）
+  // 📦 Send historical logs (latest 100 entries)
   const historyLogs = getLogBuffer(100).filter(shouldSendLog);
   if (historyLogs.length > 0) {
     sendSSE({
@@ -103,11 +103,11 @@ router.get('/logs/stream', (req, res) => {
     });
   }
 
-  // 🔌 客户端断开连接时清理
+  // 🔌 Clean up when the client disconnects
   
-  // 🔌 客户端断开连接时清理
+  // 🔌 Clean up when the client disconnects
   const cleanup = () => {
-    console.log(`[SSE] 客户端断开连接 - ID: ${connectionId}, 剩余连接数: ${activeConnections.size - 1}`);
+    console.log(`[SSE] Client disconnected - ID: ${connectionId}, remaining connections: ${activeConnections.size - 1}`);
     clearInterval(heartbeatInterval);
     logEmitter.removeListener('log', logListener);
     activeConnections.delete(connectionId);
@@ -121,7 +121,7 @@ router.get('/logs/stream', (req, res) => {
 });
 
 /**
- * 获取历史日志
+ * Get historical logs
  * GET /admin/logs/history?limit=100&level=error&keyword=test
  */
 router.get('/logs/history', (req, res) => {
@@ -130,17 +130,17 @@ router.get('/logs/history', (req, res) => {
     const levelFilter = req.query.level ? req.query.level.split(',') : null;
     const keywordFilter = req.query.keyword ? req.query.keyword.toLowerCase() : null;
 
-    let logs = getLogBuffer(Math.min(limit, 500)); // 最多返回500条
+    let logs = getLogBuffer(Math.min(limit, 500)); // Return at most 500 entries
 
-    // 应用筛选
+    // Apply filters
     if (levelFilter || keywordFilter) {
       logs = logs.filter((log) => {
-        // 级别筛选
+        // Level filter
         if (levelFilter && !levelFilter.includes(log.level)) {
           return false;
         }
 
-        // 关键词筛选
+        // Keyword filter
         if (keywordFilter) {
           const searchableText = JSON.stringify(log).toLowerCase();
           if (!searchableText.includes(keywordFilter)) {
@@ -160,14 +160,14 @@ router.get('/logs/history', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: '获取历史日志失败',
+      message: 'Failed to get historical logs',
       error: error.message,
     });
   }
 });
 
 /**
- * 清空日志缓冲区
+ * Clear the log buffer
  * DELETE /admin/logs/clear
  */
 router.delete('/logs/clear', (req, res) => {
@@ -175,19 +175,19 @@ router.delete('/logs/clear', (req, res) => {
     clearLogBuffer();
     res.json({
       success: true,
-      message: '日志已清空',
+      message: 'Logs cleared',
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: '清空日志失败',
+      message: 'Failed to clear logs',
       error: error.message,
     });
   }
 });
 
 /**
- * 获取日志统计信息
+ * Get log statistics
  * GET /admin/logs/stats
  */
 router.get('/logs/stats', (req, res) => {
@@ -217,7 +217,7 @@ router.get('/logs/stats', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: '获取日志统计失败',
+      message: 'Failed to get log statistics',
       error: error.message,
     });
   }
@@ -225,4 +225,4 @@ router.get('/logs/stats', (req, res) => {
 
 export default router;
 
-console.log('✅ 实时日志流路由已加载 - BaSui');
+console.log('✅ Live log streaming routes loaded - BaSui');

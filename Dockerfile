@@ -1,71 +1,71 @@
 # 🐳 droid2api - Dockerfile
-# 版本：v1.4.0+
-# Node.js 版本：24 (Alpine Linux)
-# 镜像大小：~150MB（优化后）
+# Version: v1.4.0+
+# Node.js version: 24 (Alpine Linux)
+# Image size: ~150MB (after optimization)
 
-# ===== 构建策略说明 =====
+# ===== Build strategy =====
 #
-# 单阶段构建（当前方案）：
-#   - 优点：简单直接，适合快速开发和测试
-#   - 缺点：镜像略大（包含 npm 缓存）
-#   - 镜像大小：~200MB
+# Single-stage build (current approach):
+#   - Advantages: straightforward; suitable for rapid development and testing
+#   - Limitations: somewhat larger image (includes npm cache)
+#   - Image size: ~200MB
 #
-# 多阶段构建（生产优化）：
-#   - 优点：镜像更小（~150MB），构建更快（利用缓存）
-#   - 缺点：稍微复杂
-#   - 使用方式：参考 DOCKER_DEPLOY.md 中的「镜像优化」章节
+# Multi-stage build (production optimization):
+#   - Advantages: smaller image (~150MB), faster builds through caching
+#   - Limitations: slightly more complex
+#   - See the "Image optimization" section in DOCKER_DEPLOY.md
 
-# ===== 阶段 1：基础镜像 =====
+# ===== Stage 1: base image =====
 FROM node:24-alpine
 
-# 设置维护者信息
+# Set maintainer metadata
 LABEL maintainer="droid2api"
 LABEL version="1.4.0"
 LABEL description="OpenAI-compatible API proxy with key pool management"
 
-# 设置工作目录
+# Set the working directory
 WORKDIR /app
 
-# ===== 阶段 2：安装依赖 =====
-# 复制 package.json 和 package-lock.json
+# ===== Stage 2: install dependencies =====
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# 安装项目依赖
-# 使用 npm ci 确保依赖版本一致（比 npm install 更快更可靠）
-# --only=production 只安装生产依赖，减小镜像大小
+# Install project dependencies
+# npm ci ensures consistent dependency versions (faster and more reliable than npm install)
+# --only=production installs production dependencies only, reducing image size
 RUN npm ci --only=production && \
     npm cache clean --force
 
-# ===== 阶段 3：复制项目文件 =====
-# 复制所有项目文件（.dockerignore 会排除不需要的文件）
+# ===== Stage 3: copy project files =====
+# Copy all project files (.dockerignore excludes unnecessary files)
 COPY . .
 
-# 创建必要的目录
+# Create required directories
 RUN mkdir -p /app/data /app/logs
 
-# ===== 阶段 4：配置运行环境 =====
-# 暴露端口（默认3000，可通过环境变量 PORT 覆盖）
+# ===== Stage 4: runtime configuration =====
+# Expose the port (default: 3000; configurable through PORT)
 EXPOSE 3000
 
-# 设置默认环境变量
+# Set default environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# ===== 阶段 5：健康检查 =====
-# Docker 内置健康检查（可选，docker-compose 中也有配置）
+# ===== Stage 5: health check =====
+# Docker health check (optional; also configured in docker-compose)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:${PORT}/ || exit 1
 
-# ===== 阶段 6：启动应用 =====
-# 使用 node 直接启动（比 npm start 更快，减少一层进程）
+# ===== Stage 6: start the application =====
+# Run node directly (faster than npm start, with one fewer process)
 CMD ["node", "server.js"]
 
-# ===== 🎯 使用说明 =====
+# ===== 🎯 Usage =====
 #
-# 构建镜像：
+# Build the image:
 #   docker build -t droid2api:latest .
 #
-# 运行容器：
+# Run the container:
 #   docker run -d \
 #     --name droid2api \
 #     -p 3000:3000 \
@@ -74,38 +74,38 @@ CMD ["node", "server.js"]
 #     -v $(pwd)/data:/app/data \
 #     droid2api:latest
 #
-# 查看日志：
+# View logs:
 #   docker logs -f droid2api
 #
-# 进入容器：
+# Open a shell in the container:
 #   docker exec -it droid2api sh
 #
-# ===== 📊 镜像大小优化建议 =====
+# ===== 📊 Image size optimization =====
 #
-# 当前方案（单阶段）：~200MB
-#   - 适合：快速开发、测试环境
+# Current approach (single-stage): ~200MB
+#   - Suitable for rapid development and testing
 #
-# 多阶段构建：~150MB（减少 25%）
-#   - 适合：生产环境、CI/CD
-#   - 参考：DOCKER_DEPLOY.md 中的「镜像优化」章节
+# Multi-stage build: ~150MB (25% smaller)
+#   - Suitable for production and CI/CD
+#   - See the "Image optimization" section in DOCKER_DEPLOY.md
 #
-# ===== 🔒 安全建议 =====
+# ===== 🔒 Security recommendations =====
 #
-# 1. 使用非 root 用户运行（可选）：
+# 1. Run as a non-root user (optional):
 #    RUN addgroup -g 1001 -S nodejs && \
 #        adduser -S nodejs -u 1001 && \
 #        chown -R nodejs:nodejs /app
 #    USER nodejs
 #
-# 2. 定期更新基础镜像：
+# 2. Update the base image regularly:
 #    docker pull node:24-alpine
 #    docker build -t droid2api:latest .
 #
-# 3. 扫描安全漏洞：
+# 3. Scan for vulnerabilities:
 #    docker scan droid2api:latest
 #
-# ===== 📚 相关文档 =====
+# ===== 📚 Related documentation =====
 #
-# - DOCKER_DEPLOY.md - Docker 部署完整指南
-# - README.md - 项目文档
-# - .dockerignore - Docker 构建排除文件列表
+# - DOCKER_DEPLOY.md - Complete Docker deployment guide
+# - README.md - Project documentation
+# - .dockerignore - Files excluded from the Docker build context

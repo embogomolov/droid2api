@@ -1,23 +1,23 @@
 /**
- * Token 提取工具
- * BaSui: 专门用来从 Anthropic/OpenAI 响应中提取完整的 Token 统计
- * 支持：input_tokens, output_tokens, thinking_tokens, cache_creation_tokens, cache_read_tokens
- * 
- * 更新：集成了更准确的token计算和标准化功能
+ * Token usage extraction helpers
+ * BaSui: Extract complete token usage statistics from Anthropic/OpenAI responses.
+ * Supports: input_tokens, output_tokens, thinking_tokens, cache_creation_tokens, cache_read_tokens
+ *
+ * Update: Integrated more accurate token counting and normalization.
  */
 
 import { logDebug } from '../logger.js';
 import { normalizeTokenStats, estimateRequestTokens } from './token-counter.js';
 
 /**
- * 从 Anthropic 流式响应中提取完整 Token 统计
- * @param {Object} data - SSE 事件数据
- * @param {Object} tokenStats - Token 统计对象（会被修改）
+ * Extract complete token statistics from an Anthropic streaming response.
+ * @param {Object} data - SSE event data
+ * @param {Object} tokenStats - Token statistics object (modified in place)
  * @returns {void}
  */
 export function extractAnthropicTokens(data, tokenStats) {
   try {
-    // message_start 事件：包含输入 Token 和缓存统计
+    // The message_start event contains input token and cache statistics.
     if (data.type === 'message_start' && data.message?.usage) {
       const usage = data.message.usage;
       tokenStats.inputTokens = usage.input_tokens || 0;
@@ -27,13 +27,13 @@ export function extractAnthropicTokens(data, tokenStats) {
       logDebug(`✅ Anthropic message_start: input=${tokenStats.inputTokens}, cache_creation=${tokenStats.cacheCreationTokens}, cache_read=${tokenStats.cacheReadTokens}`);
     }
 
-    // message_delta 事件：包含输出 Token（累计值）和推理 Token
+    // The message_delta event contains cumulative output and reasoning token counts.
     if (data.type === 'message_delta' && data.usage) {
       const usage = data.usage;
-      // BaSui: output_tokens 是累计值，不是增量！直接赋值，不要用 +=
+      // BaSui: output_tokens is cumulative, not a delta. Assign it directly; do not use +=.
       tokenStats.outputTokens = usage.output_tokens || 0;
 
-      // BaSui: 🔥 重要！Extended Thinking 的 Token 统计（这个之前漏了！）
+      // BaSui: 🔥 Include Extended Thinking tokens, which were previously omitted.
       if (usage.thinking_output_tokens !== undefined) {
         tokenStats.thinkingTokens = usage.thinking_output_tokens || 0;
         logDebug(`💡 Thinking tokens detected: ${tokenStats.thinkingTokens}`);
@@ -47,9 +47,9 @@ export function extractAnthropicTokens(data, tokenStats) {
 }
 
 /**
- * 从 OpenAI 流式响应中提取完整 Token 统计
- * @param {Object} data - SSE 事件数据
- * @param {Object} tokenStats - Token 统计对象（会被修改）
+ * Extract complete token statistics from an OpenAI streaming response.
+ * @param {Object} data - SSE event data
+ * @param {Object} tokenStats - Token statistics object (modified in place)
  * @returns {void}
  */
 export function extractOpenAITokens(data, tokenStats) {
@@ -66,9 +66,9 @@ export function extractOpenAITokens(data, tokenStats) {
 }
 
 /**
- * 从 Common（通用）流式响应中提取 Token 统计
- * @param {Object} data - SSE 事件数据
- * @param {Object} tokenStats - Token 统计对象（会被修改）
+ * Extract token statistics from a Common-format streaming response.
+ * @param {Object} data - SSE event data
+ * @param {Object} tokenStats - Token statistics object (modified in place)
  * @returns {void}
  */
 export function extractCommonTokens(data, tokenStats) {
@@ -85,7 +85,7 @@ export function extractCommonTokens(data, tokenStats) {
 }
 
 /**
- * 创建空的 Token 统计对象
+ * Create an empty token statistics object.
  * @returns {Object}
  */
 export function createTokenStats() {
@@ -99,7 +99,7 @@ export function createTokenStats() {
 }
 
 /**
- * 计算总 Token 数
+ * Calculate the total token count.
  * @param {Object} tokenStats
  * @returns {number}
  */
@@ -108,7 +108,7 @@ export function getTotalTokens(tokenStats) {
     (tokenStats.inputTokens || 0) +
     (tokenStats.outputTokens || 0) +
     (tokenStats.thinkingTokens || 0)
-    // BaSui: 缓存 Token 不计入总数（Factory API 也不计费）
+    // BaSui: Exclude cached tokens from the total (the Factory API does not bill them either).
   );
 }
 

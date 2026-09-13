@@ -6,10 +6,10 @@ import keywordFilter from '../utils/keyword-filter.js';
 export function transformToCommon(openaiRequest) {
   logDebug('Transforming OpenAI request to Common format');
   
-  // 应用关键词过滤
+  // Apply keyword filtering
   const filteredRequest = keywordFilter.filterRequest(openaiRequest);
   
-  // 基本保持 OpenAI 格式，只在 messages 前面插入 system 消息
+  // Preserve the OpenAI format, inserting a system message at the start of messages
   const commonRequest = {
     ...filteredRequest
   };
@@ -17,14 +17,14 @@ export function transformToCommon(openaiRequest) {
   const systemPrompt = getSystemPrompt();
   
   if (systemPrompt) {
-    // 检查是否已有 system 消息
+    // Check for an existing system message
     const hasSystemMessage = commonRequest.messages?.some(m => m.role === 'system');
     
     if (hasSystemMessage) {
-      // 如果已有 system 消息，在第一个 system 消息前插入我们的 system prompt
+      // If a system message exists, prepend our system prompt to it
       commonRequest.messages = filteredRequest.messages.map((msg, index) => {
         if (msg.role === 'system' && index === filteredRequest.messages.findIndex(m => m.role === 'system')) {
-          // 找到第一个 system 消息，前置我们的 prompt
+          // Find the first system message and prepend our prompt
           return {
             role: 'system',
             content: systemPrompt + (typeof msg.content === 'string' ? msg.content : '')
@@ -33,7 +33,7 @@ export function transformToCommon(openaiRequest) {
         return msg;
       });
     } else {
-      // 如果没有 system 消息，在 messages 数组最前面插入
+      // If no system message exists, insert one at the start of the messages array
       commonRequest.messages = [
         {
           role: 'system',
@@ -49,14 +49,14 @@ export function transformToCommon(openaiRequest) {
 }
 
 export function getCommonHeaders(authHeader, clientHeaders = {}) {
-  // 使用公共函数生成基础headers
+  // Use the shared function to generate base headers
   const headers = {
     'accept': 'application/json',
     ...getBaseHeaders(authHeader, clientHeaders),
     'x-api-provider': 'baseten'
   };
 
-  // 应用Stainless SDK默认headers
+  // Apply default Stainless SDK headers
   applyStainlessDefaults(headers, clientHeaders);
 
   return headers;

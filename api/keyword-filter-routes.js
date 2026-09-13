@@ -44,7 +44,7 @@ function sanitizeLogging(logging = {}) {
 
 function normalizePattern(pattern) {
   if (!pattern || typeof pattern !== 'object') {
-    throw createValidationError('规则的 pattern 配置缺失或格式错误');
+    throw createValidationError('Rule pattern configuration is missing or malformed');
   }
 
   const rawType = pattern.type;
@@ -52,11 +52,11 @@ function normalizePattern(pattern) {
   const { value, caseSensitive } = pattern;
 
   if (!mappedType || !VALID_PATTERN_TYPES.has(mappedType)) {
-    throw createValidationError(`不支持的 pattern.type: ${rawType}`);
+    throw createValidationError(`Unsupported pattern.type: ${rawType}`);
   }
 
   if (typeof value !== 'string') {
-    throw createValidationError('pattern.value 必须是字符串');
+    throw createValidationError('pattern.value must be a string');
   }
 
   return {
@@ -68,19 +68,19 @@ function normalizePattern(pattern) {
 
 function normalizeAction(action) {
   if (!action || typeof action !== 'object') {
-    throw createValidationError('规则的 action 配置缺失或格式错误');
+    throw createValidationError('Rule action configuration is missing or malformed');
   }
 
   const rawType = action.type;
   const mappedType = ACTION_TYPE_MAP[rawType] || rawType;
 
   if (!mappedType || !VALID_ACTION_TYPES.has(mappedType)) {
-    throw createValidationError(`不支持的 action.type: ${rawType}`);
+    throw createValidationError(`Unsupported action.type: ${rawType}`);
   }
 
   if (mappedType === 'replace') {
     if (action.replacement !== undefined && typeof action.replacement !== 'string') {
-      throw createValidationError('replace.replacement 必须是字符串');
+      throw createValidationError('replace.replacement must be a string');
     }
     return {
       type: 'replace',
@@ -101,7 +101,7 @@ function normalizeAction(action) {
 
   if (mode === 'targets') {
     if (!Array.isArray(action.targets)) {
-      throw createValidationError('delete_keyword.targets 必须是字符串数组');
+      throw createValidationError('delete_keyword.targets must be an array of strings');
     }
 
     const targets = action.targets
@@ -110,7 +110,7 @@ function normalizeAction(action) {
       .filter(Boolean);
 
     if (targets.length === 0) {
-      throw createValidationError('delete_keyword.targets 至少需要一个非空字符串');
+      throw createValidationError('delete_keyword.targets requires at least one nonempty string');
     }
 
     normalized.targets = targets;
@@ -118,20 +118,20 @@ function normalizeAction(action) {
 
   if (mode === 'segment') {
     if (action.delimiter !== undefined && typeof action.delimiter !== 'string') {
-      throw createValidationError('delete_keyword.delimiter 必须是字符串');
+      throw createValidationError('delete_keyword.delimiter must be a string');
     }
 
     if (action.minLength !== undefined) {
       const minLength = Number(action.minLength);
       if (!Number.isFinite(minLength) || minLength < 0) {
-        throw createValidationError('delete_keyword.minLength 必须是 >= 0 的数字');
+        throw createValidationError('delete_keyword.minLength must be a number >= 0');
       }
       normalized.minLength = minLength;
     }
 
     if (action.preserveKeywords !== undefined) {
       if (!Array.isArray(action.preserveKeywords)) {
-        throw createValidationError('delete_keyword.preserveKeywords 必须是字符串数组');
+        throw createValidationError('delete_keyword.preserveKeywords must be an array of strings');
       }
       const keywords = action.preserveKeywords
         .filter(item => typeof item === 'string')
@@ -139,7 +139,7 @@ function normalizeAction(action) {
         .filter(Boolean);
 
       if (keywords.length > MAX_PRESERVE_KEYWORDS) {
-        throw createValidationError(`delete_keyword.preserveKeywords 最多支持 ${MAX_PRESERVE_KEYWORDS} 个关键词`);
+        throw createValidationError(`delete_keyword.preserveKeywords supports at most ${MAX_PRESERVE_KEYWORDS} keywords`);
       }
 
       normalized.preserveKeywords = keywords;
@@ -159,12 +159,12 @@ function generateRuleId() {
 
 function sanitizeRule(rule, { preserveId = false } = {}) {
   if (!rule || typeof rule !== 'object') {
-    throw createValidationError('规则必须是一个对象');
+    throw createValidationError('Rule must be an object');
   }
 
   const name = typeof rule.name === 'string' ? rule.name.trim() : '';
   if (!name) {
-    throw createValidationError('规则名称不能为空');
+    throw createValidationError('Rule name cannot be empty');
   }
 
   const sanitized = {
@@ -185,15 +185,15 @@ function sanitizeRule(rule, { preserveId = false } = {}) {
 
 function sanitizeConfig(config, { strict = false } = {}) {
   if (!config || typeof config !== 'object') {
-    throw createValidationError('配置必须是一个对象');
+    throw createValidationError('Configuration must be an object');
   }
 
   if (strict && typeof config.enabled !== 'boolean') {
-    throw createValidationError('enabled 字段必须是布尔值');
+    throw createValidationError('enabled field must be a boolean');
   }
 
   if (strict && !Array.isArray(config.rules)) {
-    throw createValidationError('rules 必须是数组');
+    throw createValidationError('rules must be an array');
   }
 
   const sanitizedRules = [];
@@ -205,7 +205,7 @@ function sanitizeConfig(config, { strict = false } = {}) {
         if (strict) {
           throw error;
         }
-        logWarn(`[KeywordFilter] 跳过非法规则 ${rule?.id || '<unknown>'}: ${error.message}`);
+        logWarn(`[KeywordFilter] Skipping invalid rule ${rule?.id || '<unknown>'}: ${error.message}`);
       }
     }
   }
@@ -231,7 +231,7 @@ function writeKeywordConfig(config, { reload = true } = {}) {
       keywordFilter.reloadConfig();
     }
   } catch (error) {
-    throw wrapFsError('写入关键词过滤配置失败', error);
+    throw wrapFsError('Failed to write keyword filter configuration', error);
   }
 }
 
@@ -244,14 +244,14 @@ function readKeywordConfig({ autoMigrate = true } = {}) {
   try {
     raw = fs.readFileSync(KEYWORD_CONFIG_PATH, 'utf-8');
   } catch (error) {
-    throw wrapFsError('读取关键词过滤配置失败', error);
+    throw wrapFsError('Failed to read keyword filter configuration', error);
   }
 
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw wrapFsError('解析关键词过滤配置失败', error);
+    throw wrapFsError('Failed to parse keyword filter configuration', error);
   }
 
   if (!autoMigrate) {
@@ -263,7 +263,7 @@ function readKeywordConfig({ autoMigrate = true } = {}) {
   const normalizedSanitized = JSON.stringify(sanitized);
 
   if (normalizedOriginal !== normalizedSanitized) {
-    logWarn('[KeywordFilter] 检测到配置异常，已自动修正并回写');
+    logWarn('[KeywordFilter] Invalid configuration detected; automatically corrected and saved');
     writeKeywordConfig(sanitized, { reload: false });
     keywordFilter.reloadConfig();
   }
@@ -271,13 +271,13 @@ function readKeywordConfig({ autoMigrate = true } = {}) {
   return sanitized;
 }
 
-// 获取关键词过滤配置
+// Get keyword filter configuration
 router.get('/config', wrapAsync(async (req, res) => {
   const config = readKeywordConfig();
   sendSuccessResponse(res, config);
 }, 'get keyword filter config'));
 
-// 更新关键词过滤配置
+// Update keyword filter configuration
 router.put('/config', wrapAsync(async (req, res) => {
   const sanitizedConfig = sanitizeConfig(req.body || {}, { strict: true });
   sanitizedConfig.lastUpdatedAt = new Date().toISOString();
@@ -290,13 +290,13 @@ router.put('/config', wrapAsync(async (req, res) => {
   });
 }, 'update keyword filter config'));
 
-// 获取所有规则
+// Get all rules
 router.get('/rules', wrapAsync(async (req, res) => {
   const config = readKeywordConfig();
   sendSuccessResponse(res, config.rules);
 }, 'get keyword filter rules'));
 
-// 添加新规则
+// Add a new rule
 router.post('/rules', wrapAsync(async (req, res) => {
   const newRule = sanitizeRule(req.body || {});
   const config = readKeywordConfig({ autoMigrate: false });
@@ -306,7 +306,7 @@ router.post('/rules', wrapAsync(async (req, res) => {
   }
 
   if (config.rules.some(rule => rule.id === newRule.id)) {
-    return sendErrorResponse(res, 409, `规则ID已存在: ${newRule.id}`);
+    return sendErrorResponse(res, 409, `Rule ID already exists: ${newRule.id}`);
   }
 
   config.rules.push(newRule);
@@ -318,7 +318,7 @@ router.post('/rules', wrapAsync(async (req, res) => {
   sendSuccessResponse(res, { message: 'Rule added successfully', rule: newRule });
 }, 'add keyword filter rule'));
 
-// 更新规则
+// Update a rule
 router.put('/rules/:ruleId', wrapAsync(async (req, res) => {
   const { ruleId } = req.params;
   const config = readKeywordConfig({ autoMigrate: false });
@@ -342,7 +342,7 @@ router.put('/rules/:ruleId', wrapAsync(async (req, res) => {
   sendSuccessResponse(res, { message: 'Rule updated successfully', rule: sanitizedRule });
 }, 'update keyword filter rule'));
 
-// 删除规则
+// Delete a rule
 router.delete('/rules/:ruleId', wrapAsync(async (req, res) => {
   const { ruleId } = req.params;
   const config = readKeywordConfig({ autoMigrate: false });
@@ -365,7 +365,7 @@ router.delete('/rules/:ruleId', wrapAsync(async (req, res) => {
   sendSuccessResponse(res, { message: 'Rule deleted successfully', rule: deletedRule });
 }, 'delete keyword filter rule'));
 
-// 切换规则启用状态
+// Toggle a rule on or off
 router.patch('/rules/:ruleId/toggle', wrapAsync(async (req, res) => {
   const { ruleId } = req.params;
   const config = readKeywordConfig({ autoMigrate: false });
@@ -388,7 +388,7 @@ router.patch('/rules/:ruleId/toggle', wrapAsync(async (req, res) => {
   sendSuccessResponse(res, { message: 'Rule toggled successfully', rule });
 }, 'toggle keyword filter rule'));
 
-// 切换全局启用状态
+// Toggle the filter globally
 router.patch('/toggle', wrapAsync(async (req, res) => {
   const config = readKeywordConfig({ autoMigrate: false });
   config.enabled = !config.enabled;
@@ -400,18 +400,18 @@ router.patch('/toggle', wrapAsync(async (req, res) => {
   sendSuccessResponse(res, { message: 'Global filter toggled successfully', enabled: sanitizedConfig.enabled });
 }, 'toggle keyword filter'));
 
-// 获取统计信息
+// Get statistics
 router.get('/stats', wrapAsync(async (req, res) => {
   const stats = keywordFilter.getStats();
   sendSuccessResponse(res, stats);
 }, 'get keyword filter stats'));
 
-// 测试规则
+// Test a rule
 router.post('/test', wrapAsync(async (req, res) => {
   const { text, ruleId } = req.body || {};
 
   if (!text || typeof text !== 'string') {
-    return sendErrorResponse(res, 400, 'text 参数是必填的字符串');
+    return sendErrorResponse(res, 400, 'text parameter is required and must be a string');
   }
 
   const config = readKeywordConfig();
@@ -442,7 +442,7 @@ router.post('/test', wrapAsync(async (req, res) => {
   }
 }, 'test keyword filter'));
 
-// 重新加载配置
+// Reload configuration
 router.post('/reload', wrapAsync(async (req, res) => {
   keywordFilter.reloadConfig();
   const stats = keywordFilter.getStats();

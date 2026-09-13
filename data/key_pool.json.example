@@ -9,9 +9,9 @@
   "poolGroups": [
     {
       "id": "default",
-      "name": "默认池",
+      "name": "Default pool",
       "priority": 100,
-      "description": "默认密钥池，所有未分配到其他池子的密钥都在这里"
+      "description": "Default key pool for all keys not assigned to another pool"
     }
   ],
   "config": {

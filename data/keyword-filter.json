@@ -3,7 +3,7 @@
   "rules": [
     {
       "id": "rule-1",
-      "name": "黑名单提示词",
+      "name": "Blocked prompt text",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -14,13 +14,13 @@
         "type": "replace",
         "replacement": "If you working on tasks that would benefit from a todo list please use the TodoWrite tool to create one "
       },
-      "description": "受影响",
+      "description": "Affected prompt text",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-delete-sensitive-tokens",
-      "name": "批量移除敏感词",
+      "name": "Remove sensitive keywords in bulk",
       "enabled": true,
       "pattern": {
         "type": "regex",
@@ -36,13 +36,13 @@
           "api_key"
         ]
       },
-      "description": "命中敏感词时额外删除指定关键词，防止敏感字段泄漏",
+      "description": "When sensitive text matches, also delete the specified keywords to prevent sensitive field names from leaking",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-2",
-      "name": "黑名单提示词",
+      "name": "Blocked prompt text",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -53,13 +53,13 @@
         "type": "replace",
         "replacement": "You have not created a todolist yet. Create one `update_todo_list` "
       },
-      "description": "受影响",
+      "description": "Affected prompt text",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-3",
-      "name": "系统提示词-Kiro",
+      "name": "System prompt - Kiro",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -68,15 +68,15 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "AI助手"
+        "replacement": "AI assistant"
       },
-      "description": "Kiro 关键词",
+      "description": "Kiro keywords",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-4",
-      "name": "系统提示词-CC",
+      "name": "System prompt - Claude Code",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -87,13 +87,13 @@
         "type": "delete_keyword",
         "mode": "inline"
       },
-      "description": "CC 关键词",
+      "description": "Claude Code keywords",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-5",
-      "name": "系统提示词-CC",
+      "name": "System prompt - Claude Code",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -102,15 +102,15 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "AI助手"
+        "replacement": "AI assistant"
       },
-      "description": "CC 关键词",
+      "description": "Claude Code keywords",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-6",
-      "name": "系统提示词-CC",
+      "name": "System prompt - Claude Code",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -119,15 +119,15 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "用户需求"
+        "replacement": "user requirements"
       },
-      "description": "CC 关键词",
+      "description": "Claude Code keywords",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-system-software-engineering",
-      "name": "系统提示词-软件工程",
+      "name": "System prompt - software engineering",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -136,15 +136,15 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "软件开发"
+        "replacement": "software development"
       },
-      "description": "在system字段中替换'software engineering'为'软件开发'",
+      "description": "Replace 'software engineering' with 'software development' in the system field",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-replace-sensitive",
-      "name": "替换敏感信息",
+      "name": "Replace sensitive information",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -155,13 +155,13 @@
         "type": "replace",
         "replacement": "***"
       },
-      "description": "将'password'替换为***（示例：已禁用）",
+      "description": "Replace 'password' with *** (example described as disabled)",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-remove-instruction",
-      "name": "移除特定指令",
+      "name": "Remove specific instructions",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -178,13 +178,13 @@
           "注意"
         ]
       },
-      "description": "删除包含'ignore previous instructions'的整个content块（示例：已禁用）",
+      "description": "Delete the entire content block containing 'ignore previous instructions' (example described as disabled)",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-regex-example",
-      "name": "正则表达式示例",
+      "name": "Regular expression example",
       "enabled": true,
       "pattern": {
         "type": "regex",
@@ -193,15 +193,15 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "[电话号码已隐藏]"
+        "replacement": "[phone number hidden]"
       },
-      "description": "使用正则表达式匹配电话号码格式并替换（示例：已禁用）",
+      "description": "Match and replace phone numbers using a regular expression (example described as disabled)",
       "errors": [],
       "alerts": []
     },
     {
       "id": "rule-system-remove-droid",
-      "name": "系统提示词-移除Droid标识",
+      "name": "System prompt - remove Droid identity",
       "enabled": true,
       "pattern": {
         "type": "contains",
@@ -210,9 +210,9 @@
       },
       "action": {
         "type": "replace",
-        "replacement": "一个AI助手"
+        "replacement": "an AI assistant"
       },
-      "description": "在system字段中移除Droid的具体标识信息",
+      "description": "Remove the specific Droid identity from the system field",
       "errors": [],
       "alerts": []
     }

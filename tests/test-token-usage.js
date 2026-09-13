@@ -1,5 +1,5 @@
 /**
- * 测试Token使用量追踪功能
+ * Test token usage tracking
  */
 import 'dotenv/config';
 import { getFactoryBalanceManager } from './balance/factory-balance-manager.js';
@@ -7,36 +7,36 @@ import keyPoolManager from './auth.js';
 import { logInfo, logError } from './logger.js';
 
 async function test() {
-    logInfo('========== 开始测试Token使用量追踪功能 ==========');
+    logInfo('========== Start testing token usage tracking ==========');
 
     try {
-        // 初始化管理器
+        // Initialize the manager
         const manager = getFactoryBalanceManager();
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 等待初始化
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for initialization
 
-        // 1. 测试添加Factory密钥
-        logInfo('\n1. 添加测试密钥...');
+        // 1. Test adding a Factory key
+        logInfo('\n1. Add test keys...');
         const testKeys = [
             'fk-test-key-001',
             'fk-test-key-002',
-            'sk-openai-test-key',  // OpenAI密钥（测试自动识别）
+            'sk-openai-test-key',  // OpenAI key (tests automatic provider detection)
         ];
 
         testKeys.forEach(key => {
             try {
-                const keyObj = keyPoolManager.addKey(key, `测试密钥 ${key}`);
-                logInfo(`✅ 添加密钥成功: ${keyObj.id} (Provider: ${keyObj.provider})`);
+                const keyObj = keyPoolManager.addKey(key, `Test key ${key}`);
+                logInfo(`✅ Key added successfully: ${keyObj.id} (Provider: ${keyObj.provider})`);
             } catch (e) {
-                logInfo(`⚠️ 密钥已存在: ${key}`);
+                logInfo(`⚠️ Key already exists: ${key}`);
             }
         });
 
-        // 2. 模拟记录Token使用量
-        logInfo('\n2. 模拟记录Token使用量...');
+        // 2. Simulate recording token usage
+        logInfo('\n2. Simulate recording token usage...');
         const factoryKeys = keyPoolManager.keys.filter(k => k.provider === 'factory');
 
         if (factoryKeys.length > 0) {
-            // 模拟多次请求
+            // Simulate multiple requests
             for (let i = 0; i < 5; i++) {
                 const key = factoryKeys[i % factoryKeys.length];
                 const usage = {
@@ -46,58 +46,58 @@ async function test() {
                 };
 
                 manager.recordUsage(key.api_key || key.key, usage);
-                logInfo(`📝 记录使用量 [${key.id}]: ${usage.total_tokens} tokens`);
+                logInfo(`📝 Record usage [${key.id}]: ${usage.total_tokens} tokens`);
             }
         }
 
-        // 3. 获取使用量统计
-        logInfo('\n3. 获取使用量统计...');
+        // 3. Get usage statistics
+        logInfo('\n3. Get usage statistics...');
         const allStats = manager.getUsageStats();
-        logInfo('📊 所有密钥使用量统计:');
+        logInfo('📊 Usage statistics for all keys:');
         Object.entries(allStats).forEach(([key, stats]) => {
             logInfo(`  ${key}:`);
-            logInfo(`    总Token: ${stats.total_tokens}`);
-            logInfo(`    总请求: ${stats.total_requests}`);
-            logInfo(`    最后更新: ${stats.last_updated || 'N/A'}`);
+            logInfo(`    Total tokens: ${stats.total_tokens}`);
+            logInfo(`    Total requests: ${stats.total_requests}`);
+            logInfo(`    Last updated: ${stats.last_updated || 'N/A'}`);
         });
 
-        // 4. 获取单个密钥的使用量
+        // 4. Get usage for one key
         if (factoryKeys.length > 0) {
-            logInfo('\n4. 获取单个密钥使用量...');
+            logInfo('\n4. Get usage for one key...');
             const testKey = factoryKeys[0];
             const keyStats = manager.getUsageStats(testKey.api_key || testKey.key);
-            logInfo(`密钥 ${testKey.id} 的使用量:`, keyStats);
+            logInfo(`Usage for key ${testKey.id}:`, keyStats);
         }
 
-        // 5. 获取使用量汇总
-        logInfo('\n5. 获取使用量汇总...');
+        // 5. Get the usage summary
+        logInfo('\n5. Get the usage summary...');
         const summary = manager.getBalanceSummary();
-        logInfo('📈 使用量汇总:', summary);
+        logInfo('📈 Usage summary:', summary);
 
-        // 6. 测试数据持久化
-        logInfo('\n6. 测试数据持久化...');
+        // 6. Test data persistence
+        logInfo('\n6. Test data persistence...');
         await manager.saveCache();
-        logInfo('✅ 数据已保存到文件');
+        logInfo('✅ Data saved to file');
 
-        // 7. 测试重新加载
-        logInfo('\n7. 测试重新加载数据...');
+        // 7. Test reloading
+        logInfo('\n7. Test reloading data...');
         await manager.loadCache();
         const reloadedStats = manager.getUsageStats();
-        logInfo(`✅ 重新加载成功，共 ${Object.keys(reloadedStats).length} 条记录`);
+        logInfo(`✅ Reloaded successfully; total: ${Object.keys(reloadedStats).length} records`);
 
-        // 8. 显示配置信息
-        logInfo('\n8. 当前配置信息...');
-        logInfo(`📅 同步间隔: ${manager.syncInterval / 60000}分钟`);
-        logInfo(`📦 批量大小: ${manager.batchSize}`);
-        logInfo(`🗓️ 数据保留: ${manager.dataRetentionDays}天`);
+        // 8. Show configuration details
+        logInfo('\n8. Current configuration...');
+        logInfo(`📅 Sync interval: ${manager.syncInterval / 60000} minutes`);
+        logInfo(`📦 Batch size: ${manager.batchSize}`);
+        logInfo(`🗓️ Data retention: ${manager.dataRetentionDays} days`);
 
-        // 9. 测试清理功能
-        logInfo('\n9. 测试数据清理...');
+        // 9. Test cleanup
+        logInfo('\n9. Test data cleanup...');
         manager.cleanupOldData();
-        logInfo('✅ 过期数据已清理');
+        logInfo('✅ Expired data removed');
 
-        // 10. 显示今日使用量
-        logInfo('\n10. 今日使用量统计...');
+        // 10. Show usage for today
+        logInfo('\n10. Usage statistics for today...');
         const today = new Date().toISOString().split('T')[0];
         let todayTotal = 0;
         let todayRequests = 0;
@@ -109,27 +109,27 @@ async function test() {
             }
         });
 
-        logInfo(`📅 今日统计:`);
-        logInfo(`  Token使用: ${todayTotal}`);
-        logInfo(`  请求次数: ${todayRequests}`);
+        logInfo(`📅 Statistics for today:`);
+        logInfo(`  Tokens used: ${todayTotal}`);
+        logInfo(`  Request count: ${todayRequests}`);
 
-        logInfo('\n========== 测试完成 ==========');
-        logInfo('✅ Token使用量追踪功能正常工作');
-        logInfo('📁 数据已保存到: data/factory_usage.json');
+        logInfo('\n========== Tests complete ==========');
+        logInfo('✅ Token usage tracking works correctly');
+        logInfo('📁 Data saved to: data/factory_usage.json');
 
-        // 停止自动同步（测试环境）
+        // Stop automatic synchronization in the test environment
         manager.stopAutoSync();
 
     } catch (error) {
-        logError(`❌ 测试失败: ${error.message}`, error);
+        logError(`❌ Test failed: ${error.message}`, error);
     }
 
-    // 退出进程
+    // Exit the process
     process.exit(0);
 }
 
-// 运行测试
+// Run tests
 test().catch(error => {
-    logError('测试异常:', error);
+    logError('Test error:', error);
     process.exit(1);
 });

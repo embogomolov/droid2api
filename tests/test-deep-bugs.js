@@ -1,6 +1,6 @@
 /**
- * 测试深度bug修复
- * 测试所有新发现和修复的bug
+ * Test deeper bug fixes
+ * Test all newly discovered and fixed bugs
  */
 
 import { KeyPoolManager } from '../auth.js';
@@ -12,55 +12,55 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 console.log('========================================');
-console.log('🔍 深度Bug修复测试');
+console.log('🔍 Deep bug-fix tests');
 console.log('========================================\n');
 
-// 1. 测试headersSent检查
-console.log('1️⃣ 测试headersSent检查修复\n');
+// 1. Test headersSent checks
+console.log('1️⃣ Test the headersSent guard fix\n');
 
 function testHeadersSent() {
-  // 模拟response对象
+  // Mock a response object
   const mockRes = {
     headersSent: false,
     status: function(code) {
-      console.log(`  状态码设置: ${code}`);
+      console.log(`  Status code set: ${code}`);
       return this;
     },
     json: function(data) {
       if (this.headersSent) {
-        console.log('  ❌ 错误：尝试在headers已发送后设置响应！');
+        console.log('  ❌ Error: attempted to send a response after headers were sent!');
         throw new Error('Cannot set headers after they are sent');
       }
-      console.log(`  ✅ JSON响应: ${JSON.stringify(data).substring(0, 50)}...`);
+      console.log(`  ✅ JSON response: ${JSON.stringify(data).substring(0, 50)}...`);
       this.headersSent = true;
       return this;
     }
   };
 
-  // 测试正常情况
+  // Test the normal case
   try {
     mockRes.json({ success: true });
-    console.log('  ✅ 第一次响应成功');
+    console.log('  ✅ First response succeeded');
   } catch (e) {
-    console.log('  ❌ 第一次响应失败:', e.message);
+    console.log('  ❌ First response failed:', e.message);
   }
 
-  // 测试重复响应（应该被阻止）
+  // Test a duplicate response (it should be blocked)
   try {
     mockRes.json({ error: 'duplicate' });
-    console.log('  ❌ 第二次响应不应该成功！');
+    console.log('  ❌ The second response should not succeed!');
   } catch (e) {
-    console.log('  ✅ 第二次响应被正确阻止:', e.message);
+    console.log('  ✅ Second response correctly blocked:', e.message);
   }
 }
 
-// 2. 测试buffer初始化
-console.log('\n2️⃣ 测试buffer初始化修复\n');
+// 2. Test buffer initialization
+console.log('\n2️⃣ Test the buffer initialization fix\n');
 
 function testBufferInitialization() {
-  // 模拟流处理中的buffer
+  // Simulate a stream-processing buffer
   function processStream() {
-    let buffer = '';  // 正确初始化
+    let buffer = '';  // Initialize correctly
     const chunks = ['chunk1', 'chunk2', 'chunk3'];
     
     for (const chunk of chunks) {
@@ -72,17 +72,17 @@ function testBufferInitialization() {
   
   try {
     const result = processStream();
-    console.log(`  ✅ Buffer处理成功: ${result}`);
+    console.log(`  ✅ Buffer processed successfully: ${result}`);
   } catch (e) {
-    console.log(`  ❌ Buffer处理失败: ${e.message}`);
+    console.log(`  ❌ Buffer processing failed: ${e.message}`);
   }
 }
 
-// 3. 测试JSON解析错误处理
-console.log('\n3️⃣ 测试JSON解析错误处理\n');
+// 3. Test JSON parsing error handling
+console.log('\n3️⃣ Test JSON parsing error handling\n');
 
 async function testJSONParsing() {
-  // 模拟响应对象
+  // Mock a response object
   const mockResponse = {
     json: async function() {
       throw new Error('Invalid JSON');
@@ -97,78 +97,78 @@ async function testJSONParsing() {
     try {
       data = await mockResponse.json();
     } catch (jsonError) {
-      console.log(`  ✅ JSON解析错误被捕获: ${jsonError.message}`);
-      // 不能再次读取text，因为body已经被消费
-      console.log('  ✅ 正确处理了body已消费的情况');
+      console.log(`  ✅ JSON parsing error caught: ${jsonError.message}`);
+      // Do not read text again because the body has already been consumed
+      console.log('  ✅ Correctly handled the already-consumed body');
       return;
     }
-    console.log('  ❌ 应该抛出JSON解析错误');
+    console.log('  ❌ A JSON parsing error should have been thrown');
   } catch (e) {
-    console.log(`  ✅ 错误被正确处理: ${e.message}`);
+    console.log(`  ✅ Error handled correctly: ${e.message}`);
   }
 }
 
-// 4. 测试并发安全
-console.log('\n4️⃣ 测试并发安全\n');
+// 4. Test concurrency safety
+console.log('\n4️⃣ Test concurrency safety\n');
 
 function testConcurrencySafety() {
-  // 确保每个请求有自己的buffer
+  // Ensure each request has its own buffer
   const requests = [];
   
   for (let i = 0; i < 3; i++) {
     requests.push(new Promise((resolve) => {
-      let buffer = '';  // 每个请求独立的buffer
+      let buffer = '';  // Separate buffer for each request
       buffer += `request-${i}`;
       resolve(buffer);
     }));
   }
   
   Promise.all(requests).then(results => {
-    console.log('  ✅ 并发请求结果:');
+    console.log('  ✅ Concurrent request results:');
     results.forEach((result, i) => {
       console.log(`    - ${result}`);
       if (result !== `request-${i}`) {
-        console.log('  ❌ 并发数据混乱！');
+        console.log('  ❌ Concurrent request data is mixed up!');
       }
     });
-    console.log('  ✅ 所有请求数据隔离正确');
+    console.log('  ✅ Data is correctly isolated for all requests');
   });
 }
 
-// 5. 测试资源清理
-console.log('\n5️⃣ 测试资源清理\n');
+// 5. Test resource cleanup
+console.log('\n5️⃣ Test resource cleanup\n');
 
 function testResourceCleanup() {
   const resources = [];
   
-  // 模拟资源分配
+  // Simulate resource allocation
   function allocateResource() {
     const resource = { id: Date.now(), cleaned: false };
     resources.push(resource);
     return resource;
   }
   
-  // 模拟资源清理
+  // Simulate resource cleanup
   function cleanupResources() {
     resources.forEach(r => r.cleaned = true);
-    console.log(`  ✅ 清理了 ${resources.length} 个资源`);
+    console.log(`  ✅ Cleaned up ${resources.length}  resources`);
   }
   
-  // 分配资源
+  // Allocate resources
   allocateResource();
   allocateResource();
   allocateResource();
   
-  // 注册清理钩子
+  // Register a cleanup hook
   process.on('beforeExit', () => {
     cleanupResources();
   });
   
-  console.log(`  ✅ 分配了 ${resources.length} 个资源`);
-  console.log('  ✅ 已注册进程退出清理钩子');
+  console.log(`  ✅ Allocated ${resources.length}  resources`);
+  console.log('  ✅ Process-exit cleanup hook registered');
 }
 
-// 执行所有测试
+// Run all tests
 async function runTests() {
   testHeadersSent();
   testBufferInitialization();
@@ -177,21 +177,21 @@ async function runTests() {
   testResourceCleanup();
   
   console.log('\n========================================');
-  console.log('✨ 深度Bug修复测试完成！');
+  console.log('✨ Deep bug-fix tests complete!');
   console.log('========================================\n');
   
-  console.log('📝 修复总结:');
-  console.log('1. ✅ headersSent检查防止重复响应');
-  console.log('2. ✅ buffer正确初始化避免引用错误');
-  console.log('3. ✅ JSON解析错误得到妥善处理');
-  console.log('4. ✅ 并发请求数据正确隔离');
-  console.log('5. ✅ 资源清理机制正常工作');
+  console.log('📝 Fix summary:');
+  console.log('1. ✅ headersSent checks prevent duplicate responses');
+  console.log('2. ✅ Correct buffer initialization prevents reference errors');
+  console.log('3. ✅ JSON parsing errors are handled correctly');
+  console.log('4. ✅ Concurrent request data is correctly isolated');
+  console.log('5. ✅ Resource cleanup works correctly');
   
-  console.log('\n🎯 关键改进:');
-  console.log('- 所有响应发送前检查headersSent');
-  console.log('- 流处理中buffer声明为局部变量');
-  console.log('- JSON解析包装在try-catch中');
-  console.log('- 进程退出时自动清理资源');
+  console.log('\n🎯 Key improvements:');
+  console.log('- Check headersSent before sending any response');
+  console.log('- Declare stream-processing buffers as local variables');
+  console.log('- Wrap JSON parsing in try-catch');
+  console.log('- Automatically clean up resources on process exit');
   
   setTimeout(() => process.exit(0), 100);
 }

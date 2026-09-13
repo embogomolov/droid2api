@@ -2,21 +2,21 @@
   "poolGroups": [
     {
       "id": "freebies",
-      "name": "白嫖池",
+      "name": "Free pool",
       "priority": 1,
-      "description": "捡来的免费密钥，优先消耗这些！用完不心疼 😎"
+      "description": "Free keys acquired at no cost. Use these first; no loss when they run out 😎"
     },
     {
       "id": "main",
-      "name": "主力池",
+      "name": "Primary pool",
       "priority": 2,
-      "description": "正式购买的密钥，白嫖池用完再用这些 💰"
+      "description": "Purchased keys. Use these after the free pool is exhausted 💰"
     },
     {
       "id": "test",
-      "name": "测试池",
+      "name": "Test pool",
       "priority": 3,
-      "description": "测试专用密钥，最后才用（可选）🧪"
+      "description": "Keys reserved for testing; used last (optional) 🧪"
     }
   ],
   "keys": [
@@ -35,7 +35,7 @@
       "last_test_result": "untested",
       "banned_at": null,
       "banned_reason": null,
-      "notes": "白嫖池密钥示例"
+      "notes": "Example free-pool key"
     },
     {
       "id": "key_1730000000001_example2",
@@ -52,7 +52,7 @@
       "last_test_result": "untested",
       "banned_at": null,
       "banned_reason": null,
-      "notes": "主力池密钥示例"
+      "notes": "Example primary-pool key"
     }
   ],
   "stats": {

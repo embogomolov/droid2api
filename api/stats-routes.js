@@ -1,22 +1,22 @@
 /**
- * 请求统计 API 路由
- * 提供请求统计数据查询接口
+ * Request statistics API routes
+ * Provide endpoints for querying request statistics
  */
 
 import express from 'express';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 import { getStats, getTodayStats, getStatsSummary, get7DaysTrend, resetStats } from '../utils/request-stats.js';
 import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
 
-// 应用鉴权中间件到所有统计路由
+// Apply authentication middleware to all statistics routes
 router.use(adminAuth);
 
 /**
  * GET /admin/stats/summary
- * 获取统计摘要（用于前端显示）
- * 返回：总Token、总请求、今日Token、今日请求
+ * Get the statistics summary for display in the UI
+ * Returns total tokens, total requests, tokens today, and requests today
  */
 router.get('/summary', (req, res) => {
   try {
@@ -28,7 +28,7 @@ router.get('/summary', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: '获取统计摘要失败',
+      error: 'Failed to get the statistics summary',
       message: error.message
     });
   }
@@ -36,7 +36,7 @@ router.get('/summary', (req, res) => {
 
 /**
  * GET /admin/stats/full
- * 获取完整统计数据（包括每日历史和按模型统计）
+ * Get full statistics (including daily history and per-model statistics)
  */
 router.get('/full', (req, res) => {
   try {
@@ -48,7 +48,7 @@ router.get('/full', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: '获取完整统计数据失败',
+      error: 'Failed to get full statistics',
       message: error.message
     });
   }
@@ -56,7 +56,7 @@ router.get('/full', (req, res) => {
 
 /**
  * GET /admin/stats/today
- * 获取今日统计数据
+ * Get statistics for today
  */
 router.get('/today', (req, res) => {
   try {
@@ -68,7 +68,7 @@ router.get('/today', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: '获取今日统计失败',
+      error: 'Failed to get statistics for today',
       message: error.message
     });
   }
@@ -76,9 +76,9 @@ router.get('/today', (req, res) => {
 
 /**
  * GET /admin/stats/trend
- * 获取7天使用趋势数据（用于折线图）
- * Query参数：
- *   - days: 天数，默认7天
+ * Get 7-day usage trends for the line chart
+ * Query parameters:
+ *   - days: Number of days; default 7
  */
 router.get('/trend', (req, res) => {
   try {
@@ -91,7 +91,7 @@ router.get('/trend', (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: '获取趋势数据失败',
+      error: 'Failed to get trend data',
       message: error.message
     });
   }
@@ -99,7 +99,7 @@ router.get('/trend', (req, res) => {
 
 /**
  * POST /admin/stats/reset
- * 重置统计数据（危险操作，需要确认）
+ * Reset statistics (destructive operation; confirmation required)
  */
 router.post('/reset', (req, res) => {
   try {
@@ -108,22 +108,22 @@ router.post('/reset', (req, res) => {
     if (confirm !== 'RESET_ALL_STATS') {
       return res.status(400).json({
         success: false,
-        error: '需要确认码',
-        message: '请在请求体中包含 { "confirm": "RESET_ALL_STATS" }'
+        error: 'Confirmation code required',
+        message: 'Include the following in the request body { "confirm": "RESET_ALL_STATS" }'
       });
     }
 
     resetStats();
-    logInfo('统计数据已重置');
+    logInfo('Statistics reset');
 
     res.json({
       success: true,
-      message: '统计数据已重置'
+      message: 'Statistics reset'
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: '重置统计数据失败',
+      error: 'Failed to reset statistics',
       message: error.message
     });
   }

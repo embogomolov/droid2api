@@ -1,9 +1,9 @@
 /**
- * 每日重置调度器
- * 功能：每天凌晨自动检查并清理统计数据
+ * Daily reset scheduler
+ * Check for date changes and trigger statistics cleanup after midnight.
  *
- * BaSui：这玩意儿确保日期切换时，"今日请求"能正确清零！
- * 即使服务器一直跑着不重启，也不会出问题 😎
+ * BaSui: Ensure "Requests today" resets correctly when the date changes.
+ * Works even when the server runs continuously without restarting. 😎
  */
 
 import { logInfo, logDebug } from '../logger.js';
@@ -12,8 +12,8 @@ let lastCheckedDate = null;
 let checkInterval = null;
 
 /**
- * 获取当前日期字符串 (YYYY-MM-DD)
- * BaSui: 使用本地时区而不是UTC时区，避免凌晨切换日期不及时！
+ * Get the current date as YYYY-MM-DD.
+ * BaSui: Use local time rather than UTC so the date changes at local midnight.
  */
 function getTodayKey() {
   const now = new Date();
@@ -24,22 +24,22 @@ function getTodayKey() {
 }
 
 /**
- * 检查日期是否切换
- * @returns {boolean} 如果日期切换返回true
+ * Check whether the date has changed.
+ * @returns {boolean} True if the date has changed
  */
 function checkDateChange() {
   const currentDate = getTodayKey();
 
   if (lastCheckedDate === null) {
-    // 首次检查，初始化
+    // Initialize on the first check.
     lastCheckedDate = currentDate;
-    logDebug(`📅 每日重置调度器已初始化: ${currentDate}`);
+    logDebug(`📅 Daily reset scheduler initialized: ${currentDate}`);
     return false;
   }
 
   if (currentDate !== lastCheckedDate) {
-    // 日期切换了！
-    logInfo(`🌅 检测到日期切换: ${lastCheckedDate} → ${currentDate}`);
+    // The date has changed.
+    logInfo(`🌅 Date change detected: ${lastCheckedDate} → ${currentDate}`);
     lastCheckedDate = currentDate;
     return true;
   }
@@ -48,82 +48,82 @@ function checkDateChange() {
 }
 
 /**
- * 日期切换时的回调函数列表
+ * Callbacks to run when the date changes
  */
 const onDateChangeCallbacks = [];
 
 /**
- * 注册日期切换回调
- * @param {Function} callback - 回调函数
+ * Register a date-change callback
+ * @param {Function} callback - Callback function
  */
 export function onDateChange(callback) {
   if (typeof callback === 'function') {
     onDateChangeCallbacks.push(callback);
-    logDebug(`✅ 注册日期切换回调: ${callback.name || 'anonymous'}`);
+    logDebug(`✅ Registered date-change callback: ${callback.name || 'anonymous'}`);
   }
 }
 
 /**
- * 触发所有日期切换回调
+ * Run all date-change callbacks.
  */
 function triggerDateChangeCallbacks() {
-  logInfo(`🔔 触发 ${onDateChangeCallbacks.length} 个日期切换回调`);
+  logInfo(`🔔 Running ${onDateChangeCallbacks.length} date-change callbacks`);
 
   onDateChangeCallbacks.forEach((callback, index) => {
     try {
       callback();
-      logDebug(`  ✅ 回调 #${index + 1} 执行成功`);
+      logDebug(`  ✅ Callback #${index + 1} completed successfully`);
     } catch (error) {
-      logInfo(`  ❌ 回调 #${index + 1} 执行失败: ${error.message}`);
+      logInfo(`  ❌ Callback #${index + 1} failed: ${error.message}`);
     }
   });
 }
 
 /**
- * 启动每日重置调度器
- * @param {number} checkIntervalMs - 检查间隔（毫秒），默认1分钟
+ * Start the daily reset scheduler.
+ * @param {number} checkIntervalMs - Check interval in milliseconds; defaults to 1 minute
  */
 export function startDailyResetScheduler(checkIntervalMs = 60000) {
   if (checkInterval) {
-    logDebug('⚠️  每日重置调度器已在运行，跳过启动');
+    logDebug('⚠️  Daily reset scheduler is already running; skipping startup');
     return;
   }
 
-  // 初始化当前日期
+  // Initialize the current date.
   lastCheckedDate = getTodayKey();
-  logInfo(`🚀 每日重置调度器已启动 (检查间隔: ${checkIntervalMs / 1000}秒)`);
-  logInfo(`📅 当前日期: ${lastCheckedDate}`);
+  logInfo(`🚀 Daily reset scheduler started (check interval: ${checkIntervalMs / 1000} seconds)`);
+  logInfo(`📅 Current date: ${lastCheckedDate}`);
 
-  // 每隔一段时间检查日期是否切换
+  // Check periodically for a date change.
   checkInterval = setInterval(() => {
     const dateChanged = checkDateChange();
 
     if (dateChanged) {
-      // 日期切换了，触发所有回调
+      // The date changed; run all callbacks.
       triggerDateChangeCallbacks();
     }
   }, checkIntervalMs);
 
-  // 确保进程退出时清理定时器
+  // Ensure the timer is cleared on process exit.
   process.on('exit', () => {
     stopDailyResetScheduler();
   });
 }
 
 /**
- * 停止每日重置调度器
+ * Stop the daily reset scheduler.
  */
 export function stopDailyResetScheduler() {
   if (checkInterval) {
     clearInterval(checkInterval);
     checkInterval = null;
-    logInfo('🛑 每日重置调度器已停止');
+    logInfo('🛑 Daily reset scheduler stopped');
   }
 }
 
 /**
- * 获取调度器状态
- * @returns {Object} 调度器状态信息
+ * Get the scheduler status.
+ * @returns {Object} Scheduler status information
  */
 export function getSchedulerStatus() {
   return {
