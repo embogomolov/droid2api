@@ -87,7 +87,7 @@ export function logCollectorMiddleware(req, res, next) {
         summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
           elapsedMs: Date.now() - startTime, usage: report.usage || null,
           outcome: !res.writableFinished ? 'Disconnected' : res.statusCode >= 400 ? `HTTP ${res.statusCode}` : report.success === false ? 'Stream failed' : 'Completed',
-          error: report.error || null } });
+          error: report.error || null, upstreamError: report.upstreamError || null } });
     };
     res.once('finish', complete); res.once('close', complete);
     return next();

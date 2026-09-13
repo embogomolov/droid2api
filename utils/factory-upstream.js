@@ -47,6 +47,15 @@ export async function* checkedSSE(body, outcome = {}) {
   }
 }
 
+// Only bounded error metadata belongs in diagnostics, never the response or request payload.
+export function upstreamEventError(event) {
+  const source = event.response?.error ?? event.error ?? event;
+  const text = value => typeof value === 'string' || typeof value === 'number'
+    ? String(value).replace(/fk-[\w-]+/g, '[key hidden]').replace(/Bearer\s+[^\s"'\\]+/gi, 'Bearer [hidden]').slice(0, 2000) : null;
+  return { eventType: text(event.type), code: text(source?.code ?? (source === event ? null : source?.type) ?? source?.status),
+    type: text(source === event ? null : source?.type), message: text(typeof source === 'string' ? source : source?.message ?? source?.detail) };
+}
+
 export async function requestWithFailover(req, res, makeRequest, manager = keyPoolManager) {
   const requestId = randomUUID(), started = Date.now();
   res.setHeader('x-proxy-request-id', requestId);
@@ -57,9 +66,12 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     if (diagnosticWritten) return;
     diagnosticWritten = true;
     res.locals.factoryRequest.error = reason;
+    const details = error ? (error.eventType ? error : upstreamEventError({ type: reason, error })) : null;
+    if (details) res.locals.factoryRequest.upstreamError = details;
     logWarn(`Factory request ${requestId}: ${reason}`, {
       requestId, phase, elapsedMs: Date.now() - started, code: error?.code || null,
-      closeCode: error?.closeCode || null
+      closeCode: error?.closeCode || null,
+      ...(details ? { upstreamError: details } : {})
     });
   };
   const controller = new AbortController();
@@ -89,10 +101,12 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   let lastResponse;
   const sendError = async response => {
     if (res.destroyed) return null;
-    diagnose(`upstream_http_${response.status}`);
+    const body = await response.text();
+    let error; try { error = JSON.parse(body); } catch { error = { message: body }; }
+    diagnose(`upstream_http_${response.status}`, upstreamEventError({ type: 'http_error', error: error?.error ?? error }));
     const retryAfter = response.headers.get('retry-after');
     if (retryAfter) res.setHeader('Retry-After', retryAfter);
-    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(await response.text());
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(body);
     return null;
   };
   const suppliedAuth = req.headers.authorization;
@@ -229,7 +243,11 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       }
       const outcome = { onTerminal: observeHTTP, onEvent: event => {
         observeEvent?.(event);
-        if (event.type === 'error' || event.type === 'response.failed') diagnose('upstream_error_event');
+        if (event.type === 'error' || event.type === 'response.failed') {
+          const error = upstreamEventError(event);
+          res.locals.factoryRequest.upstreamError = error;
+          diagnose('upstream_error_event', error);
+        }
       } };
       if (req.body.stream === true) {
         const original = response;
@@ -254,7 +272,9 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
         };
         response = new Response(Readable.from(monitored()), { status: response.status, headers: response.headers });
       } else if (observeHTTP && usageRecorded) {
-        const result = await response.json(); observeHTTP(result, result.status !== 'failed');
+        const result = await response.json();
+        if (result.error || result.status === 'failed') diagnose('upstream_error_event', upstreamEventError({ type: result.status === 'failed' ? 'response.failed' : 'error', response: result }));
+        observeHTTP(result, !result.error && result.status !== 'failed');
         response = new Response(JSON.stringify(result), { status: response.status, headers: response.headers });
       }
       return { response, currentKeyId: keyId, outcome, usageRecorded };

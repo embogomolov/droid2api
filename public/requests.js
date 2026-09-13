@@ -11,7 +11,8 @@ export function renderRequests(){
     const duration=Number.isFinite(data.elapsedMs)?(data.elapsedMs/1000).toFixed(1)+'s':row.duration||'—';
     const usage=data.usage;
     const tokens=usage?'In '+number(usage.input)+' · out '+number(usage.output)+' · cache read '+number(usage.cacheRead)+(Number.isFinite(usage.cacheWrite)?' · write '+number(usage.cacheWrite):''):'No usage reported';
-    const detail=redact(data.error||row.error?.message||row.message||'');
+    const upstream=data.upstreamError;
+    const detail=redact(upstream ? [upstream.code||upstream.type,upstream.message].filter(Boolean).join(': ') : data.error||row.error?.message||row.message||'');
     return '<tr><td data-label="Time" class="muted">'+e(date(row.timestamp))+'</td><td data-label="Model / endpoint" class="request-details">'+e(redact(model))+'</td><td data-label="Account">'+(data.keyId?e(suffix(data.keyId)):'—')+'</td><td data-label="Result"><span class="badge '+(row.level==='error'?'bad':row.level==='warn'?'warn':'')+'">'+e(outcome)+'</span></td><td data-label="Duration">'+e(duration)+'</td><td data-label="Tokens / details" class="request-details"><small>'+e(tokens)+'</small>'+(detail?'<details><summary>Details</summary><pre>'+e(detail)+'</pre></details>':'')+'</td></tr>';
   }).join('')||'<tr><td colspan="6" class="empty">No matching events in the server buffer.</td></tr>';
 }

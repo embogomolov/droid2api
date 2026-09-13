@@ -985,3 +985,11 @@ using the installed Playwright skill, copy it to a temporary
 `playwright-test-*.js`, set `DROID_UI_ROOT` to this checkout's `public` directory,
 and invoke the skill's `run.js`. The test starts its own temporary static
 server and intercepts every admin request; it never contacts Factory.
+
+
+Upstream failures now retain bounded `eventType`, `code`, `type`, and `message`
+metadata in the normal request log and the Requests details view. This applies
+to Anthropic/OpenAI error events, final HTTP errors, and observed failed JSON
+responses. It does not classify by a fixed list of error codes. Factory key
+and Bearer-token strings are redacted; entire request/response payloads are
+not copied into diagnostic metadata. SSE forwarding and retry policy are unchanged.
