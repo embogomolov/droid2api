@@ -8,8 +8,8 @@ const __dirname = path.dirname(__filename);
 let config = null;
 
 /**
- * 从环境变量初始化默认配置
- * 只在 config.json 不存在时调用
+ * Initialize the default configuration from environment variables
+ * Called only when config.json does not exist
  */
 function getDefaultConfigFromEnv() {
   const parseBool = (envVar, defaultValue) => {
@@ -135,29 +135,29 @@ function getDefaultConfigFromEnv() {
 }
 
 /**
- * 初始化配置文件
- * 如果 config.json 不存在，从 .env 或默认值创建
+ * Initialize the configuration file
+ * Create config.json from .env or defaults if it does not exist
  */
 function initializeConfig() {
   const configPath = path.join(__dirname, 'data', 'config.json');
   
-  // 如果配置文件不存在，从环境变量创建
+  // Create the configuration from environment variables if the file is missing
   if (!fs.existsSync(configPath)) {
-    console.log('[INFO] config.json 不存在，从 .env 初始化默认配置...');
+    console.log('[INFO] config.json does not exist; initializing defaults from .env...');
     
-    // 确保 data 目录存在
+    // Ensure the data directory exists
     const dataDir = path.join(__dirname, 'data');
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
     
-    // 从环境变量获取默认配置
+    // Get the default configuration from environment variables
     const defaultConfig = getDefaultConfigFromEnv();
     
-    // 保存到文件
+    // Save to a file
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
-    console.log('[INFO] ✅ 已创建 config.json，配置来自 .env');
-    console.log('[INFO] 💡 之后修改配置请使用管理面板或直接编辑 config.json');
+    console.log('[INFO] ✅ Created config.json using settings from .env');
+    console.log('[INFO] 💡 Use the admin panel for subsequent configuration changes, or edit config.json');
     
     return defaultConfig;
   }
@@ -169,18 +169,18 @@ export function loadConfig() {
   try {
     const configPath = path.join(__dirname, 'data', 'config.json');
     
-    // 初始化配置（如果需要）
+    // Initialize the configuration (if needed)
     const initializedConfig = initializeConfig();
     if (initializedConfig) {
       config = initializedConfig;
       return config;
     }
     
-    // 读取现有配置
+    // Read the existing configuration
     const configData = fs.readFileSync(configPath, 'utf-8');
     config = JSON.parse(configData);
     
-    // 运行时环境变量优先级（仅特定变量）
+    // Runtime environment variable overrides (selected variables only)
     if (process.env.PORT) {
       config.port = parseInt(process.env.PORT);
     }
@@ -242,7 +242,7 @@ export function getUserAgent() {
   return cfg.user_agent || 'factory-cli/0.19.3';
 }
 
-// 获取限制配置
+// Get limit settings
 export function getLimits() {
   const cfg = getConfig();
   return {
@@ -259,40 +259,40 @@ export function getMaxJsonLogSize() {
   return getLimits().max_json_log_size;
 }
 
-// 获取密钥池配置（完整版，支持所有环境变量覆盖）
+// Get the full key pool configuration, with all supported environment variable overrides
 /**
- * 获取Factory API并发配置
+ * Get the Factory API concurrency setting
  */
 export function getFactoryApiConcurrency() {
   const cfg = getConfig();
   const keyPoolCfg = cfg.key_pool || {};
   return parseInt(process.env.FACTORY_API_CONCURRENCY) || 
          keyPoolCfg?.performance?.factoryApiConcurrency || 
-         100; // 默认并发数100，与其他批量操作保持一致
+         100; // Default concurrency is 100, consistent with other batch operations
 }
 
 export function getKeyPoolConfig() {
   const cfg = getConfig();
   const keyPoolCfg = cfg.key_pool || {};
 
-  // 辅助函数：解析布尔值环境变量
+  // Helper: Parse boolean environment variables
   const parseBool = (envVar, defaultValue) => {
     if (!envVar) return defaultValue;
     return envVar.toLowerCase() === 'true' || envVar === '1';
   };
 
   return {
-    // 轮询算法（env > config.json > 默认值）
+    // Selection algorithm (env > config.json > default)
     algorithm: process.env.KEY_POOL_ALGORITHM || keyPoolCfg.algorithm || 'round-robin',
 
-    // 重试配置
+    // Retry settings
     retry: {
       enabled: parseBool(process.env.KEY_POOL_RETRY_ENABLED, keyPoolCfg.retry?.enabled ?? true),
       maxRetries: parseInt(process.env.KEY_POOL_RETRY_MAX) || keyPoolCfg.retry?.maxRetries || 3,
       retryDelay: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || keyPoolCfg.retry?.retryDelay || 1000
     },
 
-    // 自动封禁配置
+    // Automatic ban settings
     autoBan: {
       enabled: parseBool(process.env.KEY_POOL_AUTO_BAN_ENABLED, keyPoolCfg.autoBan?.enabled ?? true),
       errorThreshold: parseInt(process.env.KEY_POOL_ERROR_THRESHOLD) || keyPoolCfg.autoBan?.errorThreshold || 5,
@@ -300,20 +300,20 @@ export function getKeyPoolConfig() {
       ban401: parseBool(process.env.KEY_POOL_BAN_401, keyPoolCfg.autoBan?.ban401 ?? false)
     },
 
-    // 性能配置
+    // Performance settings
     performance: {
       concurrentLimit: parseInt(process.env.KEY_POOL_CONCURRENT_LIMIT) || keyPoolCfg.performance?.concurrentLimit || 100,
       requestTimeout: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || keyPoolCfg.performance?.requestTimeout || 10000,
       factoryApiConcurrency: parseInt(process.env.FACTORY_API_CONCURRENCY) || keyPoolCfg.performance?.factoryApiConcurrency || 100
     },
 
-    // 🚀 BaSui：多级密钥池配置（Multi-Tier Pool）
+    // 🚀 BaSui: Multi-tier key pool configuration (Multi-Tier Pool)
     multiTier: {
       enabled: parseBool(process.env.KEY_POOL_MULTI_TIER_ENABLED, keyPoolCfg.multiTier?.enabled ?? false),
       autoFallback: parseBool(process.env.KEY_POOL_MULTI_TIER_AUTO_FALLBACK, keyPoolCfg.multiTier?.autoFallback ?? true)
     },
 
-    // 向后兼容：保留旧字段
+    // Backward compatibility: Keep legacy fields
     retry_delay_ms: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || keyPoolCfg.retry_delay_ms || 1000,
     request_timeout_ms: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || keyPoolCfg.request_timeout_ms || 10000,
     batch_test_interval_ms: parseInt(process.env.KEY_POOL_BATCH_TEST_INTERVAL_MS) || keyPoolCfg.batch_test_interval_ms || 500,
@@ -321,7 +321,7 @@ export function getKeyPoolConfig() {
   };
 }
 
-// 获取推理token配置
+// Get reasoning token settings
 export function getReasoningTokens() {
   const cfg = getConfig();
   return {
@@ -336,7 +336,7 @@ export function getReasoningBudget(level) {
   return tokens[level] || null;
 }
 
-// 获取余额同步配置
+// Get balance synchronization settings
 export function getBalanceSyncConfig() {
   const cfg = getConfig();
   return {
@@ -345,7 +345,7 @@ export function getBalanceSyncConfig() {
   };
 }
 
-// 🆕 获取Token自动同步配置
+// 🆕 Get automatic token synchronization settings
 export function getTokenSyncConfig() {
   const cfg = getConfig();
   
@@ -362,26 +362,26 @@ export function getTokenSyncConfig() {
   };
 }
 
-// 保存配置到 config.json
+// Save configuration to config.json
 export function saveConfig(newConfig) {
   try {
     const configPath = path.join(__dirname, 'data', 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
-    config = newConfig; // 更新内存中的配置
+    config = newConfig; // Update the in-memory configuration
     return config;
   } catch (error) {
     throw new Error(`Failed to save data/config.json: ${error.message}`);
   }
 }
 
-// 更新部分配置（支持深度合并）
+// Update selected settings (supports deep merging)
 export function updateConfig(updates) {
   const currentConfig = getConfig();
   const mergedConfig = deepMerge(currentConfig, updates);
   return saveConfig(mergedConfig);
 }
 
-// 深度合并对象
+// Deep-merge objects
 function deepMerge(target, source) {
   const output = { ...target };
   if (isObject(target) && isObject(source)) {

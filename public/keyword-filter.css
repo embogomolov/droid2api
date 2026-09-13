@@ -1,10 +1,10 @@
 /**
- * 关键词过滤 UI 专用样式
- * 美观大气、布局合理的现代化设计
+ * Styles for the keyword filtering UI
+ * Modern styling with a clean, well-organized layout
  */
 
 /* ============================================
-   关键词过滤页面整体布局
+   Overall layout of the keyword filtering page
    ============================================ */
 
 #tabKeywordFilter {
@@ -12,7 +12,7 @@
     animation: fadeInUp 0.5s ease;
 }
 
-/* 顶部标题区域 */
+/* Page header area */
 .keyword-section-header {
     display: flex;
     justify-content: space-between;
@@ -36,7 +36,7 @@
     font-weight: 500;
 }
 
-/* 状态药丸 */
+/* Status pills */
 .keyword-status-pill {
     display: flex;
     align-items: center;
@@ -73,7 +73,7 @@
 }
 
 /* ============================================
-   统计卡片网格
+   Statistics card grid
    ============================================ */
 
 .keyword-stats-grid {
@@ -116,7 +116,7 @@
     transform: scaleX(1);
 }
 
-/* 统计卡片内容 */
+/* Statistics card content */
 .keyword-stat-card {
     display: flex;
     align-items: center;
@@ -165,7 +165,7 @@
     opacity: 0.8;
 }
 
-/* 不同类型统计卡片的配色 */
+/* Colors for each statistics card type */
 .keyword-stat-total .keyword-stat-value {
     color: #667eea;
 }
@@ -179,7 +179,7 @@
 }
 
 /* ============================================
-   操作按钮区域
+   Action button area
    ============================================ */
 
 .keyword-actions {
@@ -204,7 +204,7 @@
     font-weight: 500;
 }
 
-/* 按钮美化 */
+/* Button styling */
 .keyword-action-btn {
     min-width: 140px;
     padding: 12px 24px;
@@ -221,7 +221,7 @@
 }
 
 /* ============================================
-   规则表格区域
+   Rules table area
    ============================================ */
 
 .keyword-table-container {
@@ -256,7 +256,7 @@
     font-weight: 600;
 }
 
-/* 规则表格样式 */
+/* Rules table styles */
 .keyword-rules-table {
     width: 100%;
     border-collapse: collapse;
@@ -303,7 +303,7 @@
     font-size: 14px;
 }
 
-/* 规则状态徽章 */
+/* Rule status badges */
 .keyword-rule-status {
     display: inline-flex;
     align-items: center;
@@ -331,7 +331,7 @@
     background: currentColor;
 }
 
-/* 规则名称和描述 */
+/* Rule names and descriptions */
 .keyword-rule-name {
     font-weight: 600;
     color: #1f2937;
@@ -344,7 +344,7 @@
     font-style: italic;
 }
 
-/* 规则匹配模式和值 */
+/* Rule matching modes and values */
 .keyword-chip-group {
     display: flex;
     flex-wrap: wrap;
@@ -398,7 +398,7 @@
     font-family: 'Courier New', monospace;
 }
 
-/* 操作按钮行 */
+/* Action button row */
 .keyword-row-actions {
     display: flex;
     gap: 6px;
@@ -442,7 +442,7 @@
 }
 
 /* ============================================
-   模态框样式优化
+   Refine dialog styles
    ============================================ */
 
 #ruleModal .modal-content,
@@ -473,7 +473,7 @@
     font-style: italic;
 }
 
-/* 测试结果显示 */
+/* Test result display */
 .test-result-container {
     margin-top: 24px;
     padding: 20px;
@@ -516,7 +516,7 @@
 }
 
 /* ============================================
-   响应式优化
+   Responsive layout refinements
    ============================================ */
 
 @media (max-width: 768px) {

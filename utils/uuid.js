@@ -1,11 +1,11 @@
 /**
- * BaSui：公共UUID生成器，别tm到处重复写了！
- * 遵循DRY原则 - Don't Repeat Yourself
+ * BaSui: Shared UUID generator; stop duplicating it everywhere!
+ * Follow DRY - Don't Repeat Yourself.
  */
 
 /**
- * 生成符合UUID v4格式的随机ID
- * @returns {string} UUID字符串
+ * Generate a random ID in UUID v4 format.
+ * @returns {string} UUID string
  */
 export function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {

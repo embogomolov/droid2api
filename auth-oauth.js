@@ -1,12 +1,12 @@
 /**
- * OAuth 认证模块
+ * OAuth authentication module
  *
- * 功能：
- * - 支持 DROID_REFRESH_KEY 环境变量
- * - 支持 data/auth.json 文件认证（项目级，Docker 友好）
- * - 支持 ~/.factory/auth.json 文件认证（用户级，兜底）
- * - WorkOS OAuth 自动刷新（6小时间隔，8小时有效期）
- * - 刷新失败时使用旧 token 兜底
+ * Features:
+ * - Supports the DROID_REFRESH_KEY environment variable
+ * - Supports file-based authentication via data/auth.json (project-level, Docker-friendly)
+ * - Supports file-based authentication via ~/.factory/auth.json (user-level fallback)
+ * - WorkOS OAuth automatic refresh (6-hour interval, 8-hour validity)
+ * - Falls back to the previous token if refresh fails
  */
 
 import fs from 'fs';
@@ -27,23 +27,23 @@ class OAuthAuthenticator {
   }
 
   /**
-   * 从 DROID_REFRESH_KEY 或 auth.json 加载认证信息
-   * 优先级：DROID_REFRESH_KEY > data/auth.json > ~/.factory/auth.json
+   * Load authentication credentials from DROID_REFRESH_KEY or auth.json
+   * Priority: DROID_REFRESH_KEY > data/auth.json > ~/.factory/auth.json
    *
-   * 🔧 BaSui：如果没有配置任何 refresh_token，直接返回 null，不报错！
+   * 🔧 BaSui: Return null without an error when no refresh_token is configured!
    */
   async loadOAuthConfig() {
-    // 1️⃣ 检查 DROID_REFRESH_KEY 环境变量
+    // 1️⃣ Check the DROID_REFRESH_KEY environment variable
     const envRefreshKey = process.env.DROID_REFRESH_KEY;
     if (envRefreshKey && envRefreshKey.trim() !== '') {
       logInfo('Using refresh token from DROID_REFRESH_KEY');
       this.authSource = 'env';
-      // 老王：保存到项目级 data/auth.json（Docker 友好）
+      // Lao Wang: Save to project-level data/auth.json (Docker-friendly)
       this.authFilePath = path.join(__dirname, 'data', 'auth.json');
       return { type: 'refresh', value: envRefreshKey.trim() };
     }
 
-    // 2️⃣ 检查 data/auth.json 文件（项目级，优先）⭐
+    // 2️⃣ Check data/auth.json (project-level, preferred)⭐
     const projectAuthPath = path.join(__dirname, 'data', 'auth.json');
     if (fs.existsSync(projectAuthPath)) {
       try {
@@ -52,12 +52,12 @@ class OAuthAuthenticator {
         this.authSource = 'project-file';
         this.authFilePath = projectAuthPath;
 
-        // 老王：恢复 lastRefreshTime，用于判断是否需要刷新
+        // Lao Wang: Restore lastRefreshTime to determine whether refresh is needed
         if (authData.last_refresh) {
           this.lastRefreshTime = authData.last_refresh;
         }
 
-        // 🔧 BaSui：修复字段读取 - 优先使用 refresh_token 作为缓存判断依据
+        // 🔧 BaSui: Fix field loading: use refresh_token first to determine whether credentials can be cached
         if (authData.refresh_token || authData.api_key) {
           this.tokenData = authData;
         }
@@ -73,8 +73,8 @@ class OAuthAuthenticator {
       }
     }
 
-    // 3️⃣ 检查 ~/.factory/auth.json 文件（用户级，兜底）
-    // 🔧 BaSui：添加环境变量控制 - 可通过 SKIP_FACTORY_AUTH=true 禁止读取用户级配置
+    // 3️⃣ Check ~/.factory/auth.json (user-level fallback)
+    // 🔧 BaSui: Add an environment switch: SKIP_FACTORY_AUTH=true disables user-level configuration loading
     if (process.env.SKIP_FACTORY_AUTH === 'true') {
       logInfo('SKIP_FACTORY_AUTH is set, skipping ~/.factory/auth.json');
       return null;
@@ -90,12 +90,12 @@ class OAuthAuthenticator {
           this.authSource = 'user-file';
           this.authFilePath = factoryAuthPath;
 
-          // 老王：恢复 lastRefreshTime
+          // Lao Wang: Restore lastRefreshTime
           if (authData.last_refresh) {
             this.lastRefreshTime = authData.last_refresh;
           }
 
-          // 🔧 BaSui：修复字段读取 - 优先使用 refresh_token 作为缓存判断依据
+          // 🔧 BaSui: Fix field loading: use refresh_token first to determine whether credentials can be cached
           if (authData.refresh_token || authData.api_key) {
             this.tokenData = authData;
           }
@@ -116,8 +116,8 @@ class OAuthAuthenticator {
   }
 
   /**
-   * WorkOS OAuth 刷新逻辑
-   * 调用 WorkOS API 刷新 access_token
+   * WorkOS OAuth refresh logic
+   * Call the WorkOS API to refresh access_token
    *
    * @param {string} refreshToken - refresh_token
    * @returns {Promise<{accessToken: string, refreshToken: string} | null>}
@@ -127,7 +127,7 @@ class OAuthAuthenticator {
 
     logInfo('Refreshing API key via WorkOS OAuth...');
 
-    // 🔧 修复 BaSui：检查 WORKOS_CLIENT_ID 是否配置
+    // 🔧 Fix, BaSui: Check whether WORKOS_CLIENT_ID is configured
     const clientId = process.env.WORKOS_CLIENT_ID || 'client_factory';
     if (!process.env.WORKOS_CLIENT_ID) {
       logWarning('WORKOS_CLIENT_ID not set, using default: client_factory');
@@ -150,13 +150,13 @@ class OAuthAuthenticator {
         const errorText = await response.text();
         logError(`WorkOS OAuth refresh failed: ${response.status} ${response.statusText}`, errorText);
 
-        // 🔧 修复 BaSui：提供更友好的错误提示
+        // 🔧 Fix, BaSui: Provide clearer error messages
         if (response.status === 400 && errorText.includes('invalid_client')) {
-          logError('❌ OAuth 认证失败！可能的原因：');
-          logError('  1. WORKOS_CLIENT_ID 环境变量未设置或不正确');
-          logError('  2. refresh_token 已过期或无效');
-          logError('  3. WorkOS API 配置变更');
-          logError('💡 建议：检查环境变量配置或联系管理员');
+          logError('❌ OAuth authentication failed. Possible causes: ');
+          logError('  1. WORKOS_CLIENT_ID environment variable is missing or incorrect');
+          logError('  2. refresh_token has expired or is invalid');
+          logError('  3. WorkOS API configuration has changed');
+          logError('💡 Tip: Check the environment variables or contact the administrator');
         }
 
         return null;
@@ -173,7 +173,7 @@ class OAuthAuthenticator {
 
       return {
         accessToken: data.access_token,
-        refreshToken: data.refresh_token || refreshToken, // 如果没有新的 refresh_token，使用旧的
+        refreshToken: data.refresh_token || refreshToken, // Reuse the previous refresh_token if no new one is returned
       };
     } catch (error) {
       logError('Failed to refresh API key', error);
@@ -182,7 +182,7 @@ class OAuthAuthenticator {
   }
 
   /**
-   * 保存 token 到文件
+   * Save tokens to a file
    *
    * @param {string} accessToken - API key (access_token)
    * @param {string} refreshToken - refresh_token
@@ -196,19 +196,19 @@ class OAuthAuthenticator {
     const tokenData = {
       api_key: accessToken,
       refresh_token: refreshToken,
-      expires_at: Date.now() + (8 * 60 * 60 * 1000), // 老王：8小时后过期
+      expires_at: Date.now() + (8 * 60 * 60 * 1000), // Lao Wang: Expires after 8 hours
       last_refresh: Date.now(),
     };
 
     try {
-      // 老王：确保目录存在（修复问题5）
+      // Lao Wang: Ensure the directory exists (fix for issue 5)
       const dir = path.dirname(this.authFilePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         logInfo(`Created directory: ${dir}`);
       }
 
-      // 老王：保存到文件
+      // Lao Wang: Save to a file
       fs.writeFileSync(this.authFilePath, JSON.stringify(tokenData, null, 2), 'utf-8');
       logInfo(`Saved OAuth tokens to ${this.authFilePath}`);
     } catch (error) {
@@ -217,15 +217,15 @@ class OAuthAuthenticator {
   }
 
   /**
-   * 判断是否需要刷新
-   * - 如果从未刷新过，返回 true
-   * - 如果距离上次刷新超过 6 小时，返回 true
-   * - 如果 token 已过期（超过 8 小时），返回 true
+   * Determine whether a refresh is needed
+   * - If never refreshed, return true
+   * - If more than 6 hours have elapsed since the last refresh, return true
+   * - If the token has expired (after 8 hours), return true
    *
    * @returns {boolean}
    */
   shouldRefresh() {
-    // 老王：如果有 expires_at，优先判断是否过期（修复问题4）
+    // Lao Wang: Check expires_at first when present (fix for issue 4)
     if (this.tokenData?.expires_at) {
       const isExpired = Date.now() >= this.tokenData.expires_at;
       if (isExpired) {
@@ -234,13 +234,13 @@ class OAuthAuthenticator {
       }
     }
 
-    // 老王：如果没有 lastRefreshTime，说明从未刷新过
+    // Lao Wang: Missing lastRefreshTime means the token has never been refreshed
     if (!this.lastRefreshTime) {
       logDebug('Never refreshed, refresh needed');
       return true;
     }
 
-    // 老王：距离上次刷新超过 6 小时，需要刷新
+    // Lao Wang: Refresh when more than 6 hours have elapsed since the last refresh
     const hoursSinceRefresh = (Date.now() - this.lastRefreshTime) / (1000 * 60 * 60);
     const needsRefresh = hoursSinceRefresh >= 6;
 
@@ -252,14 +252,14 @@ class OAuthAuthenticator {
   }
 
   /**
-   * 获取 OAuth API Key
+   * Get the OAuth API Key
    *
-   * 逻辑：
-   * 1. 如果是静态 api_key，直接返回
-   * 2. 如果是 refresh_token：
-   *    - 先尝试使用缓存的 token（如果未过期）
-   *    - 如果需要刷新或首次获取，调用 refreshApiKey()
-   *    - 如果刷新失败，尝试使用旧的 token 兜底（修复问题3）
+   * Logic:
+   * 1. Return a static api_key directly
+   * 2. If using a refresh_token:
+   *    - Try the cached token first (if it has not expired)
+   *    - Call refreshApiKey() when a refresh or initial token is needed
+   *    - If refresh fails, try the previous token as a fallback (fix for issue 3)
    *
    * @returns {Promise<string | null>}
    */
@@ -269,21 +269,21 @@ class OAuthAuthenticator {
       return null;
     }
 
-    // 老王：如果是静态 api_key，直接返回
+    // Lao Wang: Return a static api_key directly
     if (config.type === 'api_key') {
       logDebug('Using static API key from auth.json');
       return config.value;
     }
 
-    // 老王：如果是 refresh_token
+    // Lao Wang: If using a refresh_token
     if (config.type === 'refresh') {
-      // 老王：先尝试使用缓存的 token（如果未过期）
+      // Lao Wang: Try the cached token first (if it has not expired)
       if (this.tokenData?.api_key && !this.shouldRefresh()) {
         logDebug('Using cached OAuth token (not expired)');
         return this.tokenData.api_key;
       }
 
-      // 老王：需要刷新或首次获取
+      // Lao Wang: Refresh or initial token retrieval is needed
       logDebug('Refreshing OAuth token...');
       try {
         const result = await this.refreshApiKey(config.value);
@@ -302,7 +302,7 @@ class OAuthAuthenticator {
         logError('Failed to refresh OAuth token', error);
       }
 
-      // 老王：刷新失败，尝试使用旧的 token 兜底（修复问题3）
+      // Lao Wang: If refresh fails, try the previous token as a fallback (fix for issue 3)
       if (this.tokenData?.api_key) {
         const hoursUntilExpiry = this.tokenData.expires_at
           ? (this.tokenData.expires_at - Date.now()) / (1000 * 60 * 60)
@@ -324,8 +324,8 @@ class OAuthAuthenticator {
   }
 
   /**
-   * 初始化 OAuth 认证
-   * 在服务器启动时调用
+   * Initialize OAuth authentication
+   * Called at server startup
    */
   async initialize() {
     logInfo('Initializing OAuth authentication...');
@@ -335,7 +335,7 @@ class OAuthAuthenticator {
       if (config) {
         logInfo(`OAuth authentication enabled (source: ${this.authSource})`);
 
-        // 老王：如果是 refresh_token，尝试预刷新
+        // Lao Wang: Try refreshing in advance when using a refresh_token
         if (config.type === 'refresh' && this.shouldRefresh()) {
           logInfo('Pre-refreshing OAuth token on startup...');
           await this.getOAuthApiKey();
@@ -349,5 +349,5 @@ class OAuthAuthenticator {
   }
 }
 
-// 导出单例
+// Export the singleton
 export const oauthAuthenticator = new OAuthAuthenticator();

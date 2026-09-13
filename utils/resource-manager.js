@@ -1,6 +1,6 @@
 /**
- * 全局资源管理器
- * 防止内存泄漏，统一管理所有资源
+ * Global resource manager
+ * Manage resources centrally to prevent memory leaks.
  */
 
 import { logInfo, logError } from '../logger.js';
@@ -12,12 +12,12 @@ class ResourceManager {
     this.listeners = new Map();
     this.connections = new Map();
     
-    // 注册进程退出清理
+    // Register cleanup handlers for process shutdown.
     this.registerExitHandlers();
   }
   
   /**
-   * 注册定时器
+   * Register a timeout timer.
    */
   addTimer(id, timer) {
     this.timers.set(id, timer);
@@ -25,7 +25,7 @@ class ResourceManager {
   }
   
   /**
-   * 清理定时器
+   * Clear a timeout timer.
    */
   clearTimer(id) {
     const timer = this.timers.get(id);
@@ -36,7 +36,7 @@ class ResourceManager {
   }
   
   /**
-   * 注册间隔定时器
+   * Register an interval timer.
    */
   addInterval(id, interval) {
     this.intervals.set(id, interval);
@@ -44,7 +44,7 @@ class ResourceManager {
   }
   
   /**
-   * 清理间隔定时器
+   * Clear an interval timer.
    */
   clearInterval(id) {
     const interval = this.intervals.get(id);
@@ -55,7 +55,7 @@ class ResourceManager {
   }
   
   /**
-   * 注册事件监听器
+   * Register an event listener.
    */
   addEventListener(id, emitter, event, listener) {
     const key = `${id}_${event}`;
@@ -64,7 +64,7 @@ class ResourceManager {
   }
   
   /**
-   * 移除事件监听器
+   * Remove an event listener.
    */
   removeEventListener(id, event) {
     const key = `${id}_${event}`;
@@ -76,30 +76,30 @@ class ResourceManager {
   }
   
   /**
-   * 清理所有资源
+   * Clean up all resources.
    */
   cleanupAll() {
     logInfo('Cleaning up all resources...');
     
-    // 清理所有定时器
+    // Clear all timeout timers.
     for (const [id, timer] of this.timers) {
       clearTimeout(timer);
     }
     this.timers.clear();
     
-    // 清理所有间隔定时器
+    // Clear all interval timers.
     for (const [id, interval] of this.intervals) {
       clearInterval(interval);
     }
     this.intervals.clear();
     
-    // 清理所有事件监听器
+    // Remove all event listeners.
     for (const [key, item] of this.listeners) {
       item.emitter.removeListener(item.event, item.listener);
     }
     this.listeners.clear();
     
-    // 清理所有连接
+    // Close all connections.
     for (const [id, connection] of this.connections) {
       if (connection.close) connection.close();
       if (connection.destroy) connection.destroy();
@@ -111,7 +111,7 @@ class ResourceManager {
   }
   
   /**
-   * 注册进程退出处理
+   * Register process shutdown handlers.
    */
   registerExitHandlers() {
     const cleanup = () => {
@@ -124,7 +124,7 @@ class ResourceManager {
   }
 }
 
-// 单例模式
+// Singleton instance
 const resourceManager = new ResourceManager();
 
 export default resourceManager;

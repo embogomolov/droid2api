@@ -1,13 +1,13 @@
 /**
- * 前端性能优化工具库
- * 解决渲染失败和性能问题
+ * Frontend performance utilities
+ * Address rendering failures and performance issues
  * @author BaSui
  */
 
-// ==================== DOM渲染优化 ====================
+// ==================== DOM rendering optimization ====================
 
 /**
- * 批量DOM更新 - 使用DocumentFragment减少重排
+ * Batch DOM updates using DocumentFragment to reduce layout recalculation
  */
 class BatchDOMUpdater {
     constructor() {
@@ -33,7 +33,7 @@ class BatchDOMUpdater {
 }
 
 /**
- * 虚拟滚动实现 - 只渲染可见区域的元素
+ * Virtual scrolling: render only items in and around the visible viewport
  */
 class VirtualScroller {
     constructor(container, itemHeight, renderItem) {
@@ -53,7 +53,7 @@ class VirtualScroller {
         this.container.style.overflow = 'auto';
         this.container.addEventListener('scroll', this.scrollHandler, { passive: true });
         
-        // 创建占位元素
+        // Create a spacer element
         this.spacer = document.createElement('div');
         this.spacer.style.position = 'absolute';
         this.spacer.style.top = '0';
@@ -62,7 +62,7 @@ class VirtualScroller {
         this.spacer.style.visibility = 'hidden';
         this.container.appendChild(this.spacer);
         
-        // 创建内容容器
+        // Create the content container
         this.content = document.createElement('div');
         this.content.style.position = 'relative';
         this.container.appendChild(this.content);
@@ -81,7 +81,7 @@ class VirtualScroller {
 
     render() {
         const containerHeight = this.container.clientHeight;
-        const buffer = 5; // 额外渲染的行数
+        const buffer = 5; // Number of extra rows to render outside the viewport
         
         this.visibleStart = Math.max(0, Math.floor(this.scrollTop / this.itemHeight) - buffer);
         this.visibleEnd = Math.min(
@@ -89,10 +89,10 @@ class VirtualScroller {
             Math.ceil((this.scrollTop + containerHeight) / this.itemHeight) + buffer
         );
 
-        // 清空内容
+        // Clear the content
         this.content.innerHTML = '';
         
-        // 使用DocumentFragment批量插入
+        // Batch insertions using DocumentFragment
         const fragment = document.createDocumentFragment();
         
         for (let i = this.visibleStart; i < this.visibleEnd; i++) {
@@ -113,10 +113,10 @@ class VirtualScroller {
     }
 }
 
-// ==================== 防抖和节流 ====================
+// ==================== Debouncing and throttling ====================
 
 /**
- * 防抖函数 - 延迟执行
+ * Debounce: defer execution until calls stop for the specified interval
  */
 function debounce(func, wait = 300) {
     let timeout;
@@ -131,7 +131,7 @@ function debounce(func, wait = 300) {
 }
 
 /**
- * 节流函数 - 限制执行频率
+ * Throttle: limit execution frequency
  */
 function throttle(func, limit = 100) {
     let inThrottle;
@@ -145,7 +145,7 @@ function throttle(func, limit = 100) {
 }
 
 /**
- * RAF节流 - 使用requestAnimationFrame节流
+ * RAF throttle: limit execution to animation frames
  */
 function rafThrottle(func) {
     let ticking = false;
@@ -160,10 +160,10 @@ function rafThrottle(func) {
     };
 }
 
-// ==================== 内存管理 ====================
+// ==================== Memory management ====================
 
 /**
- * 对象池 - 复用对象减少GC压力
+ * Object pool: reuse objects to reduce garbage collection pressure
  */
 class ObjectPool {
     constructor(createFn, resetFn, maxSize = 100) {
@@ -192,10 +192,10 @@ class ObjectPool {
     }
 }
 
-// ==================== 懒加载 ====================
+// ==================== Lazy loading ====================
 
 /**
- * 图片懒加载
+ * Lazy loading for images
  */
 class LazyLoader {
     constructor(options = {}) {
@@ -250,10 +250,10 @@ class LazyLoader {
     }
 }
 
-// ==================== 渲染优化 ====================
+// ==================== Rendering optimization ====================
 
 /**
- * 分片渲染 - 将大任务分成小块
+ * Chunked rendering: split large tasks into smaller batches
  */
 class ChunkRenderer {
     constructor(data, renderFn, options = {}) {
@@ -291,7 +291,7 @@ class ChunkRenderer {
             this.currentIndex + this.options.chunkSize
         );
 
-        // 使用requestIdleCallback优化
+        // Schedule work during idle periods using requestIdleCallback
         if ('requestIdleCallback' in window) {
             requestIdleCallback(deadline => {
                 while (deadline.timeRemaining() > 0 && chunk.length > 0) {
@@ -310,7 +310,7 @@ class ChunkRenderer {
                 }
             });
         } else {
-            // 降级方案
+            // Fallback implementation
             requestAnimationFrame(() => {
                 chunk.forEach((item, i) => {
                     this.renderFn(item, this.currentIndex++);
@@ -330,10 +330,10 @@ class ChunkRenderer {
     }
 }
 
-// ==================== 缓存管理 ====================
+// ==================== Cache management ====================
 
 /**
- * LRU缓存 - 最近最少使用缓存
+ * LRU cache: evict the least recently used entry
  */
 class LRUCache {
     constructor(maxSize = 100) {
@@ -345,7 +345,7 @@ class LRUCache {
         if (!this.cache.has(key)) return undefined;
         
         const value = this.cache.get(key);
-        // 移到最后（最近使用）
+        // Move to the end to mark as most recently used
         this.cache.delete(key);
         this.cache.set(key, value);
         return value;
@@ -355,7 +355,7 @@ class LRUCache {
         if (this.cache.has(key)) {
             this.cache.delete(key);
         } else if (this.cache.size >= this.maxSize) {
-            // 删除最旧的
+            // Remove the least recently used entry
             const firstKey = this.cache.keys().next().value;
             this.cache.delete(firstKey);
         }
@@ -367,10 +367,10 @@ class LRUCache {
     }
 }
 
-// ==================== Web Worker 支持 ====================
+// ==================== Web Worker support ====================
 
 /**
- * Worker池 - 管理多个Worker
+ * Worker pool: manage multiple Web Workers
  */
 class WorkerPool {
     constructor(workerScript, poolSize = 4) {
@@ -432,7 +432,7 @@ class WorkerPool {
     }
 }
 
-// ==================== 导出全局对象 ====================
+// ==================== Expose the utilities as a global object ====================
 
 window.PerformanceUtils = {
     BatchDOMUpdater,
@@ -447,4 +447,4 @@ window.PerformanceUtils = {
     WorkerPool
 };
 
-console.log('✅ 性能优化工具库已加载 - BaSui');
+console.log('✅ Performance utilities loaded - BaSui');

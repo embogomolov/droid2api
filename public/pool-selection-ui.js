@@ -1,33 +1,33 @@
 /**
- * 🎯 密钥池选择 UI 功能模块
- * BaSui: 这个文件管理所有与密钥池选择相关的 UI 交互！
- * 让用户能方便地选择把密钥添加到哪个池子，或者选择导出/测试哪个池子！
+ * 🎯 Key pool selection UI module
+ * BaSui: Manage all UI interactions related to key pool selection.
+ * Let users choose the destination pool for keys and the pools to export or test.
  */
 
-// ===== 🎯 动态加载池子选项到各个下拉框 =====
+// ===== 🎯 Populate pool options in dropdown menus =====
 
 /**
- * 加载池子选项到指定的 select 元素
- * @param {string} selectId - select 元素的 ID
- * @param {boolean} includeDefault - 是否包含"默认池"选项
+ * Load pool options into the specified select element
+ * @param {string} selectId - ID of the select element
+ * @param {boolean} includeDefault - Whether to include the "Default pool" option
  */
 async function loadPoolGroupOptions(selectId, includeDefault = true) {
     try {
         const select = document.getElementById(selectId);
         if (!select) return;
 
-        // 先清空现有选项（保留默认池选项）
+        // Clear existing options, retaining the default pool option if requested
         if (includeDefault) {
-            select.innerHTML = '<option value="">默认池 (default)</option>';
+            select.innerHTML = '<option value="">Default pool (default)</option>';
         } else {
             select.innerHTML = '';
         }
 
-        // 获取密钥池列表
+        // Fetch the list of key pools
         const response = await apiRequest('/pool-groups');
         const poolGroups = response.data || [];
 
-        // 添加池子选项
+        // Add pool options
         poolGroups.forEach(pool => {
             const option = document.createElement('option');
             option.value = pool.id;
@@ -35,44 +35,44 @@ async function loadPoolGroupOptions(selectId, includeDefault = true) {
             select.appendChild(option);
         });
 
-        console.log(`✅ 已加载 ${poolGroups.length} 个池子选项到 #${selectId}`);
+        console.log(`✅ Loaded ${poolGroups.length} pool options into #${selectId}`);
     } catch (error) {
-        console.error(`❌ 加载池子选项失败 (#${selectId}):`, error);
+        console.error(`❌ Failed to load pool options (#${selectId}):`, error);
     }
 }
 
 /**
- * 初始化所有下拉框的池子选项
- * BaSui: 在页面加载时调用，一次性加载所有池子选项！
+ * Initialize pool options in all dropdown menus
+ * BaSui: Call on page load to populate all pool selectors.
  */
 async function initializeAllPoolSelects() {
-    // 加载"添加密钥"模态框的池子选项
+    // Load pool options for the Add key dialog
     await loadPoolGroupOptions('newKeyPoolGroup', true);
 
-    // 加载"批量导入"模态框的池子选项
+    // Load pool options for the Bulk import dialog
     await loadPoolGroupOptions('batchImportPoolGroup', true);
 
-    // 加载"导出密钥"模态框的池子选项（多选）
+    // Load pool options for the Export keys dialog (multiple selection)
     await loadPoolGroupOptions('exportPoolGroup', true);
 
-    // 加载"批量测试"模态框的池子选项
+    // Load pool options for the Bulk test dialog
     await loadPoolGroupOptions('testPoolGroup', true);
 
-    // 加载"修改密钥池"模态框的池子选项
+    // Load pool options for the Change pool dialog
     await loadPoolGroupOptions('changePoolSelect', false);
 
-    // 加载密钥管理页面的池子筛选器（需要包含"全部"选项）
+    // Populate the key management pool filter, including an All pools option
     const poolFilterSelect = document.getElementById('poolGroupFilter');
     if (poolFilterSelect) {
         try {
-            // 先保留默认的"全部池子"选项
-            poolFilterSelect.innerHTML = '<option value="all">全部池子</option>';
+            // Start with the default All pools option
+            poolFilterSelect.innerHTML = '<option value="all">All pools</option>';
 
-            // 获取密钥池列表
+            // Fetch the list of key pools
             const response = await apiRequest('/pool-groups');
             const poolGroups = response.data || [];
 
-            // 添加具体的池子选项
+            // Add an option for each pool
             poolGroups.forEach(pool => {
                 const option = document.createElement('option');
                 option.value = pool.id;
@@ -80,31 +80,31 @@ async function initializeAllPoolSelects() {
                 poolFilterSelect.appendChild(option);
             });
 
-            console.log(`✅ 已加载 ${poolGroups.length} 个池子选项到密钥池筛选器`);
+            console.log(`✅ Loaded ${poolGroups.length} pool options into the key pool filter`);
         } catch (error) {
-            console.error('❌ 加载池子筛选器失败:', error);
+            console.error('❌ Failed to load the pool filter:', error);
         }
     }
 
-    console.log('🎉 所有池子选项加载完成！');
+    console.log('🎉 All pool selectors loaded.');
 }
 
-// ===== 📥 导出密钥功能 =====
+// ===== 📥 Key export =====
 
 /**
- * 显示导出密钥模态框
- * BaSui: 替换原来的直接导出，改成先弹窗让用户选择！
+ * Show the Export keys dialog
+ * BaSui: Show an options dialog instead of exporting immediately.
  */
 function showExportKeysModal() {
-    // 加载最新的池子选项
+    // Refresh pool options
     loadPoolGroupOptions('exportPoolGroup', true);
 
-    // 显示模态框
+    // Show the dialog
     showModal('exportKeysModal');
 }
 
 /**
- * 切换"全部池"选项
+ * Toggle the All pools option
  */
 function toggleExportAllPools() {
     const allPoolsChecked = document.getElementById('exportAllPools').checked;
@@ -118,34 +118,34 @@ function toggleExportAllPools() {
 }
 
 /**
- * 确认导出密钥
+ * Confirm key export
  */
 async function confirmExportKeys() {
     try {
-        // 获取用户选择
+        // Read the selected options
         const exportAll = document.getElementById('exportAllPools').checked;
         const format = document.querySelector('input[name="exportFormat"]:checked').value;
         const status = document.getElementById('exportStatusFilter').value;
 
         let poolGroups = [];
         if (!exportAll) {
-            // 获取选中的池子
+            // Get the selected pools
             const select = document.getElementById('exportPoolGroup');
             poolGroups = Array.from(select.selectedOptions).map(opt => opt.value);
 
             if (poolGroups.length === 0) {
-                alert('请至少选择一个池子！');
+                alert('Select at least one pool.');
                 return;
             }
         }
 
-        // 构造导出URL
+        // Build the export URL
         let url = `/admin/keys/export?status=${status}&format=${format}`;
         if (!exportAll && poolGroups.length > 0) {
             url += `&poolGroups=${poolGroups.join(',')}`;
         }
 
-        // 发送请求
+        // Send the request
         const response = await fetch(url, {
             method: 'GET',
             headers: {
@@ -158,7 +158,7 @@ async function confirmExportKeys() {
             throw new Error(error.message || `HTTP ${response.status}`);
         }
 
-        // 获取文件名
+        // Get the filename
         const contentDisposition = response.headers.get('Content-Disposition');
         let filename = 'keys_export.json';
         if (contentDisposition) {
@@ -166,7 +166,7 @@ async function confirmExportKeys() {
             if (match) filename = match[1];
         }
 
-        // 下载文件
+        // Download the file
         const blob = await response.blob();
         const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -177,35 +177,35 @@ async function confirmExportKeys() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(downloadUrl);
 
-        // 关闭模态框
+        // Close the dialog
         closeModal('exportKeysModal');
 
-        alert(`✅ 导出成功！文件名: ${filename}`);
+        alert(`✅ Export complete. Filename: ${filename}`);
     } catch (error) {
-        console.error('❌ 导出失败:', error);
-        alert(`导出失败: ${error.message}`);
+        console.error('❌ Export failed:', error);
+        alert(`Export failed: ${error.message}`);
     }
 }
 
-// ===== 🧪 批量测试功能 =====
+// ===== 🧪 Bulk key testing =====
 
 /**
- * 显示批量测试模态框
- * BaSui: 替换原来的直接测试，改成先弹窗让用户选择！
+ * Show the Bulk test dialog
+ * BaSui: Show an options dialog instead of testing immediately.
  */
 function showBatchTestModal() {
-    // 加载最新的池子选项
+    // Refresh pool options
     loadPoolGroupOptions('testPoolGroup', true);
 
-    // 清空测试结果
+    // Clear previous test results
     document.getElementById('testResult').innerHTML = '';
 
-    // 显示模态框
+    // Show the dialog
     showModal('batchTestModal');
 }
 
 /**
- * 切换测试池子选项
+ * Toggle pool selection for testing
  */
 function toggleTestPoolOptions() {
     const testSpecific = document.querySelector('input[name="testPool"][value="specific"]').checked;
@@ -218,7 +218,7 @@ function toggleTestPoolOptions() {
     }
 }
 
-// 监听单选按钮变化
+// Listen for radio button changes
 document.addEventListener('DOMContentLoaded', () => {
     const testPoolRadios = document.querySelectorAll('input[name="testPool"]');
     testPoolRadios.forEach(radio => {
@@ -227,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * 确认批量测试
+ * Confirm bulk testing
  */
 async function confirmBatchTest() {
     try {
@@ -240,11 +240,11 @@ async function confirmBatchTest() {
             poolGroup = document.getElementById('testPoolGroup').value;
         }
 
-        // 显示加载提示
+        // Show a loading indicator
         const resultDiv = document.getElementById('testResult');
-        resultDiv.innerHTML = '<div class="loading">🧪 正在测试中，请稍候...</div>';
+        resultDiv.innerHTML = '<div class="loading">🧪 Testing keys, please wait...</div>';
 
-        // 发送测试请求
+        // Send the test request
         let url = `/admin/keys/test-all?concurrency=${concurrency}`;
         if (poolGroup) {
             url += `&poolGroup=${poolGroup}`;
@@ -253,71 +253,71 @@ async function confirmBatchTest() {
         const response = await apiRequest(url, 'POST');
         const data = response.data;
 
-        // 显示测试结果
+        // Show test results
         let message = '<div class="result-summary success">';
-        message += '<h3>🎉 批量测试完成</h3>';
-        message += `<p>📊 总密钥数: ${data.total} 个</p>`;
-        message += `<p>🔍 已测试: ${data.tested} 个</p>`;
-        message += `<p>✅ 测试通过: ${data.success} 个</p>`;
-        message += `<p>❌ 测试失败: ${data.failed} 个</p>`;
-        message += `<p>🚫 自动封禁: ${data.banned} 个</p>`;
+        message += '<h3>🎉 Bulk test complete</h3>';
+        message += `<p>📊 Total keys: ${data.total}</p>`;
+        message += `<p>🔍 Tested: ${data.tested}</p>`;
+        message += `<p>✅ Passed: ${data.success}</p>`;
+        message += `<p>❌ Failed: ${data.failed}</p>`;
+        message += `<p>🚫 Automatically blocked in proxy: ${data.banned}</p>`;
 
         if (data.banned > 0) {
-            message += '<p class="hint">💡 提示: 已自动封禁余额不足的密钥</p>';
+            message += '<p class="hint">💡 Keys with no remaining credit have been automatically blocked in this proxy.</p>';
         }
 
         message += '</div>';
 
         resultDiv.innerHTML = message;
 
-        // BaSui: 自动刷新列表显示最新测试结果
+        // BaSui: Refresh the list automatically to show the latest test results
         if (autoRefresh) {
             setTimeout(() => {
                 if (typeof refreshData === 'function') {
                     refreshData();
                 } else if (typeof fetchKeys === 'function') {
                     fetchKeys();
-                    fetchStats();  // 同时刷新统计信息
+                    fetchStats();  // Also refresh statistics
                 }
                 closeModal('batchTestModal');
             }, 2000);
         }
     } catch (error) {
-        console.error('❌ 批量测试失败:', error);
+        console.error('❌ Bulk test failed:', error);
         const resultDiv = document.getElementById('testResult');
-        resultDiv.innerHTML = `<div class="result-summary error">❌ 测试失败: ${error.message}</div>`;
+        resultDiv.innerHTML = `<div class="result-summary error">❌ Test failed: ${error.message}</div>`;
     }
 }
 
-// ===== 📤 批量导入功能增强 =====
+// ===== 📤 Extended bulk import functionality =====
 
 /**
- * 显示批量导入模态框
- * BaSui: 增强版，包含池子选择！
+ * Show the Bulk import dialog
+ * BaSui: Extended version with pool selection.
  */
 function showBatchImportModal() {
-    // 加载最新的池子选项
+    // Refresh pool options
     loadPoolGroupOptions('batchImportPoolGroup', true);
 
-    // 清空输入和结果
+    // Clear the input and previous results
     document.getElementById('batchKeysInput').value = '';
     document.getElementById('importResult').innerHTML = '';
 
-    // 显示模态框
+    // Show the dialog
     showModal('batchImportModal');
 }
 
 /**
- * 批量导入密钥（增强版）
- * BaSui: 支持自动测试，可检测密钥有效性，402错误自动拉黑！
+ * Bulk key import with pool selection and optional testing
+ * BaSui: Optionally test imported keys and block them in the proxy on HTTP 402.
  */
 async function batchImport() {
     const keysText = document.getElementById('batchKeysInput').value.trim();
     const poolGroup = document.getElementById('batchImportPoolGroup').value;
-    const autoTest = document.getElementById('autoTestKeys').checked; // BaSui: 获取自动测试选项
+    const autoTest = document.getElementById('autoTestKeys').checked; // BaSui: Read the automatic testing option
 
     if (!keysText) {
-        alert('请输入密钥');
+        alert('Enter a key or list of keys.');
         return;
     }
 
@@ -326,18 +326,18 @@ async function batchImport() {
     try {
         const response = await apiRequest('/keys/batch', 'POST', {
             keys,
-            poolGroup: poolGroup || undefined,  // 如果是空字符串，传 undefined
-            autoTest: autoTest  // BaSui: 传递自动测试参数
+            poolGroup: poolGroup || undefined,  // Pass undefined when the selection is an empty string
+            autoTest: autoTest  // BaSui: Pass the automatic testing option
         });
         const result = response.data;
 
-        // BaSui: 兼容新旧两种返回格式（新格式包含import和test字段）
+        // BaSui: Support both response formats; the newer format contains import and test fields
         const importResult = result.import || result;
         const testResult = result.test;
 
         const resultDiv = document.getElementById('importResult');
 
-        // 根据导入结果智能判断状态
+        // Determine the display status from the import results
         let statusClass = 'success';
         let statusEmoji = '✅';
         let summaryText = '';
@@ -345,60 +345,60 @@ async function batchImport() {
         if (importResult.success > 0) {
             statusClass = 'success';
             statusEmoji = '✅';
-            summaryText = `成功导入 ${importResult.success} 个密钥！`;
+            summaryText = `Successfully imported ${importResult.success} keys.`;
         } else if (importResult.duplicate > 0 && importResult.invalid === 0) {
             statusClass = 'warning';
             statusEmoji = '🔄';
-            summaryText = `所有密钥都已存在（${importResult.duplicate} 个重复）`;
+            summaryText = `All keys already exist (${importResult.duplicate} duplicates).`;
         } else if (importResult.invalid > 0) {
             statusClass = 'error';
             statusEmoji = '❌';
-            summaryText = `导入失败，有 ${importResult.invalid} 个无效密钥`;
+            summaryText = `Import failed: ${importResult.invalid} invalid keys.`;
         } else {
             statusClass = 'error';
             statusEmoji = '❌';
-            summaryText = '导入失败';
+            summaryText = 'Import failed';
         }
 
-        // BaSui: 构建导入结果HTML
+        // BaSui: Build the import results HTML
         let resultHTML = `
             <div class="result-summary ${statusClass}">
                 <h3>${statusEmoji} ${summaryText}</h3>
-                <p>📊 总数: ${keys.length}</p>
-                <p>✅ 成功: ${importResult.success}</p>
-                <p>🔄 重复: ${importResult.duplicate}</p>
-                <p>❌ 无效: ${importResult.invalid}</p>
-                ${poolGroup ? `<p>🎯 导入到池: ${poolGroup}</p>` : ''}
+                <p>📊 Total: ${keys.length}</p>
+                <p>✅ Successful: ${importResult.success}</p>
+                <p>🔄 Duplicates: ${importResult.duplicate}</p>
+                <p>❌ Invalid: ${importResult.invalid}</p>
+                ${poolGroup ? `<p>🎯 Destination pool: ${poolGroup}</p>` : ''}
         `;
 
-        // BaSui: 如果有测试结果，显示测试统计
+        // BaSui: Show test statistics if testing was performed
         if (testResult && testResult.tested > 0) {
             const testStatusClass = testResult.success === testResult.tested ? 'success' : 
                                    testResult.banned > 0 ? 'warning' : 'error';
             resultHTML += `
                 <hr style="margin: 10px 0; border: 1px solid #ddd;">
-                <h4>🧪 自动测试结果</h4>
-                <p>🔍 已测试: ${testResult.tested}</p>
-                <p>✅ 成功: ${testResult.success}</p>
-                <p>❌ 失败: ${testResult.failed}</p>
-                ${testResult.banned > 0 ? `<p>🚫 已拉黑: ${testResult.banned} (402错误)</p>` : ''}
+                <h4>🧪 Automatic test results</h4>
+                <p>🔍 Tested: ${testResult.tested}</p>
+                <p>✅ Successful: ${testResult.success}</p>
+                <p>❌ Failed: ${testResult.failed}</p>
+                ${testResult.banned > 0 ? `<p>🚫 Blocked in proxy: ${testResult.banned} (HTTP 402)</p>` : ''}
             `;
         }
 
         resultHTML += `</div>`;
         resultDiv.innerHTML = resultHTML;
 
-        // BaSui: 如果有成功导入或测试完成，2秒后刷新列表
+        // BaSui: Refresh the list after two seconds if any keys were imported or tested
         if (importResult.success > 0 || (testResult && testResult.tested > 0)) {
             setTimeout(() => {
-                // BaSui: 检查refreshData函数是否存在（在app.js中定义）
+                // BaSui: Check whether refreshData is available (defined in app.js)
                 if (typeof refreshData === 'function') {
                     refreshData();
                 } else if (typeof fetchKeys === 'function') {
-                    // 如果refreshData不存在，至少刷新密钥列表
+                    // If refreshData is unavailable, refresh at least the key list
                     fetchKeys();
                 } else {
-                    // 最后的备选方案：重新加载页面
+                    // Final fallback: reload the page
                     location.reload();
                 }
             }, 2000);
@@ -407,7 +407,7 @@ async function batchImport() {
         const resultDiv = document.getElementById('importResult');
         resultDiv.innerHTML = `
             <div class="result-summary error">
-                <h3>❌ 导入失败</h3>
+                <h3>❌ Import failed</h3>
                 <p>${err.message}</p>
             </div>
         `;
@@ -415,23 +415,23 @@ async function batchImport() {
 }
 
 /**
- * 显示添加密钥模态框
- * BaSui: 增强版，包含池子选择！
+ * Show the Add key dialog
+ * BaSui: Extended version with pool selection.
  */
 function showAddKeyModal() {
-    // 加载最新的池子选项
+    // Refresh pool options
     loadPoolGroupOptions('newKeyPoolGroup', true);
 
-    // 清空输入
+    // Clear the input fields
     document.getElementById('newKeyInput').value = '';
     document.getElementById('newKeyNotes').value = '';
 
-    // 显示模态框
+    // Show the dialog
     showModal('addKeyModal');
 }
 
 /**
- * 添加密钥（增强版）
+ * Add a key with pool selection
  */
 async function addKey() {
     const key = document.getElementById('newKeyInput').value.trim();
@@ -439,12 +439,12 @@ async function addKey() {
     const poolGroup = document.getElementById('newKeyPoolGroup').value;
 
     if (!key) {
-        alert('请输入密钥');
+        alert('Enter a key or list of keys.');
         return;
     }
 
     if (!key.startsWith('fk-')) {
-        alert('密钥格式错误，必须以 fk- 开头');
+        alert('Invalid key format: keys must start with fk-.');
         return;
     }
 
@@ -454,25 +454,25 @@ async function addKey() {
             notes,
             poolGroup: poolGroup || undefined
         });
-        alert('✅ 添加成功！');
+        alert('✅ Key added successfully.');
         closeModal('addKeyModal');
-        // BaSui: 刷新列表显示新添加的密钥
+        // BaSui: Refresh the list to show the newly added key
         if (typeof refreshData === 'function') {
             refreshData();
         } else if (typeof fetchKeys === 'function') {
             fetchKeys();
         }
     } catch (err) {
-        alert('❌ 添加失败: ' + err.message);
+        alert('❌ Failed to add key: ' + err.message);
     }
 }
 
-// ===== 🚀 页面加载时初始化 =====
+// ===== 🚀 Initialize on page load =====
 window.addEventListener('load', () => {
-    // 延迟1秒加载，确保认证完成
+    // Wait one second to allow authentication to complete before loading
     setTimeout(() => {
         initializeAllPoolSelects();
     }, 1000);
 });
 
-console.log('🎯 密钥池选择 UI 模块加载完成！');
+console.log('🎯 Key pool selection UI module loaded.');

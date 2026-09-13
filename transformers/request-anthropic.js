@@ -6,16 +6,16 @@ import keywordFilter from '../utils/keyword-filter.js';
 export function transformToAnthropic(openaiRequest, targetModel = null) {
   logDebug('Transforming OpenAI request to Anthropic format');
   
-  // 应用关键词过滤
+  // Apply keyword filtering
   const filteredRequest = keywordFilter.filterRequest(openaiRequest);
 
-  // BaSui：Anthropic 同样不接受 temperature 与 top_p 同时设置，保留 temperature 优先
+  // BaSui: Anthropic also rejects simultaneous temperature and top_p; prefer temperature
   if (filteredRequest.temperature !== undefined && filteredRequest.top_p !== undefined) {
-    logDebug('BaSui：检测到 temperature 与 top_p 并存，自动丢弃 top_p 以符合目标 API');
+    logDebug('BaSui: Both temperature and top_p were provided; dropping top_p to comply with the target API');
     delete filteredRequest.top_p;
   }
   
-  // BaSui：支持模型ID映射（如 gpt-5 → claude-sonnet-4）
+  // BaSui: Support model ID mapping (for example gpt-5 → claude-sonnet-4)
   const modelId = targetModel || filteredRequest.model;
   
   const anthropicRequest = {
@@ -64,10 +64,10 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
         continue; // Skip adding system messages to messages array
       }
 
-      // BaSui：处理工具结果消息（OpenAI的tool role → Anthropic的tool_result content）
+      // BaSui: Handle tool result messages (OpenAI tool role to Anthropic tool_result content)
       if (msg.role === 'tool') {
-        // OpenAI格式：{ role: "tool", content: "...", tool_call_id: "..." }
-        // Anthropic格式：在assistant消息后添加user消息，包含tool_result内容块
+        // OpenAI format: { role: "tool", content: "...", tool_call_id: "..." }
+        // Anthropic format: add a user message after the assistant message containing a tool_result content block
         const toolResultMsg = {
           role: 'user',
           content: [{
@@ -108,7 +108,7 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
         }
       }
 
-      // BaSui：处理assistant消息中的tool_calls（转换为tool_use内容块）
+      // BaSui: Handle tool_calls in assistant messages (convert to tool_use content blocks)
       if (msg.role === 'assistant' && msg.tool_calls && Array.isArray(msg.tool_calls)) {
         for (const toolCall of msg.tool_calls) {
           if (toolCall.type === 'function') {
@@ -197,7 +197,7 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
 }
 
 export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming = true, modelId = null) {
-  // 使用公共函数生成基础headers
+  // Use the shared function to generate base headers
   const headers = {
     'accept': 'application/json',
     ...getBaseHeaders(authHeader, clientHeaders),
@@ -236,10 +236,10 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
     headers['anthropic-beta'] = betaValues.join(', ');
   }
 
-  // 应用Stainless SDK默认headers
+  // Apply default Stainless SDK headers
   applyStainlessDefaults(headers, clientHeaders);
 
-  // Anthropic特有：覆盖package-version
+  // Anthropic specific: override package-version
   headers['x-stainless-package-version'] = clientHeaders['x-stainless-package-version'] || '0.57.0';
 
   // Set helper-method based on streaming

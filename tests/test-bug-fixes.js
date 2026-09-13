@@ -1,5 +1,5 @@
 /**
- * 测试所有bug修复和代码优化
+ * Test all bug fixes and code improvements
  */
 
 import { readFileSync } from 'fs';
@@ -10,11 +10,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 console.log('================================================');
-console.log('🔍 Bug修复和代码优化测试');
+console.log('🔍 Bug-fix and code-improvement tests');
 console.log('================================================\n');
 
-// 1. 检查重复代码是否已经移除
-console.log('1️⃣ 检查重复代码移除情况\n');
+// 1. Check that duplicate code has been removed
+console.log('1️⃣ Check duplicate-code removal\n');
 
 function checkDuplicateCode() {
   const routesPath = path.join(__dirname, '../routes.js');
@@ -22,17 +22,17 @@ function checkDuplicateCode() {
   
   const checks = [
     {
-      name: '密钥获取逻辑',
+      name: 'Key selection logic',
       pattern: /Failed to get API key from pool/g,
       expected: 0
     },
     {
-      name: '流响应头设置',
+      name: 'Streaming response header setup',
       pattern: /res\.setHeader\('Content-Type', 'text\/event-stream'\)/g,
       expected: 0
     },
     {
-      name: 'headersSent检查',
+      name: 'headersSent checks',
       pattern: /if \(!res\.headersSent\)/g,
       minExpected: 5
     }
@@ -44,22 +44,22 @@ function checkDuplicateCode() {
     
     if (check.minExpected) {
       if (count >= check.minExpected) {
-        console.log(`  ✅ ${check.name}: 找到 ${count} 处 (期望至少 ${check.minExpected})`);
+        console.log(`  ✅ ${check.name}: Found ${count} occurrences (expected at least ${check.minExpected})`);
       } else {
-        console.log(`  ❌ ${check.name}: 只找到 ${count} 处 (期望至少 ${check.minExpected})`);
+        console.log(`  ❌ ${check.name}: Found only ${count} occurrences (expected at least ${check.minExpected})`);
       }
     } else {
       if (count === check.expected) {
-        console.log(`  ✅ ${check.name}: 已移除所有重复 (${count} 处)`);
+        console.log(`  ✅ ${check.name}: All duplicates removed (${count} occurrences)`);
       } else {
-        console.log(`  ⚠️ ${check.name}: 还有 ${count} 处重复`);
+        console.log(`  ⚠️ ${check.name}: ${count} duplicate occurrences remain`);
       }
     }
   });
 }
 
-// 2. 检查公共函数是否正确导入
-console.log('\n2️⃣ 检查公共函数导入\n');
+// 2. Check that shared functions are imported correctly
+console.log('\n2️⃣ Check shared function imports\n');
 
 function checkCommonImports() {
   const files = [
@@ -73,65 +73,65 @@ function checkCommonImports() {
     const filePath = path.join(__dirname, file.path);
     const content = readFileSync(filePath, 'utf-8');
     
-    console.log(`  检查 ${file.name}:`);
+    console.log(`  Check ${file.name}:`);
     
     if (file.name === 'routes.js') {
       if (content.includes("from './utils/route-common.js'")) {
-        console.log('    ✅ 导入了route-common.js');
+        console.log('    ✅ Imported route-common.js');
       } else {
-        console.log('    ❌ 缺少route-common.js导入');
+        console.log('    ❌ Missing route-common.js import');
       }
     } else {
       if (content.includes("from '../middleware/admin-auth.js'")) {
-        console.log('    ✅ 导入了admin-auth.js');
+        console.log('    ✅ Imported admin-auth.js');
       } else {
-        console.log('    ❌ 缺少admin-auth.js导入');
+        console.log('    ❌ Missing admin-auth.js import');
       }
     }
   });
 }
 
-// 3. 检查错误处理是否完善
-console.log('\n3️⃣ 检查错误处理完善性\n');
+// 3. Check error-handling coverage
+console.log('\n3️⃣ Check error-handling coverage\n');
 
 function checkErrorHandling() {
   const routesPath = path.join(__dirname, '../routes.js');
   const content = readFileSync(routesPath, 'utf-8');
   
-  // 检查所有的res.status后面是否有headersSent检查
+  // Check for headersSent guards around res.status calls
   const statusCalls = content.match(/res\.status\(\d+\)/g) || [];
-  console.log(`  发现 ${statusCalls.length} 个响应状态设置`);
+  console.log(`  Found ${statusCalls.length} response status assignments`);
   
-  // 检查catch块
+  // Check catch blocks
   const catchBlocks = content.match(/catch\s*\([^)]+\)\s*{/g) || [];
-  console.log(`  发现 ${catchBlocks.length} 个catch块`);
+  console.log(`  Found ${catchBlocks.length} catch blocks`);
   
-  // 检查JSON解析保护
+  // Check JSON parsing guards
   if (content.includes('await response.json()')) {
     if (content.includes('catch (jsonError)')) {
-      console.log('  ✅ JSON解析有错误处理');
+      console.log('  ✅ JSON parsing has error handling');
     } else {
-      console.log('  ⚠️ JSON解析缺少错误处理');
+      console.log('  ⚠️ JSON parsing has no error handling');
     }
   }
 }
 
-// 4. 代码质量统计
-console.log('\n4️⃣ 代码质量统计\n');
+// 4. Code quality statistics
+console.log('\n4️⃣ Code quality statistics\n');
 
 function codeQualityStats() {
   const routesPath = path.join(__dirname, '../routes.js');
   const content = readFileSync(routesPath, 'utf-8');
   const lines = content.split('\n');
   
-  console.log(`  总行数: ${lines.length}`);
-  console.log(`  函数数量: ${(content.match(/function\s+\w+|async\s+function\s+\w+/g) || []).length}`);
-  console.log(`  导入模块: ${(content.match(/^import\s+/gm) || []).length}`);
-  console.log(`  注释行数: ${(content.match(/\/\/.*|\/\*[\s\S]*?\*\//g) || []).length}`);
+  console.log(`  Total lines: ${lines.length}`);
+  console.log(`  Function count: ${(content.match(/function\s+\w+|async\s+function\s+\w+/g) || []).length}`);
+  console.log(`  Module imports: ${(content.match(/^import\s+/gm) || []).length}`);
+  console.log(`  Comment lines: ${(content.match(/\/\/.*|\/\*[\s\S]*?\*\//g) || []).length}`);
 }
 
-// 5. 重复代码比例计算
-console.log('\n5️⃣ 重复代码优化效果\n');
+// 5. Calculate the duplicate-code reduction
+console.log('\n5️⃣ Duplicate-code reduction results\n');
 
 function calculateDuplicationRatio() {
   const beforeOptimization = {
@@ -155,13 +155,13 @@ function calculateDuplicationRatio() {
   const reduction = beforeOptimization.total - afterOptimization.total;
   const reductionRate = (reduction / beforeOptimization.total * 100).toFixed(1);
   
-  console.log(`  优化前重复代码: ${beforeOptimization.total} 处`);
-  console.log(`  优化后重复代码: ${afterOptimization.total} 处`);
-  console.log(`  减少重复代码: ${reduction} 处`);
-  console.log(`  优化效率: ${reductionRate}%`);
+  console.log(`  Duplicate occurrences before optimization: ${beforeOptimization.total} occurrences`);
+  console.log(`  Duplicate occurrences after optimization: ${afterOptimization.total} occurrences`);
+  console.log(`  Duplicate occurrences removed: ${reduction} occurrences`);
+  console.log(`  Reduction percentage: ${reductionRate}%`);
 }
 
-// 执行所有测试
+// Run all tests
 checkDuplicateCode();
 checkCommonImports();
 checkErrorHandling();
@@ -169,23 +169,23 @@ codeQualityStats();
 calculateDuplicationRatio();
 
 console.log('\n================================================');
-console.log('✅ 测试完成 - 系统优化成功！');
+console.log('✅ Tests complete - System optimization successful!');
 console.log('================================================\n');
 
-console.log('📋 优化总结:');
-console.log('1. ✅ 移除了所有重复的密钥获取逻辑');
-console.log('2. ✅ 统一了错误处理函数');
-console.log('3. ✅ 添加了完善的headersSent检查');
-console.log('4. ✅ 抽取了公共函数到独立模块');
-console.log('5. ✅ 统一了管理员认证中间件');
-console.log('6. ✅ 修复了JSON解析错误处理');
-console.log('7. ✅ 修复了buffer未初始化问题');
-console.log('8. ✅ 添加了进程退出资源清理');
+console.log('📋 Optimization summary:');
+console.log('1. ✅ Removed all duplicate key selection logic');
+console.log('2. ✅ Consolidated error-handling functions');
+console.log('3. ✅ Added comprehensive headersSent checks');
+console.log('4. ✅ Extracted shared functions into a separate module');
+console.log('5. ✅ Consolidated admin authentication middleware');
+console.log('6. ✅ Fixed JSON parsing error handling');
+console.log('7. ✅ Fixed uninitialized buffers');
+console.log('8. ✅ Added resource cleanup on process exit');
 
-console.log('\n🎯 代码质量提升:');
-console.log('- 可维护性: ⭐⭐⭐⭐⭐');
-console.log('- 代码复用: ⭐⭐⭐⭐⭐');
-console.log('- 错误处理: ⭐⭐⭐⭐⭐');
-console.log('- 性能优化: ⭐⭐⭐⭐⭐');
+console.log('\n🎯 Code quality improvements:');
+console.log('- Maintainability: ⭐⭐⭐⭐⭐');
+console.log('- Code reuse: ⭐⭐⭐⭐⭐');
+console.log('- Error handling: ⭐⭐⭐⭐⭐');
+console.log('- Performance optimization: ⭐⭐⭐⭐⭐');
 
 process.exit(0);

@@ -7,7 +7,7 @@ export class AnthropicResponseTransformer {
     this.created = Math.floor(Date.now() / 1000);
     this.messageId = null;
     this.currentIndex = 0;
-    // BaSui：跟踪当前的工具调用状态
+    // BaSui: Track the current tool call state
     this.currentToolCall = null;
     this.toolCallIndex = 0;
   }
@@ -38,10 +38,10 @@ export class AnthropicResponseTransformer {
     if (eventType === 'content_block_start') {
       const blockType = eventData.content_block?.type;
       
-      // BaSui：处理工具调用开始事件
+      // BaSui: Handle tool call start events
       if (blockType === 'tool_use') {
         const toolUse = eventData.content_block;
-        // 🔧 修复：使用原子操作防止竞态条件
+        // 🔧 Fix: use atomic operations to prevent race conditions
         const currentIndex = this.toolCallIndex;
         this.toolCallIndex = currentIndex + 1;
         this.currentToolCall = {
@@ -50,18 +50,18 @@ export class AnthropicResponseTransformer {
           type: 'function',
           function: {
             name: toolUse.name || '',
-            arguments: '' // 参数会在后续的delta中累积
+            arguments: '' // Arguments accumulate in subsequent deltas
           }
         };
         
-        // 返回工具调用开始的chunk
+        // Return the tool call start chunk
         return this.createToolCallChunk(this.currentToolCall, true);
       }
       
-      // BaSui：处理thinking块开始事件（推理内容）
-      // OpenAI没有thinking字段，将thinking内容作为普通文本输出
-      // 可以选择：1) 输出thinking内容 2) 隐藏thinking内容
-      // 这里选择输出，用特殊标记包裹
+      // BaSui: Handle thinking block start events (reasoning content)
+      // OpenAI has no thinking field; output thinking content as ordinary text
+      // Options: 1 output thinking content, 2 hide thinking content
+      // This implementation outputs it wrapped in special markers
       if (blockType === 'thinking') {
         return this.createOpenAIChunk('\n<thinking>\n', null, false);
       }
@@ -72,24 +72,24 @@ export class AnthropicResponseTransformer {
     if (eventType === 'content_block_delta') {
       const deltaType = eventData.delta?.type;
       
-      // BaSui：处理文本内容增量
+      // BaSui: Handle text content deltas
       if (deltaType === 'text_delta') {
         const text = eventData.delta?.text || '';
         return this.createOpenAIChunk(text, null, false);
       }
       
-      // BaSui：处理thinking内容增量（推理过程）
+      // BaSui: Handle thinking content deltas (reasoning process)
       if (deltaType === 'thinking_delta') {
         const text = eventData.delta?.thinking || eventData.delta?.text || '';
         return this.createOpenAIChunk(text, null, false);
       }
       
-      // BaSui：处理工具调用参数增量
+      // BaSui: Handle tool call argument deltas
       if (deltaType === 'input_json_delta' && this.currentToolCall) {
         const jsonDelta = eventData.delta?.partial_json || '';
         this.currentToolCall.function.arguments += jsonDelta;
         
-        // 返回工具调用参数的增量chunk
+        // Return the tool call argument delta chunk
         return this.createToolCallChunk(this.currentToolCall, false, jsonDelta);
       }
       
@@ -97,17 +97,17 @@ export class AnthropicResponseTransformer {
     }
 
     if (eventType === 'content_block_stop') {
-      // BaSui：处理thinking块结束（添加结束标记）
+      // BaSui: Handle the end of a thinking block (append the closing marker)
       const blockIndex = eventData.index;
-      // 简单判断：如果有currentToolCall说明是工具块，否则可能是thinking块
-      // 实际应该跟踪blockType，这里简化处理
+      // Simplified check: currentToolCall indicates a tool block; otherwise it may be a thinking block
+      // Ideally track blockType; this implementation uses simplified handling
       if (!this.currentToolCall) {
-        // 可能是thinking块结束，添加结束标记
-        // 注意：这个判断不够精确，更好的做法是在content_block_start时记录blockType
+        // This may be the end of a thinking block; append the closing marker
+        // Note: this check is imprecise; a better approach is to record the block type at content_block_start:blockType
         // return this.createOpenAIChunk('\n</thinking>\n', null, false);
       }
       
-      // BaSui：重置当前工具调用状态
+      // BaSui: Reset the current tool call state
       if (this.currentToolCall) {
         this.currentToolCall = null;
       }
@@ -158,7 +158,7 @@ export class AnthropicResponseTransformer {
     return `data: ${JSON.stringify(chunk)}\n\n`;
   }
 
-  // BaSui：创建工具调用的OpenAI格式chunk
+  // BaSui: Create an OpenAI-format tool call chunk
   createToolCallChunk(toolCall, isStart = false, argumentsDelta = '') {
     const chunk = {
       id: this.requestId,
@@ -175,7 +175,7 @@ export class AnthropicResponseTransformer {
     };
 
     if (isStart) {
-      // 工具调用开始：发送完整的tool_calls结构（只有id和function.name）
+      // Tool call start: send the full tool_calls structure (id and function.name)
       chunk.choices[0].delta.tool_calls = [{
         index: toolCall.index,
         id: toolCall.id,
@@ -186,7 +186,7 @@ export class AnthropicResponseTransformer {
         }
       }];
     } else if (argumentsDelta) {
-      // 工具调用参数增量：只发送arguments的增量
+      // Tool call argument delta: send only the incremental arguments
       chunk.choices[0].delta.tool_calls = [{
         index: toolCall.index,
         function: {
@@ -215,23 +215,23 @@ export class AnthropicResponseTransformer {
   async *transformStream(sourceStream) {
     let buffer = '';
     let currentEvent = null;
-    // BaSui：添加buffer大小保护，防止内存溢出（最大10KB未处理行）
+    // BaSui: Guard buffer size to prevent excessive memory use (maximum 10 KB of unprocessed lines)
     const MAX_BUFFER_SIZE = 10 * 1024;
 
     try {
       for await (const chunk of sourceStream) {
-        // BaSui：优化 - 避免超大chunk直接toString可能的性能问题
+        // BaSui: Optimization: avoid potential overhead from calling toString on very large chunks
         const chunkStr = chunk.toString();
         buffer += chunkStr;
 
-        // BaSui：内存保护 - 如果buffer过大说明没有换行符，截断并警告
+        // BaSui: Memory protection: an oversized buffer indicates missing newlines; truncate and warn
         if (buffer.length > MAX_BUFFER_SIZE) {
           logDebug(`⚠️ Buffer size exceeded ${MAX_BUFFER_SIZE} bytes, truncating`);
-          buffer = buffer.slice(-MAX_BUFFER_SIZE); // 保留最后10KB
+          buffer = buffer.slice(-MAX_BUFFER_SIZE); // Keep the last 10KB
         }
 
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留最后不完整的行
+        buffer = lines.pop() || ''; // Keep the final incomplete line
 
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -245,7 +245,7 @@ export class AnthropicResponseTransformer {
             const transformed = this.transformEvent(currentEvent, parsed.value);
             if (transformed) {
               yield transformed;
-              // BaSui：优化 - yield后立即释放引用，帮助GC
+              // BaSui: Optimization: release references immediately after yield to help GC
               currentEvent = null;
             } else {
               currentEvent = null;

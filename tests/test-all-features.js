@@ -1,6 +1,6 @@
 /**
- * BaSui：完整功能测试套件
- * 测试所有修复的功能：文本、图片、工具调用、thinking、多轮对话等
+ * BaSui: comprehensive feature test suite
+ * Test all repaired features: text, images, tool calls, thinking, multi-turn conversations, and more
  */
 
 import fetch from 'node-fetch';
@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 const BASE_URL = 'http://localhost:3000';
 const API_KEY = process.env.API_ACCESS_KEY || 'your-access-key';
 
-// 颜色输出
+// Colored output
 const colors = {
   reset: '\x1b[0m',
   green: '\x1b[32m',
@@ -29,7 +29,7 @@ function logSection(title) {
 }
 
 function logTest(name) {
-  log(`\n→ 测试：${name}`, 'yellow');
+  log(`\n→ Test: ${name}`, 'yellow');
 }
 
 function logSuccess(message) {
@@ -44,7 +44,7 @@ function logInfo(message) {
   log(`  ℹ ${message}`, 'blue');
 }
 
-// 测试计数
+// Test counters
 let totalTests = 0;
 let passedTests = 0;
 let failedTests = 0;
@@ -62,10 +62,10 @@ function testFailed(name, error) {
 }
 
 /**
- * 测试 1：获取模型列表
+ * Test 1: Get the model list
  */
 async function testGetModels() {
-  logTest('获取模型列表');
+  logTest('Get the model list');
   try {
     const response = await fetch(`${BASE_URL}/v1/models`, {
       headers: {
@@ -83,24 +83,24 @@ async function testGetModels() {
       throw new Error('Invalid response format');
     }
     
-    logInfo(`找到 ${data.data.length} 个模型`);
+    logInfo(`Found ${data.data.length} models`);
     data.data.forEach(model => {
       logInfo(`  - ${model.id} (${model.owned_by})`);
     });
     
-    testPassed('获取模型列表');
+    testPassed('Get the model list');
     return data.data;
   } catch (error) {
-    testFailed('获取模型列表', error.message);
+    testFailed('Get the model list', error.message);
     throw error;
   }
 }
 
 /**
- * 测试 2：基础文本对话（Anthropic模型）
+ * Test 2: Basic text chat (Anthropic model)
  */
 async function testBasicChat(modelId = 'claude-sonnet-4-20250514') {
-  logTest(`基础文本对话 - ${modelId}`);
+  logTest(`Basic text chat - ${modelId}`);
   try {
     const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -111,7 +111,7 @@ async function testBasicChat(modelId = 'claude-sonnet-4-20250514') {
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'user', content: '请用一句话介绍你自己' }
+          { role: 'user', content: 'Introduce yourself in one sentence' }
         ],
         max_tokens: 100
       })
@@ -127,20 +127,20 @@ async function testBasicChat(modelId = 'claude-sonnet-4-20250514') {
       throw new Error('Invalid response format');
     }
     
-    logInfo(`响应内容: ${data.choices[0].message.content.substring(0, 100)}...`);
-    testPassed(`基础文本对话 - ${modelId}`);
+    logInfo(`Response content: ${data.choices[0].message.content.substring(0, 100)}...`);
+    testPassed(`Basic text chat - ${modelId}`);
     return data;
   } catch (error) {
-    testFailed(`基础文本对话 - ${modelId}`, error.message);
+    testFailed(`Basic text chat - ${modelId}`, error.message);
     throw error;
   }
 }
 
 /**
- * 测试 3：流式响应
+ * Test 3: Streaming response
  */
 async function testStreamingChat(modelId = 'claude-sonnet-4-20250514') {
-  logTest(`流式响应 - ${modelId}`);
+  logTest(`Streaming response - ${modelId}`);
   try {
     const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -151,7 +151,7 @@ async function testStreamingChat(modelId = 'claude-sonnet-4-20250514') {
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'user', content: '数到5' }
+          { role: 'user', content: 'Count to 5' }
         ],
         stream: true,
         max_tokens: 50
@@ -178,7 +178,7 @@ async function testStreamingChat(modelId = 'claude-sonnet-4-20250514') {
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
-            logInfo('收到 [DONE] 信号');
+            logInfo('Received the [DONE] marker');
             continue;
           }
           
@@ -186,34 +186,34 @@ async function testStreamingChat(modelId = 'claude-sonnet-4-20250514') {
             const json = JSON.parse(data);
             if (json.choices && json.choices[0].delta.content) {
               content += json.choices[0].delta.content;
-              chunks++;
+             chunks++;
             }
           } catch (e) {
-            // 忽略非JSON行
+            // Ignore non-JSON lines
           }
         }
       }
     }
     
     if (chunks === 0) {
-      throw new Error('未收到任何流式数据块');
+      throw new Error('No streaming chunks received');
     }
     
-    logInfo(`收到 ${chunks} 个数据块`);
-    logInfo(`完整内容: ${content}`);
-    testPassed(`流式响应 - ${modelId}`);
+    logInfo(`Received ${chunks} chunks`);
+    logInfo(`Full content: ${content}`);
+    testPassed(`Streaming response - ${modelId}`);
     return { chunks, content };
   } catch (error) {
-    testFailed(`流式响应 - ${modelId}`, error.message);
+    testFailed(`Streaming response - ${modelId}`, error.message);
     throw error;
   }
 }
 
 /**
- * 测试 4：工具调用
+ * Test 4: Tool call
  */
 async function testToolCalls(modelId = 'claude-sonnet-4-20250514') {
-  logTest(`工具调用 - ${modelId}`);
+  logTest(`Tool call - ${modelId}`);
   try {
     const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -224,20 +224,20 @@ async function testToolCalls(modelId = 'claude-sonnet-4-20250514') {
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'user', content: '北京现在几点？请使用get_current_time工具查询' }
+          { role: 'user', content: 'What time is it in Beijing? Use the get_current_time tool to check' }
         ],
         tools: [
           {
             type: 'function',
             function: {
               name: 'get_current_time',
-              description: '获取指定城市的当前时间',
+              description: 'Get the current time in the specified city',
               parameters: {
                 type: 'object',
                 properties: {
                   city: {
                     type: 'string',
-                    description: '城市名称'
+                    description: 'City name'
                   }
                 },
                 required: ['city']
@@ -261,40 +261,40 @@ async function testToolCalls(modelId = 'claude-sonnet-4-20250514') {
     
     const message = data.choices[0].message;
     
-    // 检查是否返回了工具调用
+    // Check that a tool call was returned
     if (!message.tool_calls || message.tool_calls.length === 0) {
-      throw new Error('模型未返回工具调用');
+      throw new Error('The model did not return a tool call');
     }
     
     const toolCall = message.tool_calls[0];
-    logInfo(`工具调用ID: ${toolCall.id}`);
-    logInfo(`工具名称: ${toolCall.function.name}`);
-    logInfo(`工具参数: ${toolCall.function.arguments}`);
+    logInfo(`Tool call ID: ${toolCall.id}`);
+    logInfo(`Tool name: ${toolCall.function.name}`);
+    logInfo(`Tool arguments: ${toolCall.function.arguments}`);
     
-    // 验证参数是否为有效JSON
+    // Verify that the arguments are valid JSON
     try {
       const args = JSON.parse(toolCall.function.arguments);
-      logInfo(`解析后的参数: ${JSON.stringify(args)}`);
+      logInfo(`Parsed arguments: ${JSON.stringify(args)}`);
     } catch (e) {
-      throw new Error(`工具参数不是有效的JSON: ${e.message}`);
+      throw new Error(`Tool arguments are not valid JSON: ${e.message}`);
     }
     
-    testPassed(`工具调用 - ${modelId}`);
+    testPassed(`Tool call - ${modelId}`);
     return data;
   } catch (error) {
-    testFailed(`工具调用 - ${modelId}`, error.message);
-    // 不抛出错误，继续其他测试
+    testFailed(`Tool call - ${modelId}`, error.message);
+    // Do not rethrow; continue with the remaining tests
     return null;
   }
 }
 
 /**
- * 测试 5：多轮工具对话（tool_result）
+ * Test 5: Multi-turn tool conversation (tool_result)
  */
 async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
-  logTest(`多轮工具对话 - ${modelId}`);
+  logTest(`Multi-turn tool conversation - ${modelId}`);
   try {
-    // 第一轮：模型返回工具调用
+    // First turn: the model returns a tool call
     const firstResponse = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -304,14 +304,14 @@ async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'user', content: '2+2等于多少？请使用calculator工具计算' }
+          { role: 'user', content: 'What is 2+2? Use the calculator tool' }
         ],
         tools: [
           {
             type: 'function',
             function: {
               name: 'calculator',
-              description: '执行数学计算',
+              description: 'Perform a mathematical calculation',
               parameters: {
                 type: 'object',
                 properties: {
@@ -329,17 +329,17 @@ async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
     const firstData = await firstResponse.json();
     
     if (!firstResponse.ok) {
-      throw new Error(`第一轮失败: ${response.status}: ${JSON.stringify(firstData)}`);
+      throw new Error(`First turn failed: ${response.status}: ${JSON.stringify(firstData)}`);
     }
     
     if (!firstData.choices[0].message.tool_calls) {
-      throw new Error('第一轮未返回工具调用');
+      throw new Error('No tool call returned in the first turn');
     }
     
     const toolCall = firstData.choices[0].message.tool_calls[0];
-    logInfo(`第一轮 - 工具调用: ${toolCall.function.name}`);
+    logInfo(`First turn - Tool call: ${toolCall.function.name}`);
     
-    // 第二轮：发送工具结果
+    // Second turn: send the tool result
     const secondResponse = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -349,7 +349,7 @@ async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'user', content: '2+2等于多少？请使用calculator工具计算' },
+          { role: 'user', content: 'What is 2+2? Use the calculator tool' },
           {
             role: 'assistant',
             tool_calls: [toolCall]
@@ -365,7 +365,7 @@ async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
             type: 'function',
             function: {
               name: 'calculator',
-              description: '执行数学计算',
+              description: 'Perform a mathematical calculation',
               parameters: {
                 type: 'object',
                 properties: {
@@ -382,25 +382,25 @@ async function testToolResult(modelId = 'claude-sonnet-4-20250514') {
     const secondData = await secondResponse.json();
     
     if (!secondResponse.ok) {
-      throw new Error(`第二轮失败: ${secondResponse.status}: ${JSON.stringify(secondData)}`);
+      throw new Error(`Second turn failed: ${secondResponse.status}: ${JSON.stringify(secondData)}`);
     }
     
-    logInfo(`第二轮 - 响应: ${secondData.choices[0].message.content}`);
+    logInfo(`Second turn - Response: ${secondData.choices[0].message.content}`);
     
-    testPassed(`多轮工具对话 - ${modelId}`);
+    testPassed(`Multi-turn tool conversation - ${modelId}`);
     return secondData;
   } catch (error) {
-    testFailed(`多轮工具对话 - ${modelId}`, error.message);
-    // 不抛出错误，继续其他测试
+    testFailed(`Multi-turn tool conversation - ${modelId}`, error.message);
+    // Do not rethrow; continue with the remaining tests
     return null;
   }
 }
 
 /**
- * 测试 6：GPT-5 别名模型
+ * Test 6: GPT-5 alias model
  */
 async function testGPT5Alias() {
-  logTest('GPT-5 别名模型（使用Anthropic后端）');
+  logTest('GPT-5 alias model (using the Anthropic backend)');
   try {
     const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -411,7 +411,7 @@ async function testGPT5Alias() {
       body: JSON.stringify({
         model: 'gpt-5-2025-08-07',
         messages: [
-          { role: 'user', content: '你好，GPT-5！' }
+          { role: 'user', content: 'Hello, GPT-5!' }
         ],
         max_tokens: 100
       })
@@ -423,71 +423,71 @@ async function testGPT5Alias() {
       throw new Error(`Status ${response.status}: ${JSON.stringify(data)}`);
     }
     
-    logInfo(`响应: ${data.choices[0].message.content.substring(0, 100)}...`);
-    testPassed('GPT-5 别名模型');
+    logInfo(`Response: ${data.choices[0].message.content.substring(0, 100)}...`);
+    testPassed('GPT-5 alias model');
     return data;
   } catch (error) {
-    testFailed('GPT-5 别名模型', error.message);
-    // 不抛出错误，继续其他测试
+    testFailed('GPT-5 alias model', error.message);
+    // Do not rethrow; continue with the remaining tests
     return null;
   }
 }
 
 /**
- * 主测试函数
+ * Main test function
  */
 async function runAllTests() {
-  logSection('🧪 droid2api 完整功能测试套件');
+  logSection('🧪 droid2api comprehensive feature test suite');
   
   try {
-    // 测试 1：获取模型列表
-    logSection('测试 1：获取模型列表');
+    // Test 1: Get the model list
+    logSection('Test 1: Get the model list');
     await testGetModels();
     
-    // 测试 2：基础文本对话
-    logSection('测试 2：基础文本对话');
+    // Test 2: Basic text chat
+    logSection('Test 2: Basic text chat');
     await testBasicChat('claude-sonnet-4-20250514');
     
-    // 测试 3：流式响应
-    logSection('测试 3：流式响应');
+    // Test 3: Streaming response
+    logSection('Test 3: Streaming response');
     await testStreamingChat('claude-sonnet-4-20250514');
     
-    // 测试 4：工具调用
-    logSection('测试 4：工具调用');
+    // Test 4: Tool call
+    logSection('Test 4: Tool call');
     await testToolCalls('claude-sonnet-4-20250514');
     
-    // 测试 5：多轮工具对话
-    logSection('测试 5：多轮工具对话（tool_result）');
+    // Test 5: Multi-turn tool conversation
+    logSection('Test 5: Multi-turn tool conversation (tool_result)');
     await testToolResult('claude-sonnet-4-20250514');
     
-    // 测试 6：GPT-5 别名
-    logSection('测试 6：GPT-5 别名模型');
+    // Test 6: GPT-5 alias
+    logSection('Test 6: GPT-5 alias model');
     await testGPT5Alias();
     
   } catch (error) {
-    logError(`测试套件异常终止: ${error.message}`);
+    logError(`Test suite terminated unexpectedly: ${error.message}`);
   }
   
-  // 打印测试结果
-  logSection('测试结果');
-  log(`总测试数: ${totalTests}`, 'cyan');
-  log(`通过: ${passedTests}`, 'green');
-  log(`失败: ${failedTests}`, 'red');
+  // Print test results
+  logSection('Test results');
+  log(`Total tests: ${totalTests}`, 'cyan');
+  log(`Passed: ${passedTests}`, 'green');
+  log(`Failed: ${failedTests}`, 'red');
   
   const successRate = totalTests > 0 ? ((passedTests / totalTests) * 100).toFixed(1) : 0;
-  log(`成功率: ${successRate}%`, successRate === '100.0' ? 'green' : 'yellow');
+  log(`Success rate: ${successRate}%`, successRate === '100.0' ? 'green' : 'yellow');
   
   if (failedTests === 0) {
-    log('\n🎉 所有测试通过！', 'green');
+    log('\n🎉 All tests passed!', 'green');
   } else {
-    log(`\n⚠️  ${failedTests} 个测试失败`, 'red');
+    log(`\n⚠️  ${failedTests} tests failed`, 'red');
   }
   
   process.exit(failedTests > 0 ? 1 : 0);
 }
 
-// 运行测试
+// Run tests
 runAllTests().catch(error => {
-  logError(`测试运行失败: ${error.message}`);
+  logError(`Test run failed: ${error.message}`);
   process.exit(1);
 });

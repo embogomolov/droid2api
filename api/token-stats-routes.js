@@ -1,8 +1,8 @@
 /**
- * Token使用量统计API路由
- * 提供token使用量的查询、分析和报告功能
- * 
- * BaSui: 基于新的准确token计算算法提供详细统计
+ * Token usage statistics API routes
+ * Provide token usage queries, analysis, and reports
+ *
+ * BaSui: Provide detailed statistics based on the new accurate token counting algorithm
  */
 
 import express from 'express';
@@ -14,12 +14,12 @@ const router = express.Router();
 
 /**
  * GET /admin/token-stats/summary
- * 获取token使用量总览
+ * Get a token usage overview
  */
 router.get('/summary', wrapAsync(async (req, res) => {
   const summary = tokenUsageManager.getSummary();
   
-  // 添加额外的统计信息
+  // Add extra statistics
   const enrichedSummary = {
     ...summary,
     metrics: {
@@ -39,54 +39,54 @@ router.get('/summary', wrapAsync(async (req, res) => {
     }
   };
 
-  sendSuccessResponse(res, enrichedSummary, 'Token使用量总览');
+  sendSuccessResponse(res, enrichedSummary, 'Token usage overview');
 }, 'get token usage summary'));
 
 /**
  * GET /admin/token-stats/by-key/:keyId
- * 获取指定密钥的token使用量
+ * Get token usage for a specific key
  */
 router.get('/by-key/:keyId', wrapAsync(async (req, res) => {
   const { keyId } = req.params;
   const usage = tokenUsageManager.getKeyUsage(keyId);
   
   if (!usage) {
-    return sendErrorResponse(res, 404, `未找到密钥 ${keyId} 的使用记录`);
+    return sendErrorResponse(res, 404, `No usage records found for key ${keyId}`);
   }
 
-  sendSuccessResponse(res, usage, `密钥 ${keyId} 的token使用量`);
+  sendSuccessResponse(res, usage, `Token usage for key ${keyId}`);
 }, 'get token usage by key'));
 
 /**
  * GET /admin/token-stats/by-model/:model
- * 获取指定模型的token使用量
+ * Get token usage for a specific model
  */
 router.get('/by-model/:model', wrapAsync(async (req, res) => {
   const { model } = req.params;
   const usage = tokenUsageManager.getModelUsage(model);
   
   if (!usage) {
-    return sendErrorResponse(res, 404, `未找到模型 ${model} 的使用记录`);
+    return sendErrorResponse(res, 404, `No usage records found for model ${model}`);
   }
 
-  sendSuccessResponse(res, usage, `模型 ${model} 的token使用量`);
+  sendSuccessResponse(res, usage, `Token usage for model ${model}`);
 }, 'get token usage by model'));
 
 /**
  * GET /admin/token-stats/by-date-range
- * 获取日期范围内的token使用量
- * Query参数: start, end (YYYY-MM-DD格式)
+ * Get token usage within a date range
+ * Query parameters: start, end (YYYY-MM-DD format
  */
 router.get('/by-date-range', wrapAsync(async (req, res) => {
   const { start, end } = req.query;
   
   if (!start || !end) {
-    return sendErrorResponse(res, 400, '请提供start和end参数（YYYY-MM-DD格式）');
+    return sendErrorResponse(res, 400, 'Provide start and end parameters in YYYY-MM-DD format');
   }
 
   const usage = tokenUsageManager.getUsageByDateRange(start, end);
   
-  // 计算日期范围内的总计
+  // Calculate totals for the date range
   const total = {
     requests: 0,
     prompt_tokens: 0,
@@ -105,19 +105,19 @@ router.get('/by-date-range', wrapAsync(async (req, res) => {
     range: { start, end },
     daily: usage,
     total
-  }, `${start} 到 ${end} 的token使用量`);
+  }, `${start} to ${end}: token usage`);
 }, 'get token usage by date range'));
 
 /**
  * GET /admin/token-stats/top-keys
- * 获取token使用量最多的密钥
- * Query参数: limit (默认10)
+ * Get the keys with the highest token usage
+ * Query parameter: limit (default 10)
  */
 router.get('/top-keys', wrapAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const allData = tokenUsageManager.usageData;
   
-  // 获取所有密钥的使用量并排序
+  // Get usage for all keys and sort
   const keyUsages = Object.entries(allData.keys || {})
     .map(([keyId, usage]) => ({
       keyId,
@@ -126,19 +126,19 @@ router.get('/top-keys', wrapAsync(async (req, res) => {
     .sort((a, b) => b.total_tokens - a.total_tokens)
     .slice(0, limit);
 
-  sendSuccessResponse(res, keyUsages, `Token使用量前${limit}的密钥`);
+  sendSuccessResponse(res, keyUsages, `Top ${limit} keys by token usage`);
 }, 'get top keys by token usage'));
 
 /**
  * GET /admin/token-stats/top-models
- * 获取token使用量最多的模型
- * Query参数: limit (默认10)
+ * Get the models with the highest token usage
+ * Query parameter: limit (default 10)
  */
 router.get('/top-models', wrapAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const allData = tokenUsageManager.usageData;
   
-  // 获取所有模型的使用量并排序
+  // Get usage for all models and sort
   const modelUsages = Object.entries(allData.models || {})
     .map(([model, usage]) => ({
       model,
@@ -147,19 +147,19 @@ router.get('/top-models', wrapAsync(async (req, res) => {
     .sort((a, b) => b.total_tokens - a.total_tokens)
     .slice(0, limit);
 
-  sendSuccessResponse(res, modelUsages, `Token使用量前${limit}的模型`);
+  sendSuccessResponse(res, modelUsages, `Top ${limit} models by token usage`);
 }, 'get top models by token usage'));
 
 /**
  * GET /admin/token-stats/hourly
- * 获取最近24小时的token使用量
+ * Get token usage for the last 24 hours
  */
 router.get('/hourly', wrapAsync(async (req, res) => {
   const allData = tokenUsageManager.usageData;
   const now = new Date();
   const hourlyData = {};
   
-  // 获取最近24小时的数据
+  // Get data for the last 24 hours
   for (let i = 0; i < 24; i++) {
     const hour = new Date(now - i * 60 * 60 * 1000);
     const hourKey = `${hour.toISOString().split('T')[0]}T${hour.getHours().toString().padStart(2, '0')}`;
@@ -169,12 +169,12 @@ router.get('/hourly', wrapAsync(async (req, res) => {
     }
   }
 
-  sendSuccessResponse(res, hourlyData, '最近24小时的token使用量');
+  sendSuccessResponse(res, hourlyData, 'Token usage in the last 24 hours');
 }, 'get hourly token usage'));
 
 /**
  * GET /admin/token-stats/accuracy
- * 获取token预估准确率统计
+ * Get token estimation accuracy statistics
  */
 router.get('/accuracy', wrapAsync(async (req, res) => {
   const allData = tokenUsageManager.usageData;
@@ -182,7 +182,7 @@ router.get('/accuracy', wrapAsync(async (req, res) => {
     samples: 0,
     avg_accuracy_prompt: 0,
     avg_accuracy_completion: 0,
-    message: '暂无准确率数据'
+    message: 'No accuracy data available yet'
   };
 
   if (accuracy.samples > 0) {
@@ -190,18 +190,18 @@ router.get('/accuracy', wrapAsync(async (req, res) => {
     accuracy.completion_accuracy_percent = (accuracy.avg_accuracy_completion * 100).toFixed(2) + '%';
   }
 
-  sendSuccessResponse(res, accuracy, 'Token预估准确率');
+  sendSuccessResponse(res, accuracy, 'Token estimation accuracy');
 }, 'get token estimation accuracy'));
 
 /**
  * GET /admin/token-stats/cost-analysis
- * 获取成本分析
+ * Get cost analysis
  */
 router.get('/cost-analysis', wrapAsync(async (req, res) => {
   const allData = tokenUsageManager.usageData;
   const today = new Date().toISOString().split('T')[0];
   
-  // 计算不同时间段的成本
+  // Calculate costs over different periods
   const costAnalysis = {
     total_cost: allData.total.estimated_cost || 0,
     today_cost: allData.daily[today]?.estimated_cost || 0,
@@ -209,7 +209,7 @@ router.get('/cost-analysis', wrapAsync(async (req, res) => {
     keys: {}
   };
 
-  // 按模型分析成本
+  // Analyze cost by model
   Object.entries(allData.models || {}).forEach(([model, usage]) => {
     costAnalysis.models[model] = {
       requests: usage.requests,
@@ -218,7 +218,7 @@ router.get('/cost-analysis', wrapAsync(async (req, res) => {
     };
   });
 
-  // 获取成本最高的前10个密钥
+  // Get the 10 keys with the highest cost
   const topCostKeys = Object.entries(allData.keys || {})
     .map(([keyId, usage]) => ({
       keyId,
@@ -231,16 +231,16 @@ router.get('/cost-analysis', wrapAsync(async (req, res) => {
 
   costAnalysis.top_cost_keys = topCostKeys;
 
-  sendSuccessResponse(res, costAnalysis, '成本分析');
+  sendSuccessResponse(res, costAnalysis, 'Cost analysis');
 }, 'get cost analysis'));
 
 /**
  * POST /admin/token-stats/cleanup
- * 清理旧的统计数据
+ * Clean up old statistics
  */
 router.post('/cleanup', wrapAsync(async (req, res) => {
   tokenUsageManager.cleanupOldData();
-  sendSuccessResponse(res, { message: '已清理旧的统计数据' }, '清理完成');
+  sendSuccessResponse(res, { message: 'Old statistics removed' }, 'Cleanup completed');
 }, 'cleanup old stats'));
 
 export default router;

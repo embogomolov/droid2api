@@ -1,28 +1,28 @@
 /**
- * Token计算工具 - 基于业内标准算法实现
- * 提供更准确的token计算，修复原有计算不准确的问题
- * 
- * BaSui: 参考new-api项目的实现，使用更准确的计算方法
- * 支持文本、图片、音频等多种内容的token计算
+ * Token counting helpers based on commonly used estimation methods
+ * Improve token counting accuracy over the previous implementation.
+ *
+ * BaSui: Uses a more accurate counting approach based on the new-api project.
+ * Intended to count tokens across text, image, audio, and other content types.
  */
 
 import { logDebug, logInfo, logError } from '../logger.js';
 
-// 定义不同模型的token计算比率和特性
-// 基于项目实际配置的模型列表
+// Define token estimation ratios and characteristics for each model.
+// Based on the models configured in this project.
 const MODEL_TOKEN_RATIOS = {
-  // Claude 系列 (Anthropic) - 实际使用的模型
+  // Claude models (Anthropic) used by this project
   'claude-sonnet-4-20250514': { charToTokenRatio: 0.35, type: 'anthropic' },
   'claude-sonnet-4-5-20250929': { charToTokenRatio: 0.35, type: 'anthropic' },
   
-  // GPT-5 系列（实际是Claude后端）
+  // GPT-5 models (use the Anthropic token estimation settings here)
   'gpt-5-2025-08-07': { charToTokenRatio: 0.35, type: 'anthropic' },
   'gpt-5-codex': { charToTokenRatio: 0.35, type: 'anthropic' },
   
-  // GLM 系列
+  // GLM models
   'glm-4.6': { charToTokenRatio: 0.38, type: 'common' },
   
-  // 默认配置
+  // Default configuration
   'anthropic': { charToTokenRatio: 0.35, type: 'anthropic' },
   'openai': { charToTokenRatio: 0.38, type: 'openai' },
   'common': { charToTokenRatio: 0.38, type: 'common' },
@@ -30,21 +30,21 @@ const MODEL_TOKEN_RATIOS = {
 };
 
 /**
- * 计算文本的token数量（更准确的算法）
- * @param {string} text - 要计算的文本
- * @param {string} model - 模型名称或类型
- * @returns {number} token数量
+ * Estimate the text token count using the updated algorithm.
+ * @param {string} text - Text to count
+ * @param {string} model - Model name or type
+ * @returns {number} Token count
  */
 export function countTextTokens(text, model = 'default') {
   if (!text || typeof text !== 'string') {
     return 0;
   }
 
-  // 获取模型配置
+  // Get the model configuration.
   const modelConfig = MODEL_TOKEN_RATIOS[model] || MODEL_TOKEN_RATIOS['default'];
   const modelType = modelConfig.type;
 
-  // 基础统计
+  // Basic character and word counts
   const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
   const englishWordCount = (text.match(/[a-zA-Z]+/g) || []).length;
   const numberCount = (text.match(/\d+/g) || []).length;
@@ -53,10 +53,10 @@ export function countTextTokens(text, model = 'default') {
   
   let tokenCount = 0;
   
-  // 根据模型类型使用不同的计算方式
+  // Use a counting method appropriate to the model type.
   if (modelType === 'anthropic') {
-    // Anthropic (Claude) 的token计算
-    // Claude对中文的处理略有不同，通常1个中文字符 ≈ 1.2 tokens
+    // Anthropic (Claude) token estimation
+    // Estimate Chinese text for Claude at approximately 1.2 tokens per character.
     tokenCount = 
       chineseCharCount * 1.2 +
       englishWordCount * 1.0 +
@@ -64,7 +64,7 @@ export function countTextTokens(text, model = 'default') {
       punctuationCount * 0.5 +
       spaceCount * 0.3;
   } else if (modelType === 'openai') {
-    // OpenAI GPT 的token计算
+    // OpenAI GPT token estimation
     tokenCount = 
       chineseCharCount * 1.0 +
       englishWordCount * 1.0 +
@@ -72,7 +72,7 @@ export function countTextTokens(text, model = 'default') {
       punctuationCount * 0.3 +
       spaceCount * 0.2;
   } else {
-    // 通用计算（GLM等其他模型）
+    // Generic estimation for GLM and other models
     tokenCount = 
       chineseCharCount * 1.0 +
       englishWordCount * 1.0 +
@@ -81,57 +81,57 @@ export function countTextTokens(text, model = 'default') {
       spaceCount * 0.2;
   }
 
-  // 向上取整
+  // Round up.
   tokenCount = Math.ceil(tokenCount);
 
-  logDebug(`Token计算 [${modelType}]: 文本长度=${text.length}, 中文=${chineseCharCount}, 英文词=${englishWordCount}, 数字=${numberCount}, 计算tokens=${tokenCount}`);
+  logDebug(`Token estimate [${modelType}]: text length=${text.length}, Chinese characters=${chineseCharCount}, English words=${englishWordCount}, numbers=${numberCount}, estimated tokens=${tokenCount}`);
 
   return tokenCount;
 }
 
 /**
- * 计算消息列表的token数量
- * @param {Array} messages - 消息列表
- * @param {string} model - 模型名称或类型
- * @returns {number} token数量
+ * Estimate the token count for a list of messages.
+ * @param {Array} messages - Message list
+ * @param {string} model - Model name or type
+ * @returns {number} Token count
  */
 export function countMessagesTokens(messages, model = 'default') {
   if (!messages || !Array.isArray(messages)) {
     return 0;
   }
 
-  // 获取模型配置
+  // Get the model configuration.
   const modelConfig = MODEL_TOKEN_RATIOS[model] || MODEL_TOKEN_RATIOS['default'];
   const modelType = modelConfig.type;
 
   let totalTokens = 0;
 
-  // 根据模型类型设置不同的消息开销
-  const messageOverhead = modelType === 'anthropic' ? 4 : 3; // Anthropic格式稍微复杂一些
+  // Set per-message overhead according to the model type.
+  const messageOverhead = modelType === 'anthropic' ? 4 : 3; // The Anthropic format has slightly higher overhead.
 
   messages.forEach(message => {
-    // 添加消息格式开销
+    // Add message formatting overhead.
     totalTokens += messageOverhead;
 
-    // 计算角色tokens
+    // Count role tokens.
     if (message.role) {
       totalTokens += countTextTokens(message.role, model);
     }
 
-    // 计算内容tokens
+    // Count content tokens.
     if (message.content) {
       if (typeof message.content === 'string') {
         totalTokens += countTextTokens(message.content, model);
       } else if (Array.isArray(message.content)) {
-        // 处理多模态内容（文本、图片、工具使用等）
+        // Handle multimodal content: text, images, tool use, and so on.
         message.content.forEach(item => {
           if (item.type === 'text' && item.text) {
             totalTokens += countTextTokens(item.text, model);
           } else if (item.type === 'image' || item.type === 'image_url') {
-            // 图片token计算
+            // Image token estimation
             totalTokens += calculateImageTokens(item.image_url || item, modelType);
           } else if (item.type === 'tool_use') {
-            // Anthropic的工具使用格式
+            // Anthropic tool use format
             totalTokens += messageOverhead;
             if (item.name) {
               totalTokens += countTextTokens(item.name, model);
@@ -140,7 +140,7 @@ export function countMessagesTokens(messages, model = 'default') {
               totalTokens += countTextTokens(JSON.stringify(item.input), model);
             }
           } else if (item.type === 'tool_result') {
-            // Anthropic的工具结果格式
+            // Anthropic tool result format
             totalTokens += messageOverhead;
             if (item.content) {
               totalTokens += countTextTokens(item.content, model);
@@ -150,7 +150,7 @@ export function countMessagesTokens(messages, model = 'default') {
       }
     }
 
-    // 处理工具调用（OpenAI格式）
+    // Handle OpenAI-format tool calls.
     if (message.tool_calls) {
       message.tool_calls.forEach(toolCall => {
         totalTokens += messageOverhead;
@@ -163,23 +163,23 @@ export function countMessagesTokens(messages, model = 'default') {
       });
     }
 
-    // 处理name字段
+    // Handle the name field.
     if (message.name) {
       totalTokens += countTextTokens(message.name, model);
     }
   });
 
-  // 添加对话的整体开销
+  // Add conversation-level overhead.
   totalTokens += modelType === 'anthropic' ? 5 : 3;
 
   return totalTokens;
 }
 
 /**
- * 计算图片的token数量
- * @param {Object} imageData - 图片数据对象
- * @param {string} modelType - 模型类型
- * @returns {number} token数量
+ * Estimate the token count for an image.
+ * @param {Object} imageData - Image data object
+ * @param {string} modelType - Model type
+ * @returns {number} Token count
  */
 function calculateImageTokens(imageData, modelType = 'openai') {
   if (!imageData) {
@@ -187,23 +187,23 @@ function calculateImageTokens(imageData, modelType = 'openai') {
   }
 
   if (modelType === 'anthropic') {
-    // Anthropic (Claude) 的图片token计算
-    // Claude Vision对图片的处理方式不同
-    // 通常一张标准图片约 1600-3000 tokens，取决于图片复杂度
-    // 这里使用保守估算
+    // Anthropic (Claude) image token estimation
+    // Claude Vision processes images differently.
+    // Assume roughly 1,600-3,000 tokens for a typical image, depending on complexity.
+    // Use a conservative estimate here.
     if (imageData.source?.type === 'base64') {
-      // Base64编码的图片，根据数据大小估算
+      // Estimate base64-encoded images from the data size.
       const base64Length = imageData.source.data?.length || 0;
-      // 粗略估算：base64长度 / 100 ≈ tokens
+      // Rough estimate: base64 length / 100 is approximately the token count.
       return Math.ceil(base64Length / 100);
     }
-    // URL图片，使用默认估算
+    // Use the default estimate for images specified by URL.
     return 2000;
   } else {
-    // OpenAI的图片token计算
-    // 根据OpenAI的定价文档：
-    // - 低分辨率图片: 85 tokens
-    // - 高分辨率图片: 基础85 + 每512x512瓦片170 tokens
+    // OpenAI image token estimation
+    // Based on the OpenAI pricing documentation:
+    // - Low-resolution image: 85 tokens
+    // - High-resolution image: 85 base tokens + 170 tokens per 512x512 tile
     
     if (!imageData.url && !imageData.image_url) {
       return 0;
@@ -215,22 +215,22 @@ function calculateImageTokens(imageData, modelType = 'openai') {
       return 85;
     }
 
-    // 对于'high'或'auto'，使用默认估算
-    // 假设平均图片大小，返回一个合理的估算值
-    return 765; // 基础85 + 4个瓦片(4*170)的估算
+    // Use the default estimate for 'high' or 'auto'.
+    // Return an estimate assuming an average image size.
+    return 765; // Estimate: 85 base tokens + 4 tiles (4 * 170).
   }
 }
 
 /**
- * 从流式响应中提取token使用量
- * @param {string} data - SSE数据
- * @param {Object} tokenStats - token统计对象
- * @param {string} modelType - 模型类型
+ * Extract token usage from a streaming response.
+ * @param {string} data - SSE data
+ * @param {Object} tokenStats - Token statistics object
+ * @param {string} modelType - Model type
  */
 export function extractTokensFromStream(data, tokenStats, modelType) {
   try {
     if (modelType === 'anthropic') {
-      // Anthropic格式的token提取
+      // Extract tokens from the Anthropic format.
       if (data.type === 'message_start' && data.message?.usage) {
         const usage = data.message.usage;
         tokenStats.inputTokens = usage.input_tokens || 0;
@@ -243,20 +243,20 @@ export function extractTokensFromStream(data, tokenStats, modelType) {
       if (data.type === 'message_delta' && data.usage) {
         tokenStats.outputTokens = data.usage.output_tokens || 0;
         
-        // 处理思考模型的tokens
+        // Handle thinking tokens.
         if (data.usage.thinking_output_tokens !== undefined) {
           tokenStats.thinkingTokens = data.usage.thinking_output_tokens || 0;
           logDebug(`Anthropic thinking tokens: ${tokenStats.thinkingTokens}`);
         }
       }
     } else if (modelType === 'openai') {
-      // OpenAI格式的token提取
+      // Extract tokens from the OpenAI format.
       if (data.usage) {
         tokenStats.promptTokens = data.usage.prompt_tokens || 0;
         tokenStats.completionTokens = data.usage.completion_tokens || 0;
         tokenStats.totalTokens = data.usage.total_tokens || 0;
         
-        // 处理推理token（o1模型）
+        // Handle reasoning tokens for o1 models.
         if (data.usage.completion_tokens_details?.reasoning_tokens) {
           tokenStats.reasoningTokens = data.usage.completion_tokens_details.reasoning_tokens;
         }
@@ -265,14 +265,14 @@ export function extractTokensFromStream(data, tokenStats, modelType) {
       }
     }
   } catch (error) {
-    logError('提取token使用量失败', error);
+    logError('Failed to extract token usage', error);
   }
 }
 
 /**
- * 合并和标准化token统计
- * @param {Object} tokenStats - 原始token统计
- * @returns {Object} 标准化的token统计
+ * Merge and normalize token statistics.
+ * @param {Object} tokenStats - Raw token statistics
+ * @returns {Object} Normalized token statistics
  */
 export function normalizeTokenStats(tokenStats) {
   const normalized = {
@@ -285,35 +285,35 @@ export function normalizeTokenStats(tokenStats) {
     thinking_tokens: 0
   };
 
-  // 处理不同格式的输入tokens
+  // Normalize input token counts from different field formats.
   normalized.prompt_tokens = 
     tokenStats.promptTokens || 
     tokenStats.inputTokens || 
     tokenStats.prompt_tokens || 
     0;
 
-  // 处理不同格式的输出tokens
+  // Normalize output token counts from different field formats.
   normalized.completion_tokens = 
     tokenStats.completionTokens || 
     tokenStats.outputTokens || 
     tokenStats.completion_tokens || 
     0;
 
-  // 处理缓存相关tokens
+  // Handle cache-related tokens.
   normalized.cache_creation_tokens = tokenStats.cacheCreationTokens || 0;
   normalized.cache_read_tokens = tokenStats.cacheReadTokens || 0;
 
-  // 处理推理相关tokens
+  // Handle reasoning and thinking tokens.
   normalized.reasoning_tokens = tokenStats.reasoningTokens || 0;
   normalized.thinking_tokens = tokenStats.thinkingTokens || 0;
 
-  // 计算总tokens
+  // Calculate total tokens.
   normalized.total_tokens = 
     tokenStats.totalTokens || 
     tokenStats.total_tokens ||
     (normalized.prompt_tokens + normalized.completion_tokens);
 
-  // 如果有额外的推理/思考tokens，加入总数
+  // Include additional reasoning/thinking tokens in the total, if present.
   if (normalized.reasoning_tokens > 0) {
     normalized.total_tokens += normalized.reasoning_tokens;
   }
@@ -325,10 +325,10 @@ export function normalizeTokenStats(tokenStats) {
 }
 
 /**
- * 估算请求的token使用量（请求前预估）
- * @param {Object} request - 请求对象
- * @param {string} model - 模型名称
- * @returns {Object} 估算的token使用量
+ * Estimate token usage before sending a request.
+ * @param {Object} request - Request object
+ * @param {string} model - Model name
+ * @returns {Object} Estimated token usage
  */
 export function estimateRequestTokens(request, model = 'default') {
   const estimate = {
@@ -337,23 +337,23 @@ export function estimateRequestTokens(request, model = 'default') {
     estimated_total_tokens: 0
   };
 
-  // 估算输入tokens
+  // Estimate input tokens.
   if (request.messages) {
     estimate.estimated_prompt_tokens = countMessagesTokens(request.messages, model);
   } else if (request.prompt) {
     estimate.estimated_prompt_tokens = countTextTokens(request.prompt, model);
   }
 
-  // 估算输出tokens（基于max_tokens或默认值）
+  // Estimate output tokens using max_tokens or the default.
   const maxTokens = request.max_tokens || request.max_completion_tokens || 1000;
-  estimate.estimated_completion_tokens = Math.min(maxTokens, 4096); // 合理的上限
+  estimate.estimated_completion_tokens = Math.min(maxTokens, 4096); // Cap the estimate at a reasonable upper bound.
 
-  // 计算总估算
+  // Calculate the total estimated usage.
   estimate.estimated_total_tokens = 
     estimate.estimated_prompt_tokens + 
     estimate.estimated_completion_tokens;
 
-  logInfo(`Token预估 - 模型: ${model}, 输入: ${estimate.estimated_prompt_tokens}, 输出: ${estimate.estimated_completion_tokens}, 总计: ${estimate.estimated_total_tokens}`);
+  logInfo(`Token estimate - model: ${model}, input: ${estimate.estimated_prompt_tokens}, output: ${estimate.estimated_completion_tokens}, total: ${estimate.estimated_total_tokens}`);
 
   return estimate;
 }

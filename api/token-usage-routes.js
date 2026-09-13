@@ -1,5 +1,5 @@
 import express from 'express';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 优化：使用统一的认证中间件
+import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,60 +19,60 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
-// Token使用量数据存储路径
+// Token usage data storage path
 const TOKEN_USAGE_FILE = path.join(__dirname, '..', 'data', 'token_usage.json');
 
-// 应用鉴权中间件到所有Token管理路由
+// Apply authentication middleware to all token management routes
 router.use(adminAuth);
 
-// 缓存有效期(毫秒) - 5分钟
+// Cache lifetime in milliseconds: 5 minutes
 const CACHE_TTL = 5 * 60 * 1000;
 
-// 内存缓存(避免频繁读写文件)
+// In-memory cache to avoid frequent file access
 let memoryCache = null;
 let lastLoadTime = 0;
 
 /**
- * 确保data目录存在
+ * Ensure the data directory exists
  */
 function ensureDataDir() {
   const dataDir = path.dirname(TOKEN_USAGE_FILE);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
-    logInfo(`创建data目录: ${dataDir}`);
+    logInfo(`Create the data directory: ${dataDir}`);
   }
 }
 
 /**
- * 加载Token使用量数据(优先从内存缓存)
+ * Load token usage data, preferring the in-memory cache
  */
 function loadTokenUsageData() {
   const now = Date.now();
 
-  // 检查内存缓存
+  // Check the in-memory cache
   if (memoryCache && (now - lastLoadTime) < 60000) {
-    logDebug('使用内存缓存的Token使用量数据');
+    logDebug('Using cached token usage data from memory');
     return memoryCache;
   }
 
-  // 从文件加载
+  // Load from a file
   try {
     if (fs.existsSync(TOKEN_USAGE_FILE)) {
       const data = fs.readFileSync(TOKEN_USAGE_FILE, 'utf-8');
       const parsed = JSON.parse(data);
 
-      // 更新内存缓存
+      // Update the in-memory cache
       memoryCache = parsed;
       lastLoadTime = now;
 
-      logDebug(`从文件加载Token使用量数据: ${Object.keys(parsed.keys || {}).length} 个密钥`);
+      logDebug(`Loaded token usage data from file for ${Object.keys(parsed.keys || {}).length} keys`);
       return parsed;
     }
   } catch (error) {
-    logError('加载Token使用量数据失败', error);
+    logError('Failed to load token usage data', error);
   }
 
-  // 返回空结构
+  // Return an empty structure
   const emptyData = {
     keys: {},
     summary: {
@@ -94,69 +94,69 @@ function loadTokenUsageData() {
 }
 
 /**
- * 保存Token使用量数据(同时更新内存缓存和文件)
+ * Save token usage data, updating both memory and file caches
  */
 function saveTokenUsageData(data) {
   ensureDataDir();
 
-  // 添加元数据
+  // Add metadata
   data.meta = {
     cache_ttl: CACHE_TTL,
     last_save: new Date().toISOString()
   };
 
-  // 更新内存缓存
+  // Update the in-memory cache
   memoryCache = data;
   lastLoadTime = Date.now();
 
-  // 写入文件(带重试机制)
+  // Write to a file with retries
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 500;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // 先写临时文件,再原子重命名
+      // Write to a temporary file, then rename atomically
       const tempPath = TOKEN_USAGE_FILE + '.tmp';
       const jsonData = JSON.stringify(data, null, 2);
 
       fs.writeFileSync(tempPath, jsonData, 'utf-8');
 
-      // 验证写入
+      // Verify the write
       const written = fs.readFileSync(tempPath, 'utf-8');
       if (written !== jsonData) {
-        throw new Error('写入验证失败:文件内容不匹配');
+        throw new Error('Write verification failed: file contents do not match');
       }
 
-      // 备份旧文件(如果存在)
+      // Back up the old file if present
       if (fs.existsSync(TOKEN_USAGE_FILE)) {
         const backupPath = TOKEN_USAGE_FILE + '.bak';
         fs.copyFileSync(TOKEN_USAGE_FILE, backupPath);
       }
 
-      // 原子重命名
+      // Rename atomically
       fs.renameSync(tempPath, TOKEN_USAGE_FILE);
 
       logDebug(`Token使用量数据保存成功${attempt > 0 ? ` (尝试 ${attempt + 1}次)` : ''}`);
       return;
 
     } catch (error) {
-      logError(`保存Token使用量数据失败 (尝试 ${attempt + 1}/${MAX_RETRIES})`, error);
+      logError(`Failed to save token usage data (attempt ${attempt + 1}/${MAX_RETRIES})`, error);
 
       if (attempt < MAX_RETRIES - 1) {
-        // 同步睡眠
+        // Synchronous sleep
         const now = Date.now();
         while (Date.now() - now < RETRY_DELAY) {
-          // 忙等待
+          // Busy-wait
         }
       }
     }
   }
 
-  throw new Error(`Token使用量数据保存失败(尝试${MAX_RETRIES}次)`);
+  throw new Error(`Token usage data save failed after ${MAX_RETRIES} attempts`);
 }
 
 /**
- * 检查缓存是否过期
+ * Check whether the cache has expired
  */
 function isCacheExpired(lastSync) {
   if (!lastSync) return true;
@@ -165,7 +165,7 @@ function isCacheExpired(lastSync) {
 }
 
 /**
- * 计算汇总统计
+ * Calculate summary statistics
  */
 function calculateSummary(keysData) {
   let total_limit = 0;
@@ -175,7 +175,7 @@ function calculateSummary(keysData) {
 
   Object.values(keysData).forEach(keyData => {
     if (keyData.success && keyData.standard) {
-      // 使用实际的字段名称（来自Factory API的standard对象）
+      // Use actual field names from the Factory API standard object
       total_limit += keyData.standard.totalAllowance || 0;
       total_used += keyData.standard.orgTotalTokensUsed || 0;
       total_remaining += keyData.standard.remaining || 0;
@@ -197,7 +197,7 @@ function calculateSummary(keysData) {
 
 /**
  * GET /admin/token/stats
- * 获取Token使用量汇总统计
+ * Get token usage summary statistics
  */
 router.get('/stats', wrapSync((req, res) => {
   const data = loadTokenUsageData();
@@ -214,34 +214,34 @@ router.get('/stats', wrapSync((req, res) => {
 
 /**
  * GET /admin/token/usage
- * 获取所有密钥的Token使用量(带缓存)
- * Query参数:
- *   - forceRefresh: boolean - 是否强制刷新缓存
+ * Get token usage for all keys with caching
+ * Query parameters:
+ *   - forceRefresh: boolean - Force cache refresh
  */
 router.get('/usage', wrapAsync(async (req, res) => {
   const forceRefresh = req.query.forceRefresh === 'true';
   let data = loadTokenUsageData();
 
-  // 检查缓存是否过期
+  // Check whether the cache has expired
   const cacheExpired = isCacheExpired(data.summary.last_full_sync);
 
   if (forceRefresh || cacheExpired) {
     logInfo(`Token使用量缓存${cacheExpired ? '已过期' : '强制刷新'},触发后台同步`);
 
-    // 异步触发同步(不阻塞当前请求)
+    // Trigger synchronization asynchronously without blocking the current request
     syncTokenUsageInBackground().catch(err => {
-      logError('后台同步Token使用量失败', err);
+      logError('Background token usage synchronization failed', err);
     });
 
-    // 如果缓存完全为空,等待同步完成
+    // If the cache is completely empty, wait for synchronization
     if (Object.keys(data.keys).length === 0) {
-      logInfo('首次加载Token使用量,等待同步完成...');
+      logInfo('Loading token usage for the first time; waiting for synchronization...');
       try {
         await syncTokenUsageInBackground();
         data = loadTokenUsageData();
       } catch (error) {
-        logError('首次同步Token使用量失败', error);
-        return sendErrorResponse(res, 500, '同步Token使用量失败: ' + error.message);
+        logError('Initial token usage synchronization failed', error);
+        return sendErrorResponse(res, 500, 'Failed to synchronize token usage: ' + error.message);
       }
     }
   }
@@ -261,36 +261,36 @@ router.get('/usage', wrapAsync(async (req, res) => {
 
 /**
  * GET /admin/token/usage/:keyId
- * 获取单个密钥的Token使用量
- * Query参数:
- *   - forceRefresh: boolean - 是否强制刷新
+ * Get token usage for a single key
+ * Query parameters:
+ *   - forceRefresh: boolean - Force refresh
  */
 router.get('/usage/:keyId', wrapAsync(async (req, res) => {
   const { keyId } = req.params;
   const forceRefresh = req.query.forceRefresh === 'true';
 
-  // 获取密钥信息
+  // Get key information
   let keyObj;
   try {
     keyObj = keyPoolManager.getKey(keyId);
   } catch (error) {
-    return sendBadRequest(res, `密钥不存在: ${keyId}`);
+    return sendBadRequest(res, `Key does not exist: ${keyId}`);
   }
 
-  // 检查缓存
+  // Check the cache
   const data = loadTokenUsageData();
   const cachedData = data.keys[keyId];
 
   if (!forceRefresh && cachedData && !isCacheExpired(cachedData.last_sync)) {
-    logDebug(`使用缓存的Token使用量: ${keyId}`);
+    logDebug(`Using cached token usage: ${keyId}`);
     return sendSuccessResponse(res, {
       ...cachedData,
       from_cache: true
     });
   }
 
-  // 实时查询
-  logInfo(`查询密钥 ${keyId} 的Token使用量...`);
+  // Query live data
+  logInfo(`Querying token usage for key ${keyId}...`);
 
   try {
     const usage = await fetchTokenUsage(keyObj.key);
@@ -300,7 +300,7 @@ router.get('/usage/:keyId', wrapAsync(async (req, res) => {
       return sendErrorResponse(res, 500, usage.message || 'Factory API调用失败', usage);
     }
 
-    // 更新缓存
+    // Update the cache
     const result = {
       id: keyId,
       key: keyObj.key,
@@ -318,49 +318,49 @@ router.get('/usage/:keyId', wrapAsync(async (req, res) => {
     });
 
   } catch (error) {
-    logError(`查询密钥 ${keyId} Token使用量异常`, error);
-    sendErrorResponse(res, 500, '查询失败: ' + error.message);
+    logError(`Error querying token usage for key ${keyId}`, error);
+    sendErrorResponse(res, 500, 'Query failed: ' + error.message);
   }
 }, 'get single key token usage'));
 
 /**
  * POST /admin/token/sync
- * 强制同步所有密钥的Token使用量
- * 这是一个长时间运行的操作,建议客户端显示进度
+ * Force token usage synchronization for all keys
+ * This operation can take time; the client should display progress
  */
 router.post('/sync', wrapAsync(async (req, res) => {
-  logInfo('开始强制同步所有密钥的Token使用量...');
+  logInfo('Starting forced token usage synchronization for all keys...');
 
-  // 获取所有密钥
+  // Get all keys
   const allKeys = keyPoolManager.keys.map(k => ({
     id: k.id,
     key: k.key,
     status: k.status
   }));
 
-  // 只同步active状态的密钥
+  // Synchronize only active keys
   const activeKeys = allKeys.filter(k => k.status === 'active');
 
   if (activeKeys.length === 0) {
-    return sendBadRequest(res, '没有可用的密钥需要同步');
+    return sendBadRequest(res, 'No available keys need synchronization');
   }
 
-  logInfo(`准备同步 ${activeKeys.length} 个active密钥的Token使用量`);
+  logInfo(`Preparing to synchronize token usage for ${activeKeys.length} active keys`);
 
-  // 批量查询(带进度回调)
+  // Query in batches with a progress callback
   let completedCount = 0;
   const results = await batchFetchTokenUsage(activeKeys, {
     concurrency: 10,
     onProgress: (current, total) => {
       completedCount = current;
-      logInfo(`Token使用量同步进度: ${current}/${total}`);
+      logInfo(`Token usage synchronization progress: ${current}/${total}`);
     }
   });
 
-  // 加载现有数据
+  // Load existing data
   const data = loadTokenUsageData();
 
-  // 更新数据
+  // Update data
   let successCount = 0;
   let failCount = 0;
 
@@ -373,13 +373,13 @@ router.post('/sync', wrapAsync(async (req, res) => {
     }
   });
 
-  // 重新计算汇总
+  // Recalculate the summary
   data.summary = calculateSummary(data.keys);
 
-  // 保存
+  // Save
   saveTokenUsageData(data);
 
-  logInfo(`Token使用量同步完成: ${successCount} 成功, ${failCount} 失败`);
+  logInfo(`Token usage synchronization completed: ${successCount} succeeded, ${failCount} failed`);
 
   sendSuccessResponse(res, {
     total: results.length,
@@ -391,39 +391,39 @@ router.post('/sync', wrapAsync(async (req, res) => {
       error: r.error,
       message: r.message
     }))
-  }, '同步完成');
+  }, 'Synchronization completed');
 }, 'sync token usage'));
 
 /**
  * GET /admin/token/trend
- * 获取Token使用趋势数据（7天）
- * 返回每个密钥的使用趋势和总体趋势
+ * Get token usage trends over 7 days
+ * Return usage trends for each key and overall trends
  * 
- * Query参数:
- * - poolGroup: 密钥池筛选（可选）
- * - limit: 返回数量限制（默认10）
+ * Query parameters:
+ * - poolGroup: Pool filter (optional)
+ * - limit: Result limit (default 10)
  */
 router.get('/trend', wrapSync((req, res) => {
   const data = loadTokenUsageData();
-  const poolGroupFilter = req.query.poolGroup; // 密钥池筛选
-  const limit = parseInt(req.query.limit) || 10; // 默认返回10条
+  const poolGroupFilter = req.query.poolGroup; // Pool filter
+  const limit = parseInt(req.query.limit) || 10; // Return 10 entries by default
 
-  // 获取所有密钥信息（用于密钥池筛选）
+  // Get all key information for pool filtering
   const allKeys = keyPoolManager.keys || [];
   const keyIdToPoolMap = {};
   allKeys.forEach(key => {
     keyIdToPoolMap[key.id] = key.pool_group || 'default';
   });
 
-  // 提取所有密钥的使用数据
+  // Extract usage data for all keys
   let keysData = Object.entries(data.keys || {})
     .filter(([keyId, keyData]) => {
-      // 基础数据验证
+      // Basic data validation
       if (!keyData || !keyData.success || !keyData.standard) {
         return false;
       }
       
-      // BaSui: 密钥池筛选
+      // BaSui: Pool filter
       if (poolGroupFilter) {
         const keyPoolGroup = keyIdToPoolMap[keyId] || 'default';
         if (keyPoolGroup !== poolGroupFilter) {
@@ -434,7 +434,7 @@ router.get('/trend', wrapSync((req, res) => {
       return true;
     })
     .map(([keyId, keyData]) => {
-      // 安全获取密钥字符串（可能是对象）
+      // Safely get the key string, which may be wrapped in an object
       let keyStr = '';
       if (typeof keyData.key === 'string') {
         keyStr = keyData.key;
@@ -442,13 +442,13 @@ router.get('/trend', wrapSync((req, res) => {
         keyStr = keyData.key.key;
       }
       
-      // 获取密钥池信息
+      // Get pool information
       const poolGroup = keyIdToPoolMap[keyId] || 'default';
       
       return {
         id: keyId,
-        key: keyStr.length > 20 ? keyStr.substring(0, 20) + '...' : keyStr,  // 脱敏显示
-        pool_group: poolGroup, // BaSui: 添加密钥池信息
+        key: keyStr.length > 20 ? keyStr.substring(0, 20) + '...' : keyStr,  // Mask sensitive values for display
+        pool_group: poolGroup, // BaSui: Add pool information
         used: keyData.standard.orgTotalTokensUsed || 0,
         limit: keyData.standard.totalAllowance || 0,
         remaining: keyData.standard.remaining || 0,
@@ -458,42 +458,42 @@ router.get('/trend', wrapSync((req, res) => {
         trialEndDate: keyData.trialEndDate || null
       };
     })
-    .sort((a, b) => b.used - a.used);  // 按使用量降序
+    .sort((a, b) => b.used - a.used);  // Sort by usage in descending order
 
-  // BaSui: 应用数量限制
+  // BaSui: Apply the result limit
   const topKeys = keysData.slice(0, limit);
 
   sendSuccessResponse(res, {
-    top_keys: topKeys, // BaSui: 使用限制后的数据
+    top_keys: topKeys, // BaSui: Use the limited data
     summary: {
-      total_keys: keysData.length, // BaSui: 筛选后的密钥总数
+      total_keys: keysData.length, // BaSui: Total keys after filtering
       total_used: (data.summary && data.summary.total_used) || 0,
       total_limit: (data.summary && data.summary.total_limit) || 0,
       total_remaining: (data.summary && data.summary.total_remaining) || 0
     },
-    filter: poolGroupFilter ? { poolGroup: poolGroupFilter } : null, // BaSui: 返回筛选条件
+    filter: poolGroupFilter ? { poolGroup: poolGroupFilter } : null, // BaSui: Return filter criteria
     last_sync: (data.summary && data.summary.last_full_sync) || null
   });
 }, 'get token trend'));
 
 /**
  * GET /admin/token/by-pool
- * 获取按密钥池分组的Token使用量统计
- * 返回每个密钥池的Token使用情况
+ * Get token usage statistics grouped by pool
+ * Return token usage for each pool
  */
 router.get('/by-pool', wrapSync((req, res) => {
   const data = loadTokenUsageData();
   
-  // 获取所有密钥信息（包括密钥池分组）
+  // Get all key information, including pool grouping
   const allKeys = keyPoolManager.keys || [];
   
-  // 按密钥池分组统计
+  // Aggregate statistics by pool
   const poolStats = {};
   
   allKeys.forEach(key => {
     const poolGroup = key.poolGroup || 'default';
     
-    // 初始化池子统计
+    // Initialize pool statistics
     if (!poolStats[poolGroup]) {
       poolStats[poolGroup] = {
         id: poolGroup,
@@ -507,7 +507,7 @@ router.get('/by-pool', wrapSync((req, res) => {
     
     poolStats[poolGroup].total_keys++;
     
-    // 获取该密钥的Token使用数据
+    // Get token usage for this key
     const keyUsageData = data.keys[key.id];
     if (keyUsageData && keyUsageData.success && keyUsageData.standard) {
       poolStats[poolGroup].total_used += keyUsageData.standard.orgTotalTokensUsed || 0;
@@ -517,7 +517,7 @@ router.get('/by-pool', wrapSync((req, res) => {
     }
   });
   
-  // 计算使用百分比
+  // Calculate usage percentage
   Object.values(poolStats).forEach(pool => {
     if (pool.total_limit > 0) {
       pool.percentage = ((pool.total_used / pool.total_limit) * 100).toFixed(1);
@@ -538,141 +538,141 @@ router.get('/by-pool', wrapSync((req, res) => {
 
 /**
  * DELETE /admin/token/cache
- * 清除Token使用量缓存
+ * Clear the token usage cache
  */
 router.delete('/cache', wrapSync((req, res) => {
   try {
-    // 清除内存缓存
+    // Clear the in-memory cache
     memoryCache = null;
     lastLoadTime = 0;
 
-    // 删除文件缓存
+    // Delete the file cache
     if (fs.existsSync(TOKEN_USAGE_FILE)) {
-      // 备份后删除
+      // Back up before deleting
       const backupPath = TOKEN_USAGE_FILE + '.bak';
       fs.copyFileSync(TOKEN_USAGE_FILE, backupPath);
       fs.unlinkSync(TOKEN_USAGE_FILE);
-      logInfo('Token使用量缓存已清除');
+      logInfo('Token usage cache cleared');
     }
 
-    sendSuccessResponse(res, { message: '缓存已清除' });
+    sendSuccessResponse(res, { message: 'Cache cleared' });
   } catch (error) {
-    logError('清除Token使用量缓存失败', error);
-    sendErrorResponse(res, 500, '清除缓存失败: ' + error.message);
+    logError('Failed to clear the token usage cache', error);
+    sendErrorResponse(res, 500, 'Failed to clear cache: ' + error.message);
   }
 }, 'clear token cache'));
 
-// ========== 后台同步任务 ==========
+// ========== Background synchronization task ==========
 
 let syncInProgress = false;
 
 /**
- * 后台异步同步Token使用量
- * 避免重复触发
+ * Synchronize token usage asynchronously in the background
+ * Prevent duplicate triggers
  */
 async function syncTokenUsageInBackground() {
   if (syncInProgress) {
-    logDebug('Token使用量同步任务已在进行中,跳过');
+    logDebug('Token usage synchronization is already running; skipping');
     return;
   }
 
   syncInProgress = true;
 
   try {
-    logInfo('后台同步Token使用量开始...');
+    logInfo('Starting background token usage synchronization...');
 
-    // 获取所有active密钥
+    // Get all active keys
     const activeKeys = keyPoolManager.keys
       .filter(k => k.status === 'active')
       .map(k => ({ id: k.id, key: k.key }));
 
     if (activeKeys.length === 0) {
-      logInfo('没有active密钥需要同步');
+      logInfo('No active keys need synchronization');
       return;
     }
 
-    // 批量查询
+    // Query in batches
     const results = await batchFetchTokenUsage(activeKeys, {
       concurrency: 10
     });
 
-    // 加载现有数据
+    // Load existing data
     const data = loadTokenUsageData();
 
-    // 更新数据
+    // Update data
     results.forEach(result => {
       data.keys[result.id] = result;
     });
 
-    // 重新计算汇总
+    // Recalculate the summary
     data.summary = calculateSummary(data.keys);
 
-    // 保存
+    // Save
     saveTokenUsageData(data);
 
     const successCount = results.filter(r => r.success).length;
-    logInfo(`后台同步Token使用量完成: ${successCount}/${results.length} 成功`);
+    logInfo(`Background token usage synchronization completed: ${successCount}/${results.length} succeeded`);
 
   } catch (error) {
-    logError('后台同步Token使用量失败', error);
+    logError('Background token usage synchronization failed', error);
     throw error;
   } finally {
     syncInProgress = false;
   }
 }
 
-// 🔧 修复内存泄漏 - 添加定时器管理
+// 🔧 Fix memory leaks by managing timers
 let autoSyncInterval = null;
 
 /**
- * 定时自动同步(每5分钟)
- * 服务器启动后自动开启
+ * Scheduled automatic synchronization every 5 minutes
+ * Automatically enabled after server startup
  */
 function startAutoSync() {
-  const SYNC_INTERVAL = 5 * 60 * 1000; // 5分钟
+  const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-  // 清理可能存在的旧定时器
+  // Clear any previous timer
   if (autoSyncInterval) {
     clearInterval(autoSyncInterval);
     autoSyncInterval = null;
   }
 
-  logInfo(`启动Token使用量自动同步,间隔: ${SYNC_INTERVAL / 1000} 秒`);
+  logInfo(`Starting automatic token usage synchronization; interval: ${SYNC_INTERVAL / 1000} seconds`);
 
   autoSyncInterval = setInterval(async () => {
     try {
       const data = loadTokenUsageData();
 
-      // 只有缓存过期时才同步
+      // Synchronize only when the cache has expired
       if (isCacheExpired(data.summary.last_full_sync)) {
-        logInfo('Token使用量缓存已过期,触发自动同步');
+        logInfo('Token usage cache expired; triggering automatic synchronization');
         await syncTokenUsageInBackground();
       } else {
-        logDebug('Token使用量缓存仍有效,跳过自动同步');
+        logDebug('Token usage cache is still valid; skipping automatic synchronization');
       }
     } catch (error) {
-      logError('Token使用量自动同步失败', error);
+      logError('Token usage automatic synchronization failed', error);
     }
   }, SYNC_INTERVAL);
 }
 
 /**
- * 停止自动同步
+ * Stop automatic synchronization
  */
 export function stopAutoSync() {
   if (autoSyncInterval) {
     clearInterval(autoSyncInterval);
     autoSyncInterval = null;
-    logInfo('Token使用量自动同步已停止');
+    logInfo('Token usage automatic synchronization stopped');
   }
 }
 
-// 进程退出时清理定时器
+// Clear timers when the process exits
 process.on('SIGTERM', stopAutoSync);
 process.on('SIGINT', stopAutoSync);
 process.on('exit', stopAutoSync);
 
-// 服务器启动时立即启动自动同步
+// Start automatic synchronization at server startup
 startAutoSync();
 
 export default router;

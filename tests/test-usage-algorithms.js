@@ -1,63 +1,63 @@
 /**
- * 🎓 测试基于用量的轮询算法
+ * 🎓 Test usage-based key selection algorithms
  *
- * 测试目标：
- * 1. least-token-used：验证选择的密钥确实是Token用量最少的
- * 2. max-remaining：验证选择的密钥确实是剩余配额最多的
+ * Test objectives:
+ * 1. least-token-used: verify that the key with the lowest token usage is selected
+ * 2. max-remaining: verify that the key with the largest remaining quota is selected
  */
 
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
 
 async function testUsageAlgorithms() {
-  logInfo('========== 开始测试基于用量的轮询算法 ==========');
+  logInfo('========== Start testing usage-based key selection algorithms ==========');
 
   try {
-    // 1. 保存原始配置
+    // 1. Save the original configuration
     const originalConfig = keyPoolManager.getConfig();
-    logInfo(`原始算法配置: ${originalConfig.algorithm}`);
+    logInfo(`Original algorithm: ${originalConfig.algorithm}`);
 
-    // 2. 测试 least-token-used 算法
-    logInfo('\n========== 测试 least-token-used 算法 ==========');
+    // 2. Test the least-token-used algorithm
+    logInfo('\n========== Test the least-token-used algorithm ==========');
     keyPoolManager.updateConfig({ algorithm: 'least-token-used' });
 
     for (let i = 0; i < 3; i++) {
       try {
         const result = await keyPoolManager.getNextKey();
-        logInfo(`第 ${i + 1} 次选择: ${result.keyId.substring(0, 20)}...`);
+        logInfo(`Selection ${i + 1}: ${result.keyId.substring(0, 20)}...`);
       } catch (error) {
-        logError(`least-token-used 测试失败 (第${i+1}次)`, error);
+        logError(`least-token-used Test failed (attempt ${i+1})`, error);
       }
     }
 
-    // 3. 测试 max-remaining 算法
-    logInfo('\n========== 测试 max-remaining 算法 ==========');
+    // 3. Test the max-remaining algorithm
+    logInfo('\n========== Test the max-remaining algorithm ==========');
     keyPoolManager.updateConfig({ algorithm: 'max-remaining' });
 
     for (let i = 0; i < 3; i++) {
       try {
         const result = await keyPoolManager.getNextKey();
-        logInfo(`第 ${i + 1} 次选择: ${result.keyId.substring(0, 20)}...`);
+        logInfo(`Selection ${i + 1}: ${result.keyId.substring(0, 20)}...`);
       } catch (error) {
-        logError(`max-remaining 测试失败 (第${i+1}次)`, error);
+        logError(`max-remaining Test failed (attempt ${i+1})`, error);
       }
     }
 
-    // 4. 恢复原始配置
+    // 4. Restore the original configuration
     keyPoolManager.updateConfig({ algorithm: originalConfig.algorithm });
-    logInfo(`\n配置已恢复为: ${originalConfig.algorithm}`);
+    logInfo(`\nConfiguration restored to: ${originalConfig.algorithm}`);
 
-    logInfo('\n========== 测试完成！==========');
-    logInfo('✅ 所有测试通过！如果你看到了上面的密钥选择日志，说明算法工作正常！');
+    logInfo('\n========== Tests complete!==========');
+    logInfo('✅ All tests passed! The key-selection logs above indicate that the algorithms are working correctly.');
 
   } catch (error) {
-    logError('测试过程中发生错误', error);
+    logError('Error during testing', error);
     process.exit(1);
   }
 }
 
-// 运行测试
+// Run tests
 testUsageAlgorithms().catch(error => {
-  logError('测试脚本执行失败', error);
+  logError('Test script failed', error);
   process.exit(1);
 });

@@ -1,13 +1,13 @@
 /**
- * 类型检查工具
- * 防止空指针和类型错误
+ * Type checking helpers
+ * Prevent null access and type errors.
  */
 
 /**
- * 安全获取对象属性
- * @param {object} obj - 对象
- * @param {string} path - 属性路径，如 'a.b.c'
- * @param {*} defaultValue - 默认值
+ * Safely retrieve an object property.
+ * @param {object} obj - Object
+ * @param {string} path - Property path, such as 'a.b.c'
+ * @param {*} defaultValue - Default value
  */
 export function safeGet(obj, path, defaultValue = undefined) {
   if (!obj) return defaultValue;
@@ -26,8 +26,8 @@ export function safeGet(obj, path, defaultValue = undefined) {
 }
 
 /**
- * 检查是否为空
- * @param {*} value - 要检查的值
+ * Check whether a value is empty.
+ * @param {*} value - Value to check
  */
 export function isEmpty(value) {
   if (value === null || value === undefined) return true;
@@ -38,9 +38,9 @@ export function isEmpty(value) {
 }
 
 /**
- * 确保是数组
- * @param {*} value - 要检查的值
- * @param {array} defaultValue - 默认值
+ * Ensure the value is an array.
+ * @param {*} value - Value to check
+ * @param {array} defaultValue - Default value
  */
 export function ensureArray(value, defaultValue = []) {
   if (Array.isArray(value)) return value;
@@ -49,9 +49,9 @@ export function ensureArray(value, defaultValue = []) {
 }
 
 /**
- * 安全的JSON解析
- * @param {string} str - JSON字符串
- * @param {*} defaultValue - 解析失败的默认值
+ * Parse JSON with a fallback on failure.
+ * @param {string} str - JSON string
+ * @param {*} defaultValue - Fallback value if parsing fails
  */
 export function safeJsonParse(str, defaultValue = null) {
   try {
@@ -62,9 +62,9 @@ export function safeJsonParse(str, defaultValue = null) {
 }
 
 /**
- * 安全的JSON字符串化
- * @param {*} obj - 要字符串化的对象
- * @param {string} defaultValue - 失败的默认值
+ * Serialize to JSON with a fallback on failure.
+ * @param {*} obj - Object to serialize
+ * @param {string} defaultValue - Fallback value on failure
  */
 export function safeJsonStringify(obj, defaultValue = '{}') {
   try {

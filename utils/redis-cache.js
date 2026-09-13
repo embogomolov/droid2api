@@ -1,17 +1,17 @@
 /**
- * Redis 缓存管理器 🚀
+ * Redis cache manager 🚀
  *
- * 功能：
- * - 密钥池状态缓存（减少文件读取）
- * - Token 使用量缓存（高性能统计）
- * - 支持集群模式（多进程共享状态）
+ * Features:
+ * - Cache key pool state to reduce disk reads.
+ * - Cache token usage for fast statistics access.
+ * - Support cluster mode by sharing state across processes.
  *
- * 依赖：
+ * Dependency:
  * npm install redis
  *
- * 使用：
+ * Usage:
  * import redisCache from './utils/redis-cache.js';
- * await redisCache.set('key', value, 60);  // 缓存60秒
+ * await redisCache.set('key', value, 60);  // Cache for 60 seconds.
  * const value = await redisCache.get('key');
  */
 
@@ -28,63 +28,63 @@ class RedisCache {
       password: process.env.REDIS_PASSWORD || undefined,
       db: parseInt(process.env.REDIS_DB || '0'),
       keyPrefix: process.env.REDIS_KEY_PREFIX || 'droid2api:',
-      // BaSui：连接池配置（复用Redis连接）
+      // BaSui: Connection settings for Redis connection reuse.
       socket: {
         keepAlive: true,
         reconnectStrategy: (retries) => {
           if (retries > 10) {
-            logError('Redis重连失败，达到最大重试次数');
-            return false;  // 停止重连
+            logError('Redis reconnection failed: retry limit reached');
+            return false;  // Stop reconnecting.
           }
-          return Math.min(retries * 100, 3000);  // 重连延迟：100ms, 200ms, ..., 3000ms
+          return Math.min(retries * 100, 3000);  // Reconnection delay: 100 ms, 200 ms, ..., 3,000 ms
         }
       }
     };
   }
 
   /**
-   * 初始化 Redis 连接
+   * Initialize the Redis connection.
    */
   async connect() {
-    // BaSui：如果未安装redis包，优雅降级（不影响系统运行）
+    // BaSui: Continue without caching if the redis package is unavailable.
     try {
       const { createClient } = await import('redis');
 
       this.client = createClient(this.config);
 
-      // 错误处理
+      // Handle connection errors.
       this.client.on('error', (err) => {
-        logError('Redis错误', err);
+        logError('Redis error', err);
         this.isConnected = false;
       });
 
-      // 重连成功
+      // Log reconnection attempts.
       this.client.on('reconnecting', () => {
-        logInfo('Redis正在重连...');
+        logInfo('Reconnecting to Redis...');
       });
 
-      // 连接成功
+      // Connection established.
       this.client.on('connect', () => {
-        logInfo('Redis连接成功');
+        logInfo('Connected to Redis');
         this.isConnected = true;
         this.isEnabled = true;
       });
 
-      // 建立连接
+      // Establish the connection.
       await this.client.connect();
 
-      logInfo(`Redis缓存已启用: ${this.config.host}:${this.config.port} (DB:${this.config.db})`);
+      logInfo(`Redis cache enabled: ${this.config.host}:${this.config.port} (DB:${this.config.db})`);
 
     } catch (error) {
-      logInfo('Redis未安装或连接失败，缓存功能已禁用（系统仍可正常运行）');
-      logDebug('Redis错误详情', error);
+      logInfo('Redis is unavailable or the connection failed; caching is disabled and the application can continue running');
+      logDebug('Redis error details', error);
       this.isEnabled = false;
     }
   }
 
   /**
-   * 获取缓存（带前缀）
-   * @param {string} key - 缓存键
+   * Get a cached value using the configured key prefix.
+   * @param {string} key - Cache key
    * @returns {Promise<any>}
    */
   async get(key) {
@@ -97,23 +97,23 @@ class RedisCache {
       const value = await this.client.get(fullKey);
 
       if (value) {
-        logDebug(`Redis缓存命中: ${key}`);
+        logDebug(`Redis cache hit: ${key}`);
         return JSON.parse(value);
       }
 
-      logDebug(`Redis缓存未命中: ${key}`);
+      logDebug(`Redis cache miss: ${key}`);
       return null;
     } catch (error) {
-      logError(`Redis读取失败: ${key}`, error);
+      logError(`Redis read failed: ${key}`, error);
       return null;
     }
   }
 
   /**
-   * 设置缓存（带前缀和过期时间）
-   * @param {string} key - 缓存键
-   * @param {any} value - 缓存值
-   * @param {number} ttl - 过期时间（秒），默认60秒
+   * Cache a value with the configured key prefix and expiration.
+   * @param {string} key - Cache key
+   * @param {any} value - Cached value
+   * @param {number} ttl - Time to live in seconds; defaults to 60
    * @returns {Promise<boolean>}
    */
   async set(key, value, ttl = 60) {
@@ -126,17 +126,17 @@ class RedisCache {
       const jsonValue = JSON.stringify(value);
 
       await this.client.setEx(fullKey, ttl, jsonValue);
-      logDebug(`Redis缓存已设置: ${key} (TTL: ${ttl}s)`);
+      logDebug(`Redis cache entry set: ${key} (TTL: ${ttl}s)`);
       return true;
     } catch (error) {
-      logError(`Redis写入失败: ${key}`, error);
+      logError(`Redis write failed: ${key}`, error);
       return false;
     }
   }
 
   /**
-   * 删除缓存
-   * @param {string} key - 缓存键
+   * Delete a cache entry.
+   * @param {string} key - Cache key
    * @returns {Promise<boolean>}
    */
   async del(key) {
@@ -147,18 +147,18 @@ class RedisCache {
     try {
       const fullKey = this.config.keyPrefix + key;
       await this.client.del(fullKey);
-      logDebug(`Redis缓存已删除: ${key}`);
+      logDebug(`Redis cache entry deleted: ${key}`);
       return true;
     } catch (error) {
-      logError(`Redis删除失败: ${key}`, error);
+      logError(`Redis deletion failed: ${key}`, error);
       return false;
     }
   }
 
   /**
-   * 批量删除缓存（通过模式匹配）
-   * @param {string} pattern - 匹配模式，如 "keypool:*"
-   * @returns {Promise<number>} 删除的键数量
+   * Delete cache entries matching a pattern.
+   * @param {string} pattern - Match pattern, such as "keypool:*"
+   * @returns {Promise<number>} Number of deleted keys
    */
   async delByPattern(pattern) {
     if (!this.isEnabled || !this.isConnected) {
@@ -171,20 +171,20 @@ class RedisCache {
 
       if (keys.length > 0) {
         await this.client.del(keys);
-        logDebug(`Redis批量删除: ${pattern} (${keys.length}个键)`);
+        logDebug(`Redis batch deletion: ${pattern} (${keys.length} keys)`);
         return keys.length;
       }
 
       return 0;
     } catch (error) {
-      logError(`Redis批量删除失败: ${pattern}`, error);
+      logError(`Redis batch deletion failed: ${pattern}`, error);
       return 0;
     }
   }
 
   /**
-   * 检查缓存是否存在
-   * @param {string} key - 缓存键
+   * Check whether a cache entry exists.
+   * @param {string} key - Cache key
    * @returns {Promise<boolean>}
    */
   async exists(key) {
@@ -197,17 +197,17 @@ class RedisCache {
       const result = await this.client.exists(fullKey);
       return result === 1;
     } catch (error) {
-      logError(`Redis检查失败: ${key}`, error);
+      logError(`Redis existence check failed: ${key}`, error);
       return false;
     }
   }
 
   /**
-   * 自增计数器（原子操作）
-   * @param {string} key - 计数器键
-   * @param {number} increment - 增量，默认1
-   * @param {number} ttl - 过期时间（秒），默认不过期
-   * @returns {Promise<number>} 自增后的值
+   * Increment a counter atomically.
+   * @param {string} key - Counter key
+   * @param {number} increment - Increment amount; defaults to 1
+   * @param {number} ttl - Time to live in seconds; no expiration by default
+   * @returns {Promise<number>} Value after incrementing
    */
   async incr(key, increment = 1, ttl = null) {
     if (!this.isEnabled || !this.isConnected) {
@@ -219,26 +219,26 @@ class RedisCache {
       const newValue = await this.client.incrBy(fullKey, increment);
 
       if (ttl !== null && newValue === increment) {
-        // 首次创建时设置过期时间
+        // Set the expiration when the counter is first created.
         await this.client.expire(fullKey, ttl);
       }
 
       return newValue;
     } catch (error) {
-      logError(`Redis自增失败: ${key}`, error);
+      logError(`Redis increment failed: ${key}`, error);
       return 0;
     }
   }
 
   /**
-   * 获取缓存状态（用于监控）
+   * Get cache status for monitoring.
    */
   async getStats() {
     if (!this.isEnabled || !this.isConnected) {
       return {
         enabled: false,
         connected: false,
-        message: 'Redis未启用或未连接'
+        message: 'Redis is disabled or disconnected'
       };
     }
 
@@ -257,7 +257,7 @@ class RedisCache {
         keyspace: keyspace
       };
     } catch (error) {
-      logError('获取Redis状态失败', error);
+      logError('Failed to get Redis status', error);
       return {
         enabled: true,
         connected: false,
@@ -267,18 +267,18 @@ class RedisCache {
   }
 
   /**
-   * 关闭连接（应用退出时调用）
+   * Close the connection on application exit.
    */
   async disconnect() {
     if (this.client && this.isConnected) {
       await this.client.quit();
-      logInfo('Redis连接已关闭');
+      logInfo('Redis connection closed');
       this.isConnected = false;
     }
   }
 
   /**
-   * 清空所有缓存（危险操作！仅用于开发/测试）
+   * Flush all entries in the selected database (destructive; development/testing only).
    */
   async flushAll() {
     if (!this.isEnabled || !this.isConnected) {
@@ -287,23 +287,23 @@ class RedisCache {
 
     try {
       await this.client.flushDb();
-      logInfo('Redis缓存已清空');
+      logInfo('Redis cache flushed');
       return true;
     } catch (error) {
-      logError('Redis清空失败', error);
+      logError('Redis flush failed', error);
       return false;
     }
   }
 
   /**
-   * 判断 Redis 是否可用
+   * Check whether Redis is available.
    */
   isAvailable() {
     return this.isEnabled && this.isConnected;
   }
 }
 
-// BaSui：全局单例（整个应用共享一个Redis连接）
+// BaSui: Global singleton; the application shares one Redis connection.
 const redisCache = new RedisCache();
 
 export default redisCache;

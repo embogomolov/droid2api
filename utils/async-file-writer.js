@@ -4,51 +4,51 @@ import path from 'path';
 import { logDebug, logError } from '../logger.js';
 
 /**
- * 异步批量文件写入器 🚀
+ * Asynchronous batched file writer 🚀
  *
- * 性能优化核心：
- * - 批量写入（debounce）：高并发时合并多次写入为一次
- * - 异步 I/O：不阻塞主线程
- * - 原子操作：临时文件 + rename 保证数据安全
- * - 自动备份：防止数据损坏
+ * Core performance optimizations:
+ * - Debounced writes: combine repeated writes under high concurrency.
+ * - Asynchronous I/O: avoid blocking the main thread.
+ * - Atomic replacement: write a temporary file, then rename it to protect data.
+ * - Automatic backups: protect against data corruption.
  *
- * 使用场景：
- * - 密钥池频繁更新（每次请求都更新使用次数）
- * - Token 统计实时写入
- * - 请求统计日志
+ * Use cases:
+ * - Frequent key pool updates (usage counts change on every request).
+ * - Persisting token statistics in real time.
+ * - Request statistics logs.
  */
 
 class AsyncFileWriter {
   constructor(filePath, options = {}) {
     this.filePath = filePath;
-    this.debounceTime = options.debounceTime || 1000;  // 默认1秒批量写入
-    this.maxRetries = options.maxRetries || 3;         // 最大重试次数
-    this.retryDelay = options.retryDelay || 500;       // 重试延迟
+    this.debounceTime = options.debounceTime || 1000;  // Default debounce interval: 1 second
+    this.maxRetries = options.maxRetries || 3;         // Maximum write attempts
+    this.retryDelay = options.retryDelay || 500;       // Retry delay
 
-    this.pendingData = null;      // 待写入数据
-    this.writeTimer = null;       // 写入定时器
-    this.isWriting = false;       // 是否正在写入
-    this.writeQueue = [];         // 写入队列
+    this.pendingData = null;      // Pending data
+    this.writeTimer = null;       // Write timer
+    this.isWriting = false;       // Whether a write is in progress
+    this.writeQueue = [];         // Write queue
   }
 
   /**
-   * 异步写入数据（带 debounce）
-   * @param {object} data - 要写入的数据
+   * Write data asynchronously with debouncing.
+   * @param {object} data - Data to write
    * @returns {Promise<void>}
    */
   async write(data) {
-    // BaSui：缓存待写入数据（后续的写入会覆盖前面的）
+    // BaSui: Store pending data; later writes replace earlier pending data.
     this.pendingData = data;
 
-    // BaSui：清除旧的定时器，重新开始计时
+    // BaSui: Clear the old timer and restart the debounce interval.
     if (this.writeTimer) {
       clearTimeout(this.writeTimer);
     }
 
-    // BaSui：debounce - 1秒内的多次写入合并为一次
+    // BaSui: Debounce multiple writes within one second into a single write.
     return new Promise((resolve, reject) => {
       
-    // 🔧 修复：限制队列大小防止内存泄漏
+    // 🔧 Fix: Bound the queue size to prevent memory leaks.
     if (this.writeQueue.length > 1000) {
       const error = new Error('Write queue overflow - too many pending writes');
       logError('AsyncFileWriter queue overflow', error);
@@ -65,14 +65,14 @@ class AsyncFileWriter {
   }
 
   /**
-   * 立即写入（跳过 debounce）
-   * @param {object} data - 要写入的数据
+   * Write immediately, bypassing the debounce delay.
+   * @param {object} data - Data to write
    * @returns {Promise<void>}
    */
   async writeImmediately(data) {
     this.pendingData = data;
 
-    // BaSui：清除 debounce 定时器
+    // BaSui: Clear the debounce timer.
     if (this.writeTimer) {
       clearTimeout(this.writeTimer);
       this.writeTimer = null;
@@ -82,19 +82,19 @@ class AsyncFileWriter {
   }
 
   /**
-   * 执行实际写入（带重试机制）
+   * Perform the actual write with retries.
    * @private
    */
   async _flushWrite() {
-    // BaSui：防止并发写入（加锁）
+    // BaSui: Prevent concurrent writes with a lock flag.
     if (this.isWriting) {
-      // 🔧 修复 BaSui：改用 DEBUG 级别，避免日志污染
+      // 🔧 BaSui fix: Use DEBUG level to avoid noisy logs.
       logDebug(`[FileWriter] Write in progress for ${this.filePath}, will retry after debounce`);
       return;
     }
 
     if (!this.pendingData) {
-      return;  // 没有数据需要写入
+      return;  // No data to write.
     }
 
     this.isWriting = true;
@@ -112,12 +112,12 @@ class AsyncFileWriter {
           await this._sleep(this.retryDelay);
         }
 
-        // BaSui：原子写入（临时文件 + rename）
+        // BaSui: Write atomically using a temporary file and rename.
         await this._atomicWrite(dataToWrite);
 
         logDebug(`File written successfully: ${this.filePath}${attempt > 0 ? ` (after ${attempt + 1} attempts)` : ''}`);
 
-        // BaSui：通知所有等待的 Promise
+        // BaSui: Resolve all waiting promises.
         queueToNotify.forEach(({ resolve }) => resolve());
 
         this.isWriting = false;
@@ -128,17 +128,17 @@ class AsyncFileWriter {
       }
     }
 
-    // BaSui：所有重试都失败了
+    // BaSui: All write attempts failed.
     this.isWriting = false;
     const errorMsg = `文件写入失败（尝试${this.maxRetries}次）: ${this.filePath} - ${lastError.message}`;
     logError(errorMsg, lastError);
 
-    // BaSui：通知所有等待的 Promise 失败
+    // BaSui: Reject all waiting promises.
     queueToNotify.forEach(({ reject }) => reject(new Error(errorMsg)));
   }
 
   /**
-   * 原子写入操作（临时文件 + rename）
+   * Atomic write using a temporary file and rename.
    * @private
    */
   async _atomicWrite(data) {
@@ -146,29 +146,29 @@ class AsyncFileWriter {
     const tempPath = this.filePath + '.tmp';
     const backupPath = this.filePath + '.bak';
 
-    // 1. 写入临时文件
+    // 1. Write the temporary file.
     await fs.writeFile(tempPath, jsonData, 'utf-8');
 
-    // 2. 验证写入的数据是否正确
+    // 2. Verify that the written data matches the intended content.
     const written = await fs.readFile(tempPath, 'utf-8');
     if (written !== jsonData) {
-      throw new Error('写入验证失败：文件内容不匹配');
+      throw new Error('Write verification failed: file contents do not match');
     }
 
-    // 3. 备份旧文件（如果存在）
+    // 3. Back up the existing file, if present.
     try {
       await fs.access(this.filePath);
       await fs.copyFile(this.filePath, backupPath);
     } catch (err) {
-      // 文件不存在，不需要备份
+      // The file does not exist; no backup is needed.
     }
 
-    // 4. 原子重命名（这是原子操作，即使进程崩溃也不会损坏）
+    // 4. Rename atomically so a process crash does not leave a partially replaced file.
     await fs.rename(tempPath, this.filePath);
   }
 
   /**
-   * 睡眠工具函数
+   * Delay helper
    * @private
    */
   async _sleep(ms) {
@@ -176,7 +176,7 @@ class AsyncFileWriter {
   }
 
   /**
-   * 销毁写入器（应用退出时调用）
+   * Dispose of the writer on application exit.
    */
   async destroy() {
     if (this.writeTimer) {
@@ -191,7 +191,7 @@ class AsyncFileWriter {
 }
 
 /**
- * 全局写入器管理器（单例模式）
+ * Global file writer manager (singleton)
  */
 class FileWriterManager {
   constructor() {
@@ -199,9 +199,9 @@ class FileWriterManager {
   }
 
   /**
-   * 获取或创建写入器
-   * @param {string} filePath - 文件路径
-   * @param {object} options - 配置选项
+   * Get or create a file writer.
+   * @param {string} filePath - File path
+   * @param {object} options - Configuration options
    * @returns {AsyncFileWriter}
    */
   getWriter(filePath, options = {}) {
@@ -212,7 +212,7 @@ class FileWriterManager {
   }
 
   /**
-   * 销毁所有写入器
+   * Dispose of all file writers.
    */
   async destroyAll() {
     const destroyPromises = [];
@@ -224,10 +224,10 @@ class FileWriterManager {
   }
 }
 
-// BaSui：全局单例
+// BaSui: Global singleton
 const fileWriterManager = new FileWriterManager();
 
-// 🔧 修复：进程退出时flush所有pending写入，避免数据丢失
+// 🔧 Fix: Flush all pending writes on process exit to prevent data loss.
 async function flushAllWriters() {
   try {
     console.log('Flushing all pending writes...');

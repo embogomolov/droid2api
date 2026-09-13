@@ -1,6 +1,6 @@
 /**
- * 原子计数器
- * 防止并发计数错误
+ * Atomic counter
+ * Prevent incorrect counts during concurrent operations.
  */
 
 class AtomicCounter {
@@ -11,14 +11,14 @@ class AtomicCounter {
   }
   
   /**
-   * 获取当前值
+   * Get the current value.
    */
   get value() {
     return this._value;
   }
   
   /**
-   * 原子递增
+   * Increment atomically.
    */
   async increment() {
     await this._acquireLock();
@@ -32,7 +32,7 @@ class AtomicCounter {
   }
   
   /**
-   * 原子递减
+   * Decrement atomically.
    */
   async decrement() {
     await this._acquireLock();
@@ -46,7 +46,7 @@ class AtomicCounter {
   }
   
   /**
-   * 原子加法
+   * Add atomically.
    */
   async add(delta) {
     await this._acquireLock();
@@ -60,7 +60,7 @@ class AtomicCounter {
   }
   
   /**
-   * 比较并交换
+   * Compare and swap.
    */
   async compareAndSwap(expectedValue, newValue) {
     await this._acquireLock();
@@ -76,7 +76,7 @@ class AtomicCounter {
   }
   
   /**
-   * 获取锁
+   * Acquire the lock.
    */
   async _acquireLock() {
     while (this._lock) {
@@ -88,7 +88,7 @@ class AtomicCounter {
   }
   
   /**
-   * 释放锁
+   * Release the lock.
    */
   _releaseLock() {
     this._lock = false;

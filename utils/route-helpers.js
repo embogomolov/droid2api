@@ -3,10 +3,10 @@ import keyPoolManager from '../auth.js';
 import fetchWithPool, { FetchRetryError } from './http-client.js';
 
 /**
- * 从响应中提取Token使用量信息
- * @param {Object} data - 响应数据
- * @param {string} type - 模型类型 (openai/anthropic/common)
- * @returns {Object|null} 使用量信息
+ * Extract token usage from a response.
+ * @param {Object} data - Response data
+ * @param {string} type - Model type (openai/anthropic/common)
+ * @returns {Object|null} Usage information
  */
 export function extractUsageFromResponse(data, type) {
   try {
@@ -45,26 +45,26 @@ export function extractUsageFromResponse(data, type) {
       }
     }
   } catch (error) {
-    logDebug(`提取使用量信息失败: ${error.message}`);
+    logDebug(`Failed to extract usage information: ${error.message}`);
   }
   return null;
 }
 
 /**
- * 记录Token使用量（使用更准确的计算方法）
- * @param {Object} data - 响应数据
- * @param {string} modelType - 模型类型
- * @param {string} keyId - 密钥ID
- * @param {Object} request - 原始请求数据（用于验证计算准确性）
- * @param {Object} estimated - 预估的token使用量
- * @param {number} latency - 请求延迟（毫秒）
+ * Record token usage using more accurate counting.
+ * @param {Object} data - Response data
+ * @param {string} modelType - Model type
+ * @param {string} keyId - Key ID
+ * @param {Object} request - Original request data, used to verify counting accuracy
+ * @param {Object} estimated - Estimated token usage
+ * @param {number} latency - Request latency in milliseconds
  */
 export function recordTokenUsage(data, modelType, keyId, request = null, estimated = null, latency = null) {
   try {
     const usage = extractUsageFromResponse(data, modelType);
 
     if (usage && keyId) {
-      // 使用token使用量管理器记录
+      // Record usage with the token usage manager.
       import('./token-usage-manager.js').then(module => {
         const tokenUsageManager = module.default;
         tokenUsageManager.recordUsage({
@@ -75,48 +75,48 @@ export function recordTokenUsage(data, modelType, keyId, request = null, estimat
           latency
         });
       }).catch(err => {
-        logDebug(`导入token-usage-manager失败: ${err.message}`);
+        logDebug(`Failed to import token-usage-manager: ${err.message}`);
       });
 
-      // 如果有请求数据，验证token计算的准确性
+      // Verify token counting accuracy when request data is available.
       if (request && request.messages) {
         import('./token-counter.js').then(({ countMessagesTokens }) => {
           const calculatedInputTokens = countMessagesTokens(request.messages, modelType);
           
-          // 比较实际值和计算值
+          // Compare the reported and calculated values.
           const actualInputTokens = usage.prompt_tokens || usage.input_tokens || 0;
           if (actualInputTokens > 0) {
             const difference = Math.abs(actualInputTokens - calculatedInputTokens);
             const percentDiff = (difference / actualInputTokens * 100).toFixed(1);
             
             if (percentDiff > 10) {
-              logDebug(`Token计算差异: 实际=${actualInputTokens}, 计算=${calculatedInputTokens}, 差异=${percentDiff}%`);
+              logDebug(`Token count discrepancy: reported=${actualInputTokens}, calculated=${calculatedInputTokens}, difference=${percentDiff}%`);
             }
           }
         }).catch(err => {
-          logDebug(`导入token-counter失败: ${err.message}`);
+          logDebug(`Failed to import token-counter: ${err.message}`);
         });
       }
 
-      // 记录更详细的token使用信息
+      // Log detailed token usage.
       const tokenDetails = {
         total: usage.total_tokens || 0,
         input: usage.prompt_tokens || usage.input_tokens || 0,
         output: usage.completion_tokens || usage.output_tokens || 0
       };
 
-      logDebug(`Token使用量 (keyId: ${keyId}): 总计=${tokenDetails.total}, 输入=${tokenDetails.input}, 输出=${tokenDetails.output}`);
+      logDebug(`Token usage (keyId: ${keyId}): total=${tokenDetails.total}, input=${tokenDetails.input}, output=${tokenDetails.output}`);
     }
   } catch (error) {
-    logDebug(`记录Token使用量失败: ${error.message}`);
+    logDebug(`Failed to record token usage: ${error.message}`);
   }
 }
 
 /**
- * 处理402错误 - 自动封禁密钥
- * @param {string} keyId - 密钥ID
- * @param {Response} response - fetch响应对象
- * @param {Object} res - Express响应对象
+ * Handle HTTP 402 by automatically disabling the key.
+ * @param {string} keyId - Key ID
+ * @param {Response} response - Fetch response object
+ * @param {Object} res - Express response object
  */
 export async function handle402Error(keyId, response, res) {
   keyPoolManager.disableKey(keyId, '402: Payment Required - No Credits');
@@ -131,9 +131,9 @@ export async function handle402Error(keyId, response, res) {
 }
 
 /**
- * 处理上游API错误响应
- * @param {Response} response - fetch响应对象
- * @param {Object} res - Express响应对象
+ * Handle upstream API error responses.
+ * @param {Response} response - Fetch response object
+ * @param {Object} res - Express response object
  */
 export async function handleUpstreamError(response, res) {
   const errorText = await response.text();
@@ -146,10 +146,10 @@ export async function handleUpstreamError(response, res) {
 }
 
 /**
- * 处理流式响应
- * @param {Response} upstreamResponse - 上游API响应
- * @param {Object} res - Express响应对象
- * @param {Object|null} transformer - 响应转换器实例 (可选)
+ * Handle streaming responses.
+ * @param {Response} upstreamResponse - Upstream API response
+ * @param {Object} res - Express response object
+ * @param {Object|null} transformer - Response transformer instance (optional)
  */
 export async function handleStreamResponse(upstreamResponse, res, transformer = null) {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -158,12 +158,12 @@ export async function handleStreamResponse(upstreamResponse, res, transformer = 
 
   try {
     if (transformer) {
-      // 使用transformer转换流式响应
+      // Transform the streaming response using the transformer.
       for await (const chunk of transformer.transformStream(upstreamResponse.body)) {
         res.write(chunk);
       }
     } else {
-      // 直接转发原始流
+      // Forward the original stream directly.
       for await (const chunk of upstreamResponse.body) {
         res.write(chunk);
       }
@@ -177,38 +177,38 @@ export async function handleStreamResponse(upstreamResponse, res, transformer = 
 }
 
 /**
- * 处理非流式响应
- * @param {Response} upstreamResponse - 上游API响应
- * @param {Object} res - Express响应对象
- * @param {string} modelType - 模型类型
- * @param {string} keyId - 密钥ID
- * @param {Function|null} converter - 响应格式转换函数 (可选)
+ * Handle non-streaming responses.
+ * @param {Response} upstreamResponse - Upstream API response
+ * @param {Object} res - Express response object
+ * @param {string} modelType - Model type
+ * @param {string} keyId - Key ID
+ * @param {Function|null} converter - Response format converter (optional)
  */
 export async function handleNonStreamResponse(upstreamResponse, res, modelType, keyId, converter = null) {
   const data = await upstreamResponse.json();
 
-  // 记录Token使用量
+  // Record token usage.
   recordTokenUsage(data, modelType, keyId);
 
-  // 如果有转换函数,尝试转换响应格式
+  // If a converter is provided, try to convert the response format.
   if (converter) {
     try {
       const converted = converter(data);
       return res.json(converted);
     } catch (e) {
-      // 转换失败,返回原始数据
+      // Return the original data if conversion fails.
       logDebug(`Response conversion failed, returning original: ${e.message}`);
     }
   }
 
-  // 返回原始响应
+  // Return the original response.
   return res.json(data);
 }
 
 /**
- * 从密钥池获取下一个可用密钥
+ * Get the next available key from the pool.
  * @returns {Promise<{key: string, keyId: string}>}
- * @throws {Error} 密钥池错误
+ * @throws {Error} Key pool error
  */
 export async function getNextKeyFromPool() {
   try {
@@ -220,24 +220,24 @@ export async function getNextKeyFromPool() {
     };
   } catch (error) {
     logError('Failed to get API key from pool', error);
-    throw new Error(`密钥池错误: ${error.message}`);
+    throw new Error(`Key pool error: ${error.message}`);
   }
 }
 
 /**
- * 统一的上游API调用包装器
- * 自动处理密钥获取、402错误封禁、流式/非流式响应
+ * Shared wrapper for upstream API calls
+ * Handle key selection, disabling keys on HTTP 402, and streaming/non-streaming responses.
  *
- * @param {Object} req - Express请求对象
- * @param {Object} res - Express响应对象
- * @param {Object} options - 配置选项
- * @param {string} options.endpoint - 上游API端点URL
- * @param {Object} options.headers - 请求头
- * @param {Object} options.body - 请求体
- * @param {boolean} options.isStreaming - 是否流式响应
- * @param {string} options.modelType - 模型类型 (openai/anthropic/common)
- * @param {Object|null} options.transformer - 流式响应转换器
- * @param {Function|null} options.converter - 非流式响应转换函数
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Object} options - Configuration options
+ * @param {string} options.endpoint - Upstream API endpoint URL
+ * @param {Object} options.headers - Request headers
+ * @param {Object} options.body - Request body
+ * @param {boolean} options.isStreaming - Whether the response is streamed
+ * @param {string} options.modelType - Model type (openai/anthropic/common)
+ * @param {Object|null} options.transformer - Streaming response transformer
+ * @param {Function|null} options.converter - Non-streaming response converter
  */
 export async function executeUpstreamRequest(req, res, options) {
   const {
@@ -250,18 +250,18 @@ export async function executeUpstreamRequest(req, res, options) {
     converter = null
   } = options;
 
-  // 获取密钥
+  // Get a key.
   let keyInfo;
   try {
     keyInfo = await getNextKeyFromPool();
   } catch (error) {
     return res.status(500).json({
-      error: '密钥池错误',
+      error: 'Key pool error',
       message: error.message
     });
   }
 
-  // 调用上游API
+  // Call the upstream API.
   let response;
   const requestBody = typeof body === 'string' ? body : JSON.stringify(body);
 
@@ -296,17 +296,17 @@ export async function executeUpstreamRequest(req, res, options) {
 
   logInfo(`Response status: ${response.status}`);
 
-  // 处理402错误 - 自动封禁密钥
+  // Handle HTTP 402 by automatically disabling the key.
   if (response.status === 402) {
     return await handle402Error(keyInfo.keyId, response, res);
   }
 
-  // 处理其他错误状态
+  // Handle other error statuses.
   if (!response.ok) {
     return await handleUpstreamError(response, res);
   }
 
-  // 处理成功响应
+  // Handle a successful response.
   if (isStreaming) {
     await handleStreamResponse(response, res, transformer);
   } else {

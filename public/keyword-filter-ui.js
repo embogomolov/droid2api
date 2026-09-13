@@ -1,14 +1,14 @@
 /**
- * 关键词过滤管理前端 UI
+ * Keyword filter management UI
  */
 
 let currentEditingRuleId = null;
 let filterRules = [];
 let filterConfig = {};
 
-// 页面加载时初始化
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // 监听 tab 切换，当切换到关键词过滤 tab 时加载数据
+    // Load data when the keyword filter tab is selected
     const originalSwitchTab = window.switchTab;
     if (originalSwitchTab) {
         window.switchTab = function(tabName) {
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// 加载过滤器数据
+// Load filter data
 async function loadFilterData() {
     try {
         const response = await fetch('/admin/keyword-filter/config', {
@@ -37,15 +37,15 @@ async function loadFilterData() {
             updateFilterStats();
             renderFilterRules();
         } else {
-            showNotification('加载配置失败', 'error');
+            showNotification('Failed to load configuration', 'error');
         }
     } catch (error) {
         console.error('Failed to load filter data:', error);
-        showNotification('加载配置失败: ' + error.message, 'error');
+        showNotification('Failed to load configuration: ' + error.message, 'error');
     }
 }
 
-// 更新统计信息
+// Update statistics
 function updateFilterStats() {
     const total = filterRules.length;
     const enabledCount = filterRules.filter(r => r.enabled).length;
@@ -62,7 +62,7 @@ function updateFilterStats() {
 
     const statusEl = document.getElementById('filterStatStatus');
     if (statusEl) {
-        statusEl.textContent = filterConfig.enabled ? '✅ 已启用' : '⚪ 已关闭';
+        statusEl.textContent = filterConfig.enabled ? '✅ Enabled' : '⚪ Disabled';
     }
 
     const statusPill = document.querySelector('.keyword-status-pill');
@@ -84,39 +84,39 @@ function updateFilterStats() {
 
     const btn = document.getElementById('toggleGlobalBtn');
     if (btn) {
-        btn.textContent = filterConfig.enabled ? '❌ 关闭全局过滤' : '✅ 启用全局过滤';
+        btn.textContent = filterConfig.enabled ? '❌ Disable global filtering' : '✅ Enable global filtering';
         btn.className = filterConfig.enabled
             ? 'btn keyword-action-btn keyword-toggle is-active'
             : 'btn keyword-action-btn keyword-toggle';
     }
 }
 
-// 渲染规则列表
+// Render the rule list
 function renderFilterRules() {
     const tbody = document.getElementById('filterRulesTable');
     
     if (filterRules.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无过滤规则，点击“添加规则”按钮创建</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No filter rules yet. Click Add rule to create one.</td></tr>';
         return;
     }
 
     const patternLabels = {
-        contains: '包含匹配',
-        exact: '精确匹配',
-        startsWith: '开头匹配',
-        endsWith: '结尾匹配',
-        regex: '正则表达式'
+        contains: 'Contains',
+        exact: 'Exact match',
+        startsWith: 'Starts with',
+        endsWith: 'Ends with',
+        regex: 'Regular expression'
     };
 
     const actionLabels = {
-        replace: '替换',
-        delete_keyword: '删除关键词',
-        block: '阻止'
+        replace: 'Replace',
+        delete_keyword: 'Delete keywords',
+        block: 'Clear text'
     };
     const deleteModeLabels = {
-        inline: '逐字删除',
-        targets: '指定词',
-        segment: '整段'
+        inline: 'Remove matches',
+        targets: 'Specified keywords',
+        segment: 'Whole segment'
     };
 
     tbody.innerHTML = filterRules.map(rule => {
@@ -127,7 +127,7 @@ function renderFilterRules() {
         let actionDetail = '—';
 
         if (rule.action.type === 'replace') {
-            actionDetail = `<code>${escapeHtml(rule.action.replacement || '（空）')}</code>`;
+            actionDetail = `<code>${escapeHtml(rule.action.replacement || '(empty)')}</code>`;
         } else if (rule.action.type === 'delete_keyword') {
             const mode = rule.action.mode || 'inline';
             actionChips.push(`<span class="keyword-chip chip-outline">${deleteModeLabels[mode] || mode}</span>`);
@@ -136,19 +136,19 @@ function renderFilterRules() {
                 actionDetail = rule.action.targets.map(escapeHtml).join(', ');
             } else if (mode === 'segment') {
                 const meta = [
-                    `分隔符 <code>${escapeHtml(rule.action.delimiter || '\\n\\n')}</code>`
+                    `Delimiter <code>${escapeHtml(rule.action.delimiter || '\\n\\n')}</code>`
                 ];
                 if (typeof rule.action.minLength === 'number') {
-                    meta.push(`最小长度 ≥ ${rule.action.minLength}`);
+                    meta.push(`Minimum length ≥ ${rule.action.minLength}`);
                 }
                 if (Array.isArray(rule.action.preserveKeywords) && rule.action.preserveKeywords.length > 0) {
-                    meta.push(`保留关键词: ${rule.action.preserveKeywords.map(escapeHtml).join(', ')}`);
+                    meta.push(`Preserve keywords: ${rule.action.preserveKeywords.map(escapeHtml).join(', ')}`);
                 }
                 actionDetail = meta.join('<br/>');
             }
         }
-        // BaSui：修复按钮点击问题 - 不要对参数使用 escapeHtml + JSON.stringify 组合
-        // 只需要对 ID 和名称进行单引号转义，生成正确的 onclick 属性
+        // BaSui: Fix button handlers; do not combine escapeHtml and JSON.stringify for arguments
+        // Escape single quotes in the ID and name to generate the onclick attribute
         const ruleIdArg = `'${rule.id.replace(/'/g, "\\'")}'`;
         const ruleNameArg = `'${rule.name.replace(/'/g, "\\'")}'`;
 
@@ -156,17 +156,17 @@ function renderFilterRules() {
         <tr class="rule-row ${statusClass}">
             <td>
                 <span class="keyword-rule-status ${statusClass}">
-                    <span class="status-dot"></span>${rule.enabled ? '启用' : '禁用'}
+                    <span class="status-dot"></span>${rule.enabled ? 'Enabled' : 'Disabled'}
                 </span>
             </td>
             <td>
                 <div class="keyword-rule-name">${escapeHtml(rule.name)}</div>
-                <div class="keyword-rule-description">${escapeHtml(rule.description || '暂无描述')}</div>
+                <div class="keyword-rule-description">${escapeHtml(rule.description || 'No description')}</div>
             </td>
             <td>
                 <div class="keyword-chip-group">
                     <span class="keyword-chip">${patternLabel}</span>
-                    ${rule.pattern.caseSensitive ? '<span class="keyword-chip chip-outline">🔡 区分大小写</span>' : ''}
+                    ${rule.pattern.caseSensitive ? '<span class="keyword-chip chip-outline">🔡 Case sensitive</span>' : ''}
                 </div>
                 <div class="keyword-rule-pattern"><code>${escapeHtml(rule.pattern.value)}</code></div>
             </td>
@@ -178,13 +178,13 @@ function renderFilterRules() {
             </td>
             <td>
                 <div class="keyword-row-actions">
-                    <button onclick="toggleRuleStatus(${ruleIdArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-toggle ${statusClass}" title="${rule.enabled ? '禁用规则' : '启用规则'}">
+                    <button onclick="toggleRuleStatus(${ruleIdArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-toggle ${statusClass}" title="${rule.enabled ? 'Disable rule' : 'Enable rule'}">
                         ${rule.enabled ? '⏸️' : '▶️'}
                     </button>
-                    <button onclick="editRule(${ruleIdArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-edit" title="编辑规则">
+                    <button onclick="editRule(${ruleIdArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-edit" title="Edit rule">
                         ✏️
                     </button>
-                    <button onclick="deleteRule(${ruleIdArg}, ${ruleNameArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-delete" title="删除规则">
+                    <button onclick="deleteRule(${ruleIdArg}, ${ruleNameArg})" class="btn btn-sm keyword-row-btn keyword-row-btn-delete" title="Delete rule">
                         🗑️
                     </button>
                 </div>
@@ -193,9 +193,9 @@ function renderFilterRules() {
     }).join('');
 }
 
-// 切换全局过滤状态
+// Toggle global filtering
 async function toggleGlobalFilter() {
-    if (!confirm(`确定要${filterConfig.enabled ? '关闭' : '启用'}全局过滤吗？`)) {
+    if (!confirm(`${filterConfig.enabled ? 'Disable' : 'Enable'} global filtering?`)) {
         return;
     }
 
@@ -211,23 +211,23 @@ async function toggleGlobalFilter() {
             const result = await response.json();
             filterConfig.enabled = result.data.enabled;
             updateFilterStats();
-            showNotification(`全局过滤已${result.data.enabled ? '启用' : '关闭'}`, 'success');
+            showNotification(`Global filtering ${result.data.enabled ? 'enabled' : 'disabled'}`, 'success');
         } else {
-            showNotification('操作失败', 'error');
+            showNotification('Action failed', 'error');
         }
     } catch (error) {
         console.error('Failed to toggle global filter:', error);
-        showNotification('操作失败: ' + error.message, 'error');
+        showNotification('Action failed: ' + error.message, 'error');
     }
 }
 
-// 显示添加规则模态框
+// Show the Add rule dialog
 function showAddRuleModal() {
     currentEditingRuleId = null;
-    document.getElementById('ruleModalTitle').textContent = '➕ 添加过滤规则';
-    document.getElementById('saveRuleBtn').textContent = '💾 保存规则';
+    document.getElementById('ruleModalTitle').textContent = '➕ Add filter rule';
+    document.getElementById('saveRuleBtn').textContent = '💾 Save rule';
     
-    // 清空表单
+    // Clear the form
     document.getElementById('ruleName').value = '';
     document.getElementById('rulePatternType').value = 'contains';
     document.getElementById('rulePatternValue').value = '';
@@ -248,19 +248,19 @@ function showAddRuleModal() {
     openModal('ruleModal');
 }
 
-// 编辑规则
+// Edit rule
 function editRule(ruleId) {
     const rule = filterRules.find(r => r.id === ruleId);
     if (!rule) {
-        showNotification('规则不存在', 'error');
+        showNotification('Rule not found', 'error');
         return;
     }
 
     currentEditingRuleId = ruleId;
-    document.getElementById('ruleModalTitle').textContent = '✏️ 编辑过滤规则';
-    document.getElementById('saveRuleBtn').textContent = '💾 更新规则';
+    document.getElementById('ruleModalTitle').textContent = '✏️ Edit filter rule';
+    document.getElementById('saveRuleBtn').textContent = '💾 Update rule';
     
-    // 填充表单
+    // Populate the form
     document.getElementById('ruleName').value = rule.name;
     document.getElementById('rulePatternType').value = rule.pattern.type;
     document.getElementById('rulePatternValue').value = rule.pattern.value;
@@ -285,7 +285,7 @@ function editRule(ruleId) {
     openModal('ruleModal');
 }
 
-// 保存规则
+// Save rule
 async function saveRule() {
     const name = document.getElementById('ruleName').value.trim();
     const patternType = document.getElementById('rulePatternType').value;
@@ -301,13 +301,13 @@ async function saveRule() {
     const description = document.getElementById('ruleDescription').value.trim();
     const enabled = document.getElementById('ruleEnabled').checked;
 
-    // 验证
+    // Validate
     if (!name) {
-        showNotification('请输入规则名称', 'error');
+        showNotification('Enter a rule name', 'error');
         return;
     }
     if (!patternValue) {
-        showNotification('请输入匹配值', 'error');
+        showNotification('Enter a pattern to match', 'error');
         return;
     }
 
@@ -337,7 +337,7 @@ async function saveRule() {
                 .filter(Boolean);
 
             if (targets.length === 0) {
-                showNotification('请至少填写一个要删除的关键词', 'error');
+                showNotification('Enter at least one keyword to delete', 'error');
                 return;
             }
 
@@ -350,7 +350,7 @@ async function saveRule() {
             if (deleteMinLengthValue !== '') {
                 const minLengthNumber = Number(deleteMinLengthValue);
                 if (Number.isNaN(minLengthNumber) || minLengthNumber < 0) {
-                    showNotification('最小段落长度必须是大于等于 0 的数字', 'error');
+                    showNotification('Minimum segment length must be a number greater than or equal to 0.', 'error');
                     return;
                 }
                 ruleData.action.minLength = minLengthNumber;
@@ -384,22 +384,22 @@ async function saveRule() {
         });
 
         if (response.ok) {
-            showNotification(currentEditingRuleId ? '规则已更新' : '规则已添加', 'success');
+            showNotification(currentEditingRuleId ? 'Rule updated' : 'Rule added', 'success');
             closeModal('ruleModal');
             loadFilterData();
         } else {
             const result = await response.json();
-            showNotification('保存失败: ' + (result.error || '未知错误'), 'error');
+            showNotification('Failed to save: ' + (result.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('Failed to save rule:', error);
-        showNotification('保存失败: ' + error.message, 'error');
+        showNotification('Failed to save: ' + error.message, 'error');
     }
 }
 
-// 删除规则
+// Delete rule
 async function deleteRule(ruleId, ruleName) {
-    if (!confirm(`确定要删除规则"${ruleName}"吗？此操作不可恢复！`)) {
+    if (!confirm(`Delete rule "${ruleName}"? This cannot be undone.`)) {
         return;
     }
 
@@ -412,18 +412,18 @@ async function deleteRule(ruleId, ruleName) {
         });
 
         if (response.ok) {
-            showNotification('规则已删除', 'success');
+            showNotification('Rule deleted', 'success');
             loadFilterData();
         } else {
-            showNotification('删除失败', 'error');
+            showNotification('Failed to delete rule', 'error');
         }
     } catch (error) {
         console.error('Failed to delete rule:', error);
-        showNotification('删除失败: ' + error.message, 'error');
+        showNotification('Failed to delete rule: ' + error.message, 'error');
     }
 }
 
-// 切换规则状态
+// Toggle rule status
 async function toggleRuleStatus(ruleId) {
     try {
         const response = await fetch(`/admin/keyword-filter/rules/${ruleId}/toggle`, {
@@ -435,18 +435,18 @@ async function toggleRuleStatus(ruleId) {
 
         if (response.ok) {
             const result = await response.json();
-            showNotification(`规则已${result.data.rule.enabled ? '启用' : '禁用'}`, 'success');
+            showNotification(`Rule ${result.data.rule.enabled ? 'enabled' : 'disabled'}`, 'success');
             loadFilterData();
         } else {
-            showNotification('操作失败', 'error');
+            showNotification('Action failed', 'error');
         }
     } catch (error) {
         console.error('Failed to toggle rule:', error);
-        showNotification('操作失败: ' + error.message, 'error');
+        showNotification('Action failed: ' + error.message, 'error');
     }
 }
 
-// 重新加载配置
+// Reload configuration
 async function reloadFilterConfig() {
     try {
         const response = await fetch('/admin/keyword-filter/reload', {
@@ -457,40 +457,40 @@ async function reloadFilterConfig() {
         });
 
         if (response.ok) {
-            showNotification('配置已重新加载', 'success');
+            showNotification('Configuration reloaded', 'success');
             loadFilterData();
         } else {
-            showNotification('重新加载失败', 'error');
+            showNotification('Failed to reload', 'error');
         }
     } catch (error) {
         console.error('Failed to reload config:', error);
-        showNotification('重新加载失败: ' + error.message, 'error');
+        showNotification('Failed to reload: ' + error.message, 'error');
     }
 }
 
-// 显示测试规则模态框
+// Show the Test rule dialog
 function showTestRuleModal() {
-    // 填充规则选择下拉框
+    // Populate the rule selector
     const select = document.getElementById('testRuleSelect');
-    select.innerHTML = '<option value="">测试所有规则</option>';
+    select.innerHTML = '<option value="">Test all rules</option>';
     filterRules.forEach(rule => {
         select.innerHTML += `<option value="${rule.id}">${escapeHtml(rule.name)} (${rule.pattern.type})</option>`;
     });
 
-    // 清空测试结果
+    // Clear test results
     document.getElementById('testRuleResult').style.display = 'none';
     document.getElementById('testText').value = '';
 
     openModal('testRuleModal');
 }
 
-// 运行测试规则
+// Run the rule test
 async function runTestRule() {
     const ruleId = document.getElementById('testRuleSelect').value;
     const text = document.getElementById('testText').value;
 
     if (!text) {
-        showNotification('请输入测试文本', 'error');
+        showNotification('Enter text to test', 'error');
         return;
     }
 
@@ -512,50 +512,50 @@ async function runTestRule() {
             displayTestResult(result.data);
         } else {
             const result = await response.json();
-            showNotification('测试失败: ' + (result.error || '未知错误'), 'error');
+            showNotification('Test failed: ' + (result.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('Failed to test rule:', error);
-        showNotification('测试失败: ' + error.message, 'error');
+        showNotification('Test failed: ' + error.message, 'error');
     }
 }
 
-// 显示测试结果
+// Display test results
 function displayTestResult(data) {
     document.getElementById('testOriginalText').textContent = data.original;
     document.getElementById('testFilteredText').textContent = data.filtered || data.original;
     
     const matchInfo = document.getElementById('testMatchInfo');
     if (data.matched !== undefined) {
-        // 单个规则测试
+        // Single-rule test
         matchInfo.innerHTML = `
-            <p><strong>匹配状态：</strong>${data.matched ? '✅ 匹配' : '❌ 不匹配'}</p>
-            <p><strong>规则名称：</strong>${escapeHtml(data.rule)}</p>
+            <p><strong>Match status:</strong>${data.matched ? '✅ Matched' : '❌ Not matched'}</p>
+            <p><strong>Rule name:</strong>${escapeHtml(data.rule)}</p>
         `;
     } else {
-        // 所有规则测试
+        // Test all rules
         matchInfo.innerHTML = `
-            <p><strong>是否改变：</strong>${data.changed ? '✅ 是' : '❌ 否'}</p>
+            <p><strong>Text changed:</strong>${data.changed ? '✅ Yes' : '❌ No'}</p>
         `;
     }
 
     document.getElementById('testRuleResult').style.display = 'block';
 }
 
-// 更新匹配类型提示
+// Update the pattern type hint
 function updatePatternHint() {
     const type = document.getElementById('rulePatternType').value;
     const hints = {
-        contains: '💡 包含匹配：只要文本中出现该关键词就会匹配',
-        exact: '💡 精确匹配：只有完全相同的文本才会匹配',
-        startsWith: '💡 开头匹配：文本以该关键词开头时匹配',
-        endsWith: '💡 结尾匹配：文本以该关键词结尾时匹配',
-        regex: '💡 正则表达式：使用强大的正则表达式进行匹配 (例如: \\b(密码|密钥)\\b)'
+        contains: '💡 Contains: matches when the keyword occurs anywhere in the text.',
+        exact: '💡 Exact: matches only when the entire text equals the pattern.',
+        startsWith: '💡 Starts with: matches when the text begins with the keyword.',
+        endsWith: '💡 Ends with: matches when the text ends with the keyword.',
+        regex: '💡 Regex: match using a regular expression (e.g. \\b(password|key)\\b).'
     };
     document.getElementById('patternHint').textContent = hints[type] || '';
 }
 
-// 更新动作字段显示
+// Update action field visibility
 function updateActionFields() {
     const type = document.getElementById('ruleActionType').value;
     const replacementField = document.getElementById('replacementField');
@@ -600,14 +600,14 @@ function updateActionFields() {
     }
 }
 
-// HTML 转义
+// Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// 显示通知 (内部函数，直接使用alert)
+// Display a notification (internal helper using alert)
 function showNotification(message, type = 'info') {
     const typeIcons = {
         success: '✅',
@@ -619,7 +619,7 @@ function showNotification(message, type = 'info') {
     alert(`${icon} ${message}`);
 }
 
-// 打开模态框
+// Open a dialog
 function openModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -627,7 +627,7 @@ function openModal(modalId) {
     }
 }
 
-// 关闭模态框
+// Close a dialog
 function closeModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
@@ -635,8 +635,8 @@ function closeModal(modalId) {
     }
 }
 
-// 导出到全局作用域，供 HTML onclick 使用
-// 注意：这些函数必须在定义后导出，所以放在文件末尾
+// Export to the global scope for HTML onclick handlers
+// Export after the function definitions, at the end of the file
 if (typeof window !== 'undefined') {
     window.loadFilterData = loadFilterData;
     window.toggleGlobalFilter = toggleGlobalFilter;
@@ -651,12 +651,12 @@ if (typeof window !== 'undefined') {
     window.updatePatternHint = updatePatternHint;
     window.updateActionFields = updateActionFields;
     
-    // 这些函数可能在 app.js 中已定义，只在不存在时才导出
+    // Export only if these helpers were not already defined in app.js
     if (!window.openModal) {
         window.openModal = openModal;
     }
     if (!window.closeModal) {
         window.closeModal = closeModal;
     }
-    // showNotification 保持为内部函数，不导出到 window
+    // Keep showNotification internal; do not export it to window
 }

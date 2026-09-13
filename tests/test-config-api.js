@@ -1,6 +1,6 @@
 /**
- * 测试配置管理 API
- * 用法: node tests/test-config-api.js
+ * Test the configuration API
+ * Usage: node tests/test-config-api.js
  */
 
 const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY || 'your-admin-key-here';
@@ -30,86 +30,86 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 }
 
 async function testGetConfig() {
-  console.log('\n📖 测试: GET /admin/config');
+  console.log('\n📖 Test: GET /admin/config');
   try {
     const result = await apiRequest('/config');
-    console.log('✅ 成功获取配置');
-    console.log('配置内容:', JSON.stringify(result.data, null, 2).slice(0, 500) + '...');
+    console.log('✅ Configuration retrieved successfully');
+    console.log('Configuration content:', JSON.stringify(result.data, null, 2).slice(0, 500) + '...');
     return result.data;
   } catch (err) {
-    console.error('❌ 失败:', err.message);
+    console.error('❌ Failed:', err.message);
     throw err;
   }
 }
 
 async function testUpdateConfig(config) {
-  console.log('\n📝 测试: PUT /admin/config (更新部分配置)');
+  console.log('\n📝 Test: PUT /admin/config (Update part of the configuration)');
   try {
-    // 只更新 port 和 dev_mode
+    // Update only port and dev_mode
     const updates = {
-      port: config.port, // 保持原值
-      dev_mode: !config.dev_mode // 切换值
+      port: config.port, // Keep the original value
+      dev_mode: !config.dev_mode // Toggle the value
     };
 
-    console.log('更新内容:', updates);
+    console.log('Updated values:', updates);
     const result = await apiRequest('/config', 'PUT', updates);
-    console.log('✅ 成功更新配置');
-    console.log('返回结果:', JSON.stringify(result, null, 2).slice(0, 300) + '...');
+    console.log('✅ Configuration updated successfully');
+    console.log('Returned result:', JSON.stringify(result, null, 2).slice(0, 300) + '...');
     return result.data;
   } catch (err) {
-    console.error('❌ 失败:', err.message);
+    console.error('❌ Failed:', err.message);
     throw err;
   }
 }
 
 async function testUpdateFullConfig(originalConfig) {
-  console.log('\n📝 测试: PUT /admin/config (更新完整配置)');
+  console.log('\n📝 Test: PUT /admin/config (Update the entire configuration)');
   try {
-    // 恢复原始配置
+    // Restore the original configuration
     const result = await apiRequest('/config', 'PUT', originalConfig);
-    console.log('✅ 成功恢复原始配置');
+    console.log('✅ Original configuration restored successfully');
     return result.data;
   } catch (err) {
-    console.error('❌ 失败:', err.message);
+    console.error('❌ Failed:', err.message);
     throw err;
   }
 }
 
 async function testGetKeyPoolConfig() {
-  console.log('\n📖 测试: GET /admin/config/key-pool');
+  console.log('\n📖 Test: GET /admin/config/key-pool');
   try {
     const result = await apiRequest('/config/key-pool');
-    console.log('✅ 成功获取密钥池配置');
-    console.log('密钥池配置:', JSON.stringify(result.data, null, 2));
+    console.log('✅ Key-pool configuration retrieved successfully');
+    console.log('Key-pool configuration:', JSON.stringify(result.data, null, 2));
     return result.data;
   } catch (err) {
-    console.error('❌ 失败:', err.message);
+    console.error('❌ Failed:', err.message);
     throw err;
   }
 }
 
 async function main() {
-  console.log('🚀 开始测试配置管理 API');
+  console.log('🚀 Start configuration API tests');
   console.log('=' . repeat(60));
 
   try {
-    // 1. 读取当前配置
+    // 1. Read the current configuration
     const originalConfig = await testGetConfig();
 
-    // 2. 测试更新部分配置
+    // 2. Test partial configuration updates
     await testUpdateConfig(originalConfig);
 
-    // 3. 恢复原始配置
+    // 3. Restore the original configuration
     await testUpdateFullConfig(originalConfig);
 
-    // 4. 测试获取密钥池配置
+    // 4. Test retrieving the key-pool configuration
     await testGetKeyPoolConfig();
 
     console.log('\n' + '='.repeat(60));
-    console.log('✅ 所有测试通过！');
+    console.log('✅ All tests passed!');
   } catch (err) {
     console.log('\n' + '='.repeat(60));
-    console.error('❌ 测试失败:', err.message);
+    console.error('❌ Test failed:', err.message);
     process.exit(1);
   }
 }

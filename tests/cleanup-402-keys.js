@@ -1,6 +1,6 @@
 /**
- * 自动清理402错误（余额不足）的密钥
- * 会先导出到txt文件备份，然后自动删除
+ * Automatically remove keys that returned HTTP 402 (insufficient balance)
+ * Export a backup to a text file before automatically deleting the keys
  */
 
 import fs from 'fs';
@@ -12,19 +12,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 console.log('========================================');
-console.log('💰 自动清理402错误（余额不足）的密钥');
+console.log('💰 Automatically remove keys that returned HTTP 402 (insufficient balance)');
 console.log('========================================\n');
 
 async function cleanup402Keys() {
   try {
-    // 创建KeyPoolManager实例
+    // Create a KeyPoolManager instance
     const keyPoolManager = new KeyPoolManager();
     
-    // 获取所有密钥
+    // Get all keys
     const allKeys = keyPoolManager.keys;
-    console.log(`📊 密钥池总数: ${allKeys.length}`);
+    console.log(`📊 Total keys in the pool: ${allKeys.length}`);
     
-    // 统计信息
+    // Statistics
     const stats = {
       total: allKeys.length,
       active: 0,
@@ -33,50 +33,50 @@ async function cleanup402Keys() {
       error402: 0
     };
     
-    // 收集402错误的密钥
+    // Collect keys that returned HTTP 402
     const keys402 = [];
     
-    // 分析每个密钥
+    // Analyze each key
     for (const key of allKeys) {
-      // 统计状态
+      // Count keys by status
       if (key.status === 'active') stats.active++;
       else if (key.status === 'disabled') stats.disabled++;
       else if (key.status === 'banned') stats.banned++;
       
-      // 检查是否有402错误记录或被封禁（通常402会导致自动封禁）
+      // Check for a recorded HTTP 402 error or a ban (HTTP 402 normally triggers an automatic ban)
       if ((key.last_error && key.last_error.includes('402')) || 
           (key.status === 'banned' && key.ban_reason && key.ban_reason.includes('402'))) {
         stats.error402++;
         keys402.push(key);
-        console.log(`💸 发现402错误密钥: ${key.id.substring(0, 30)}... (${key.poolGroup || 'default'}池)`);
+        console.log(`💸 Found a key with an HTTP 402 error: ${key.id.substring(0, 30)}... (pool: ${key.poolGroup || 'default'})`);
       }
     }
     
-    // 显示当前状态
-    console.log(`\n📈 当前密钥池状态:`);
-    console.log(`   活跃: ${stats.active}`);
-    console.log(`   禁用: ${stats.disabled}`);
-    console.log(`   封禁: ${stats.banned}`);
-    console.log(`   402错误（余额不足）: ${stats.error402}`);
+    // Show the current status
+    console.log(`\n📈 Current key-pool status:`);
+    console.log(`   Active: ${stats.active}`);
+    console.log(`   Disabled: ${stats.disabled}`);
+    console.log(`   Blocked in proxy: ${stats.banned}`);
+    console.log(`   HTTP 402 (insufficient balance): ${stats.error402}`);
     
     if (keys402.length === 0) {
-      console.log('\n✨ 没有发现402错误的密钥！');
+      console.log('\n✨ No keys with HTTP 402 errors found!');
       return;
     }
     
-    // 准备导出内容
+    // Prepare the export content
     const exportData = [];
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const exportFileName = path.join(__dirname, `../data/402-keys-backup-${timestamp}.txt`);
     
-    // 构建导出内容
+    // Build the export content
     exportData.push('========================================');
-    exportData.push(`402错误密钥备份 (余额不足)`);
-    exportData.push(`备份时间: ${new Date().toLocaleString('zh-CN')}`);
-    exportData.push(`总计: ${keys402.length} 个密钥`);
+    exportData.push(`Backup of keys with HTTP 402 errors (Insufficient balance)`);
+    exportData.push(`Backup time: ${new Date().toLocaleString('en-US')}`);
+    exportData.push(`Total: ${keys402.length} keys`);
     exportData.push('========================================\n');
     
-    // 按池分组
+    // Group by pool
     const poolGroups = {};
     for (const key of keys402) {
       const pool = key.poolGroup || 'default';
@@ -86,78 +86,78 @@ async function cleanup402Keys() {
       poolGroups[pool].push(key);
     }
     
-    // 导出每个池的密钥
+    // Export keys from each pool
     for (const [pool, keys] of Object.entries(poolGroups)) {
-      exportData.push(`\n【${pool}池】 (${keys.length}个)`);
+      exportData.push(`\n[Pool ${pool}] (${keys.length} keys)`);
       exportData.push('----------------------------------------');
       
       for (const key of keys) {
-        // 保存完整密钥信息以便恢复
-        exportData.push(`密钥值: ${key.key}`);
-        exportData.push(`密钥ID: ${key.id}`);
-        exportData.push(`状态: ${key.status}`);
-        exportData.push(`创建时间: ${key.created_at || 'N/A'}`);
-        exportData.push(`最后错误: ${key.last_error || 'N/A'}`);
+        // Save complete key details so they can be restored
+        exportData.push(`Key value: ${key.key}`);
+        exportData.push(`Key ID: ${key.id}`);
+        exportData.push(`Status: ${key.status}`);
+        exportData.push(`Created at: ${key.created_at || 'N/A'}`);
+        exportData.push(`Last error: ${key.last_error || 'N/A'}`);
         exportData.push('');
       }
     }
     
-    // 添加汇总信息
+    // Add summary statistics
     exportData.push('\n========================================');
-    exportData.push('汇总统计');
+    exportData.push('Summary statistics');
     exportData.push('========================================');
     for (const [pool, keys] of Object.entries(poolGroups)) {
-      exportData.push(`${pool}池: ${keys.length}个`);
+      exportData.push(`Pool ${pool}: ${keys.length} keys`);
     }
-    exportData.push(`\n总计: ${keys402.length}个402错误密钥`);
+    exportData.push(`\nTotal: ${keys402.length} keys with HTTP 402 errors`);
     
-    // 写入备份文件
+    // Write the backup file
     const exportContent = exportData.join('\n');
     fs.writeFileSync(exportFileName, exportContent, 'utf-8');
     
-    console.log(`\n✅ 已备份到文件: ${exportFileName}`);
-    console.log(`📝 文件包含 ${keys402.length} 个402错误的密钥详情`);
+    console.log(`\n✅ Backup saved to file: ${exportFileName}`);
+    console.log(`📝 The file contains details for ${keys402.length} keys with HTTP 402 errors.`);
     
-    // 自动清理
-    console.log('\n🗑️ 开始自动清理402错误密钥...\n');
+    // Automatic cleanup
+    console.log('\n🗑️ Start automatically removing keys with HTTP 402 errors...\n');
     
     let cleaned = 0;
     for (const key of keys402) {
       try {
         keyPoolManager.deleteKey(key.id);
         cleaned++;
-        console.log(`   ✅ 已删除: ${key.id.substring(0, 30)}... (${key.poolGroup || 'default'}池)`);
+        console.log(`   ✅ Deleted: ${key.id.substring(0, 30)}... (pool: ${key.poolGroup || 'default'})`);
       } catch (error) {
-        console.log(`   ❌ 删除失败: ${key.id.substring(0, 30)}... - ${error.message}`);
+        console.log(`   ❌ Failed to delete: ${key.id.substring(0, 30)}... - ${error.message}`);
       }
     }
     
-    // 保存更新后的密钥池
+    // Save the updated key pool
     keyPoolManager.saveKeyPool();
     
-    console.log(`\n✅ 清理完成！`);
-    console.log(`   已删除: ${cleaned}个密钥`);
-    console.log(`   剩余总数: ${keyPoolManager.keys.length}个密钥`);
-    console.log(`   备份文件: ${exportFileName}`);
+    console.log(`\n✅ Cleanup complete!`);
+    console.log(`   Deleted: ${cleaned} keys`);
+    console.log(`   Remaining total: ${keyPoolManager.keys.length} keys`);
+    console.log(`   Backup file: ${exportFileName}`);
     
-    // 创建清理记录文件
+    // Create a cleanup log file
     const cleanupLog = path.join(__dirname, `../data/402-cleanup-${timestamp}.log`);
     const logContent = [
-      `清理时间: ${new Date().toLocaleString('zh-CN')}`,
-      `清理数量: ${cleaned}个`,
-      `清理前总数: ${stats.total}个`,
-      `清理后总数: ${keyPoolManager.keys.length}个`,
-      `备份文件: ${exportFileName}`,
+      `Cleanup time: ${new Date().toLocaleString('en-US')}`,
+      `Keys removed: ${cleaned}`,
+      `Total before cleanup: ${stats.total}`,
+      `Total after cleanup: ${keyPoolManager.keys.length}`,
+      `Backup file: ${exportFileName}`,
       '',
-      '清理详情:',
-      ...keys402.map(k => `- ${k.id} (${k.poolGroup || 'default'}池)`)
+      'Cleanup details:',
+      ...keys402.map(k => `- ${k.id} (pool: ${k.poolGroup || 'default'})`)
     ].join('\n');
     fs.writeFileSync(cleanupLog, logContent, 'utf-8');
-    console.log(`   清理日志: ${cleanupLog}`);
+    console.log(`   Cleanup log: ${cleanupLog}`);
     
-    // 显示最终统计
+    // Show final statistics
     console.log('\n========================================');
-    console.log('📊 最终密钥池状态:');
+    console.log('📊 Final key-pool status:');
     console.log('========================================');
     
     const finalStats = {};
@@ -173,18 +173,18 @@ async function cleanup402Keys() {
     }
     
     for (const [pool, stat] of Object.entries(finalStats)) {
-      console.log(`   ${pool}池: ${stat.total}个 (活跃${stat.active}, 禁用${stat.disabled}, 封禁${stat.banned})`);
+      console.log(`   Pool ${pool}: ${stat.total} keys (active: ${stat.active}, disabled: ${stat.disabled}, blocked in proxy: ${stat.banned})`);
     }
-    console.log(`   总计: ${keyPoolManager.keys.length}个密钥`);
+    console.log(`   Total: ${keyPoolManager.keys.length} keys`);
     
-    // 计算健康度
+    // Calculate pool health
     const healthRate = ((finalStats.main?.active || 0) + (finalStats.freebies?.active || 0) + (finalStats.test?.active || 0)) / keyPoolManager.keys.length * 100;
-    console.log(`   健康度: ${healthRate.toFixed(1)}% (活跃密钥比例)`);
+    console.log(`   Health: ${healthRate.toFixed(1)}% (Percentage of active keys)`);
     
   } catch (error) {
-    console.error('❌ 处理过程出错:', error);
+    console.error('❌ Error during processing:', error);
   }
 }
 
-// 执行清理
+// Run cleanup
 cleanup402Keys().catch(console.error);

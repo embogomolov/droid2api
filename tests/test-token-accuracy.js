@@ -1,6 +1,6 @@
 /**
- * Token计算算法准确性测试
- * 测试新的token计算算法的准确性（不依赖API）
+ * Token counting algorithm accuracy tests
+ * Test the new token counting algorithm without making API calls
  */
 
 import { 
@@ -9,49 +9,49 @@ import {
 } from '../utils/token-counter.js';
 
 console.log('========================================');
-console.log('Token计算算法准确性测试');
+console.log('Token counting algorithm accuracy tests');
 console.log('========================================\n');
 
-// 测试用例和预期值（基于OpenAI官方文档的估算）
+// Test cases and expected values (estimates based on the OpenAI documentation)
 const TEST_CASES = [
   {
-    name: '简单英文',
+    name: 'Simple English',
     text: 'Hello world',
     expectedTokens: 2,
     tolerance: 1
   },
   {
-    name: '中文短句',
-    text: '你好世界',
+    name: 'Short Chinese phrase',
+    text: '\u4f60\u597d\u4e16\u754c',
     expectedTokens: 4,
     tolerance: 1
   },
   {
-    name: '英文句子',
+    name: 'English sentence',
     text: 'The quick brown fox jumps over the lazy dog',
     expectedTokens: 9,
     tolerance: 2
   },
   {
-    name: '中文句子',
-    text: '人工智能是计算机科学的一个分支',
+    name: 'Chinese sentence',
+    text: '\u4eba\u5de5\u667a\u80fd\u662f\u8ba1\u7b97\u673a\u79d1\u5b66\u7684\u4e00\u4e2a\u5206\u652f',
     expectedTokens: 15,
     tolerance: 3
   },
   {
-    name: '混合文本',
-    text: 'AI（人工智能）is changing the world 改变世界',
+    name: 'Mixed-language text',
+    text: 'AI\uff08\u4eba\u5de5\u667a\u80fd\uff09is changing the world \u6539\u53d8\u4e16\u754c',
     expectedTokens: 12,
     tolerance: 3
   },
   {
-    name: '代码片段',
+    name: 'Code snippet',
     text: 'function hello() { console.log("Hello World"); }',
     expectedTokens: 12,
     tolerance: 3
   },
   {
-    name: '长英文段落',
+    name: 'Long English paragraph',
     text: `Artificial Intelligence (AI) refers to the simulation of human intelligence in machines 
     that are programmed to think and learn like humans. The term may also be applied to any machine 
     that exhibits traits associated with a human mind such as learning and problem-solving.`,
@@ -59,15 +59,15 @@ const TEST_CASES = [
     tolerance: 10
   },
   {
-    name: '长中文段落',
-    text: `人工智能是计算机科学的一个分支，它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式
-    做出反应的智能机器。该领域的研究包括机器人、语言识别、图像识别、自然语言处理和专家系统等。`,
+    name: 'Long Chinese paragraph',
+    text: `\u4eba\u5de5\u667a\u80fd\u662f\u8ba1\u7b97\u673a\u79d1\u5b66\u7684\u4e00\u4e2a\u5206\u652f\uff0c\u5b83\u4f01\u56fe\u4e86\u89e3\u667a\u80fd\u7684\u5b9e\u8d28\uff0c\u5e76\u751f\u4ea7\u51fa\u4e00\u79cd\u65b0\u7684\u80fd\u4ee5\u4eba\u7c7b\u667a\u80fd\u76f8\u4f3c\u7684\u65b9\u5f0f
+    \u505a\u51fa\u53cd\u5e94\u7684\u667a\u80fd\u673a\u5668\u3002\u8be5\u9886\u57df\u7684\u7814\u7a76\u5305\u62ec\u673a\u5668\u4eba\u3001\u8bed\u8a00\u8bc6\u522b\u3001\u56fe\u50cf\u8bc6\u522b\u3001\u81ea\u7136\u8bed\u8a00\u5904\u7406\u548c\u4e13\u5bb6\u7cfb\u7edf\u7b49\u3002`,
     expectedTokens: 90,
     tolerance: 15
   }
 ];
 
-console.log('纯文本Token计算测试：');
+console.log('Plain-text token counting tests:');
 console.log('-'.repeat(60));
 
 let passedTests = 0;
@@ -78,33 +78,33 @@ for (const testCase of TEST_CASES) {
   const difference = Math.abs(calculatedTokens - testCase.expectedTokens);
   const passed = difference <= testCase.tolerance;
   
-  console.log(`\n测试: ${testCase.name}`);
-  console.log(`文本长度: ${testCase.text.length} 字符`);
-  console.log(`计算tokens: ${calculatedTokens}`);
-  console.log(`预期tokens: ${testCase.expectedTokens} (±${testCase.tolerance})`);
-  console.log(`结果: ${passed ? '✅ 通过' : '❌ 失败'} (差异: ${difference})`);
+  console.log(`\nTest: ${testCase.name}`);
+  console.log(`Text length: ${testCase.text.length} characters`);
+  console.log(`Calculated tokens: ${calculatedTokens}`);
+  console.log(`Expected tokens: ${testCase.expectedTokens} (±${testCase.tolerance})`);
+  console.log(`Result: ${passed ? '✅ Passed' : '❌ Failed'} (Difference: ${difference})`);
   
   if (passed) passedTests++;
 }
 
 console.log('\n' + '='.repeat(60));
-console.log(`测试结果: ${passedTests}/${totalTests} 通过 (${(passedTests/totalTests*100).toFixed(1)}%)`);
+console.log(`Test results: ${passedTests}/${totalTests} Passed (${(passedTests/totalTests*100).toFixed(1)}%)`);
 
-// 测试消息列表
-console.log('\n\n消息列表Token计算测试：');
+// Test message lists
+console.log('\n\nMessage-list token counting tests:');
 console.log('-'.repeat(60));
 
 const MESSAGE_TESTS = [
   {
-    name: '单条消息',
+    name: 'Single message',
     messages: [
       { role: 'user', content: 'Hello, how are you?' }
     ],
-    expectedTokens: 12,  // 包括格式开销
+    expectedTokens: 12,  // Includes message formatting overhead
     tolerance: 3
   },
   {
-    name: '系统消息+用户消息',
+    name: 'System and user messages',
     messages: [
       { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'What is AI?' }
@@ -113,7 +113,7 @@ const MESSAGE_TESTS = [
     tolerance: 5
   },
   {
-    name: '多轮对话',
+    name: 'Multi-turn conversation',
     messages: [
       { role: 'user', content: 'Hi' },
       { role: 'assistant', content: 'Hello! How can I help you today?' },
@@ -123,10 +123,10 @@ const MESSAGE_TESTS = [
     tolerance: 8
   },
   {
-    name: '中文对话',
+    name: 'Chinese conversation',
     messages: [
-      { role: 'system', content: '你是一个有帮助的助手' },
-      { role: 'user', content: '什么是机器学习？' }
+      { role: 'system', content: '\u4f60\u662f\u4e00\u4e2a\u6709\u5e2e\u52a9\u7684\u52a9\u624b' },
+      { role: 'user', content: '\u4ec0\u4e48\u662f\u673a\u5668\u5b66\u4e60\uff1f' }
     ],
     expectedTokens: 25,
     tolerance: 5
@@ -141,39 +141,39 @@ for (const test of MESSAGE_TESTS) {
   const difference = Math.abs(calculatedTokens - test.expectedTokens);
   const passed = difference <= test.tolerance;
   
-  console.log(`\n测试: ${test.name}`);
-  console.log(`消息数: ${test.messages.length}`);
-  console.log(`计算tokens: ${calculatedTokens}`);
-  console.log(`预期tokens: ${test.expectedTokens} (±${test.tolerance})`);
-  console.log(`结果: ${passed ? '✅ 通过' : '❌ 失败'} (差异: ${difference})`);
+  console.log(`\nTest: ${test.name}`);
+  console.log(`Message count: ${test.messages.length}`);
+  console.log(`Calculated tokens: ${calculatedTokens}`);
+  console.log(`Expected tokens: ${test.expectedTokens} (±${test.tolerance})`);
+  console.log(`Result: ${passed ? '✅ Passed' : '❌ Failed'} (Difference: ${difference})`);
   
   if (passed) passedMessageTests++;
 }
 
 console.log('\n' + '='.repeat(60));
-console.log(`消息测试结果: ${passedMessageTests}/${totalMessageTests} 通过 (${(passedMessageTests/totalMessageTests*100).toFixed(1)}%)`);
+console.log(`Message test results: ${passedMessageTests}/${totalMessageTests} Passed (${(passedMessageTests/totalMessageTests*100).toFixed(1)}%)`);
 
-// 总体结果
+// Overall results
 const totalPassed = passedTests + passedMessageTests;
 const totalCount = totalTests + totalMessageTests;
 
 console.log('\n' + '='.repeat(60));
-console.log('总体测试结果');
+console.log('Overall test results');
 console.log('='.repeat(60));
-console.log(`通过: ${totalPassed}/${totalCount}`);
-console.log(`通过率: ${(totalPassed/totalCount*100).toFixed(1)}%`);
-console.log(`状态: ${totalPassed/totalCount >= 0.8 ? '✅ 算法准确性良好' : '⚠️ 算法需要改进'}`);
+console.log(`Passed: ${totalPassed}/${totalCount}`);
+console.log(`Pass rate: ${(totalPassed/totalCount*100).toFixed(1)}%`);
+console.log(`Status: ${totalPassed/totalCount >= 0.8 ? '✅ Algorithm accuracy is satisfactory' : '⚠️ Algorithm needs improvement'}`);
 
-// 对比说明
+// Comparison notes
 console.log('\n' + '='.repeat(60));
-console.log('算法改进说明');
+console.log('Algorithm improvements');
 console.log('='.repeat(60));
-console.log('新算法的改进点：');
-console.log('1. 区分中英文字符，中文字符约2 tokens/字符');
-console.log('2. 英文按单词计算，约1.3 tokens/单词');
-console.log('3. 添加消息格式开销（每条消息4 tokens）');
-console.log('4. 支持多模态内容（图片、工具调用等）');
-console.log('5. 添加5%缓冲区确保不低估');
-console.log('\n相比原算法：');
-console.log('- 原算法：简单的字符数计算，误差较大');
-console.log('- 新算法：考虑语言特性和格式开销，更接近实际值');
+console.log('Improvements in the new algorithm:');
+console.log('1. Distinguishes Chinese and English characters; estimates about 2 tokens per Chinese character');
+console.log('2. Counts English words at about 1.3 tokens per word');
+console.log('3. Adds message formatting overhead (4 tokens per message)');
+console.log('4. Supports multimodal content (images, tool calls, etc.)');
+console.log('5. Adds a 5% buffer to avoid underestimating');
+console.log('\nCompared with the old algorithm:');
+console.log('- Old algorithm: simple character counting with larger errors');
+console.log('- New algorithm: accounts for language and formatting overhead for a closer estimate');

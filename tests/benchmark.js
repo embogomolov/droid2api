@@ -1,19 +1,19 @@
 /**
- * 🚀 droid2api 性能压测脚本
+ * 🚀 droid2api Performance load-test script
  *
- * 使用方式：
+ * Usage:
  * node tests/benchmark.js
  *
- * 功能：
- * - 测试 /v1/models 接口吞吐量
- * - 测试 /v1/chat/completions 接口延迟
- * - 生成性能报告
+ * Features:
+ * - Measure /v1/models endpoint throughput
+ * - Measure /v1/chat/completions endpoint latency
+ * - Generate a performance report
  */
 
 import fetch from 'node-fetch';
 import { performance } from 'perf_hooks';
 
-// 配置
+// Configuration
 const CONFIG = {
   baseUrl: 'http://localhost:3000',
   apiKey: process.env.API_ACCESS_KEY || 'your-api-key',
@@ -31,7 +31,7 @@ const CONFIG = {
   }
 };
 
-// 性能统计器
+// Performance metrics collector
 class PerformanceStats {
   constructor(name) {
     this.name = name;
@@ -61,7 +61,7 @@ class PerformanceStats {
 
     const sorted = [...this.latencies].sort((a, b) => a - b);
     const total = this.latencies.length;
-    const totalTime = (this.endTime - this.startTime) / 1000; // 秒
+    const totalTime = (this.endTime - this.startTime) / 1000; // Seconds
 
     return {
       name: this.name,
@@ -89,34 +89,34 @@ class PerformanceStats {
     }
 
     console.log(`\n${'='.repeat(80)}`);
-    console.log(`📊 ${report.name} - 性能报告`);
+    console.log(`📊 ${report.name} - Performance report`);
     console.log(`${'='.repeat(80)}`);
-    console.log(`总请求数:    ${report.total}`);
-    console.log(`错误数:      ${report.errors} (${report.errorRate})`);
-    console.log(`测试时长:    ${report.duration}`);
-    console.log(`吞吐量:      ${report.rps} req/s`);
-    console.log(`\n延迟统计:`);
-    console.log(`  最小值:    ${report.latency.min}`);
-    console.log(`  平均值:    ${report.latency.avg}`);
+    console.log(`Total requests:    ${report.total}`);
+    console.log(`Errors:      ${report.errors} (${report.errorRate})`);
+    console.log(`Test duration:    ${report.duration}`);
+    console.log(`Throughput:      ${report.rps} req/s`);
+    console.log(`\nLatency statistics:`);
+    console.log(`  Minimum:    ${report.latency.min}`);
+    console.log(`  Average:    ${report.latency.avg}`);
     console.log(`  P50:       ${report.latency.p50}`);
     console.log(`  P90:       ${report.latency.p90}`);
     console.log(`  P99:       ${report.latency.p99}`);
-    console.log(`  最大值:    ${report.latency.max}`);
+    console.log(`  Maximum:    ${report.latency.max}`);
     console.log(`${'='.repeat(80)}\n`);
   }
 }
 
-// 测试 /v1/models 接口
+// Test the /v1/models endpoint
 async function testModels() {
   const config = CONFIG.tests.models;
   const stats = new PerformanceStats(config.name);
 
-  console.log(`\n🚀 开始测试: ${config.name}`);
-  console.log(`   并发数: ${config.concurrent}, 总请求: ${config.total}\n`);
+  console.log(`\n🚀 Starting test: ${config.name}`);
+  console.log(`   Concurrency: ${config.concurrent}, Total requests: ${config.total}\n`);
 
   stats.start();
 
-  // 并发控制
+  // Concurrency control
   let completed = 0;
   const queue = [];
 
@@ -133,19 +133,19 @@ async function testModels() {
 
       if (response.ok) {
         stats.addRequest(latency, false);
-        process.stdout.write(`\r✓ 完成: ${++completed}/${config.total}`);
+        process.stdout.write(`\r✓ Completed: ${++completed}/${config.total}`);
       } else {
         stats.addRequest(latency, true);
-        process.stdout.write(`\r❌ 失败: ${++completed}/${config.total} (HTTP ${response.status})`);
+        process.stdout.write(`\r❌ Failed: ${++completed}/${config.total} (HTTP ${response.status})`);
       }
     } catch (error) {
       const latency = performance.now() - startTime;
       stats.addRequest(latency, true);
-      process.stdout.write(`\r❌ 失败: ${++completed}/${config.total} (${error.message})`);
+      process.stdout.write(`\r❌ Failed: ${++completed}/${config.total} (${error.message})`);
     }
   }
 
-  // 分批发送请求
+  // Send requests in batches
   for (let i = 0; i < config.total; i++) {
     if (queue.length >= config.concurrent) {
       await Promise.race(queue);
@@ -158,9 +158,9 @@ async function testModels() {
     });
   }
 
-  // 等待所有请求完成
+  // Wait for all requests to finish
   await Promise.all(queue);
-  console.log(); // 换行
+  console.log(); // Start a new line
 
   stats.finish();
   stats.printReport();
@@ -168,13 +168,13 @@ async function testModels() {
   return stats.getReport();
 }
 
-// 测试 /v1/chat/completions 接口
+// Test the /v1/chat/completions endpoint
 async function testChatCompletions() {
   const config = CONFIG.tests.chatCompletions;
   const stats = new PerformanceStats(config.name);
 
-  console.log(`\n🚀 开始测试: ${config.name}`);
-  console.log(`   并发数: ${config.concurrent}, 总请求: ${config.total}\n`);
+  console.log(`\n🚀 Starting test: ${config.name}`);
+  console.log(`   Concurrency: ${config.concurrent}, Total requests: ${config.total}\n`);
 
   stats.start();
 
@@ -204,15 +204,15 @@ async function testChatCompletions() {
 
       if (response.ok) {
         stats.addRequest(latency, false);
-        process.stdout.write(`\r✓ 完成: ${++completed}/${config.total}`);
+        process.stdout.write(`\r✓ Completed: ${++completed}/${config.total}`);
       } else {
         stats.addRequest(latency, true);
-        process.stdout.write(`\r❌ 失败: ${++completed}/${config.total} (HTTP ${response.status})`);
+        process.stdout.write(`\r❌ Failed: ${++completed}/${config.total} (HTTP ${response.status})`);
       }
     } catch (error) {
       const latency = performance.now() - startTime;
       stats.addRequest(latency, true);
-      process.stdout.write(`\r❌ 失败: ${++completed}/${config.total} (${error.message})`);
+      process.stdout.write(`\r❌ Failed: ${++completed}/${config.total} (${error.message})`);
     }
   }
 
@@ -229,7 +229,7 @@ async function testChatCompletions() {
   }
 
   await Promise.all(queue);
-  console.log(); // 换行
+  console.log(); // Start a new line
 
   stats.finish();
   stats.printReport();
@@ -237,66 +237,66 @@ async function testChatCompletions() {
   return stats.getReport();
 }
 
-// 主函数
+// Main function
 async function main() {
   console.log(`
 ${'='.repeat(80)}
-🚀 droid2api 性能压测工具
+🚀 droid2api Performance load-testing tool
 ${'='.repeat(80)}
-目标服务器: ${CONFIG.baseUrl}
-API密钥:    ${CONFIG.apiKey.substring(0, 10)}...
+Target server: ${CONFIG.baseUrl}
+API key:    ${CONFIG.apiKey.substring(0, 10)}...
 ${'='.repeat(80)}
 `);
 
-  // 检查服务器是否可用
-  console.log('🔍 检查服务器连接...');
+  // Check server availability
+  console.log('🔍 Check the server connection...');
   try {
     const response = await fetch(`${CONFIG.baseUrl}/`, {
       headers: { 'x-api-key': CONFIG.apiKey }
     });
     if (response.ok) {
-      console.log('✅ 服务器连接正常\n');
+      console.log('✅ Server connection successful\n');
     } else {
-      console.error(`❌ 服务器返回错误: HTTP ${response.status}`);
+      console.error(`❌ Server returned an error: HTTP ${response.status}`);
       process.exit(1);
     }
   } catch (error) {
-    console.error(`❌ 无法连接到服务器: ${error.message}`);
+    console.error(`❌ Unable to connect to the server: ${error.message}`);
     process.exit(1);
   }
 
-  // 运行测试
+  // Run the tests
   const results = {
     models: await testModels(),
     chatCompletions: await testChatCompletions()
   };
 
-  // 打印总结
+  // Print the summary
   console.log(`
 ${'='.repeat(80)}
-📈 压测总结
+📈 Load-test summary
 ${'='.repeat(80)}
 /v1/models:
-  吞吐量: ${results.models.rps} req/s
-  平均延迟: ${results.models.latency.avg}
-  错误率: ${results.models.errorRate}
+  Throughput: ${results.models.rps} req/s
+  Average latency: ${results.models.latency.avg}
+  Error rate: ${results.models.errorRate}
 
 /v1/chat/completions:
-  吞吐量: ${results.chatCompletions.rps} req/s
-  平均延迟: ${results.chatCompletions.latency.avg}
-  错误率: ${results.chatCompletions.errorRate}
+  Throughput: ${results.chatCompletions.rps} req/s
+  Average latency: ${results.chatCompletions.latency.avg}
+  Error rate: ${results.chatCompletions.errorRate}
 ${'='.repeat(80)}
 
-💡 提示:
-  - 如果吞吐量 < 500 req/s，考虑启用连接池优化
-  - 如果平均延迟 > 200ms，检查上游 API 响应速度
-  - 如果错误率 > 5%，检查密钥池配置和上游限流
+💡 Tips:
+  - If throughput is < 500 req/s, consider enabling connection pooling
+  - If average latency is > 200ms, check upstream API response times
+  - If the error rate is > 5%, check the key-pool configuration and upstream rate limits
 ${'='.repeat(80)}
 `);
 }
 
-// 运行
+// Run
 main().catch(error => {
-  console.error('❌ 压测失败:', error);
+  console.error('❌ Load test failed:', error);
   process.exit(1);
 });

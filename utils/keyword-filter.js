@@ -295,18 +295,18 @@ class KeywordFilter {
       rules: [
         {
           id: "rule-example",
-          name: "示例规则",
+          name: "Example rule",
           enabled: false,
           pattern: {
             type: "contains",
-            value: "关键词",
+            value: "keyword",
             caseSensitive: false
           },
           action: {
             type: "replace",
-            replacement: "替换词"
+            replacement: "replacement"
           },
-          description: "这是一个示例规则"
+          description: "Example rule demonstrating keyword replacement"
         }
       ],
       logging: {
@@ -382,7 +382,7 @@ class KeywordFilter {
       case 'block':
         return '';
       default:
-        // 理论上不会走到这里，留作安全网
+        // This branch should be unreachable; retain it as a fallback.
         return this.performLegacyAction(text, action, pattern);
     }
   }
@@ -525,17 +525,17 @@ class KeywordFilter {
     let hasChanges = false;
 
     brokenRules.forEach(rule => {
-      const errorMessage = error?.message || '未知错误';
+      const errorMessage = error?.message || 'Unknown error';
       rule.errors = rule.errors || [];
       rule.errors.push({
         timestamp: new Date().toISOString(),
-        message: `正则解析失败: ${errorMessage}`
+        message: `Invalid regular expression: ${errorMessage}`
       });
 
       if (rule.enabled) {
         rule.enabled = false;
         hasChanges = true;
-        logWarn(`[KeywordFilter] 自动禁用规则 ${rule.id} (${rule.name})，原因：正则解析失败 -> ${errorMessage}`);
+        logWarn(`[KeywordFilter] Automatically disabled rule ${rule.id} (${rule.name}); reason: Invalid regular expression -> ${errorMessage}`);
       }
     });
 
@@ -599,7 +599,7 @@ class KeywordFilter {
     targetRule.errors = targetRule.errors || [];
     targetRule.errors.push({
       timestamp: new Date().toISOString(),
-      message: `自动降级: ${reason}`
+      message: `Automatically disabled: ${reason}`
     });
     targetRule.alerts = targetRule.alerts || [];
     targetRule.alerts.push({
@@ -616,7 +616,7 @@ class KeywordFilter {
       this.ruleStats.set(rule.id, stats);
     }
 
-    logWarn(`[KeywordFilter] 自动降级规则 ${targetRule.id} (${targetRule.name})，原因：${reason}`);
+    logWarn(`[KeywordFilter] Automatically disabled rule ${targetRule.id} (${targetRule.name}); reason: ${reason}`);
 
     try {
       fs.writeFileSync(KEYWORD_CONFIG_PATH, JSON.stringify(this.config, null, 2), 'utf-8');
@@ -792,12 +792,12 @@ class KeywordFilter {
 
     const filtered = { ...requestBody };
 
-    // 过滤 system prompt
+    // Filter the system prompt.
     if (filtered.system) {
       filtered.system = this.filterText(filtered.system, 'system_prompt');
     }
 
-    // 过滤 messages
+    // Filter messages.
     if (filtered.messages) {
       filtered.messages = this.filterMessages(filtered.messages);
     }
@@ -838,7 +838,7 @@ class KeywordFilter {
   }
 }
 
-// 单例模式
+// Singleton instance
 const keywordFilter = new KeywordFilter();
 
 export default keywordFilter;

@@ -1,60 +1,60 @@
 /**
- * 测试脚本：验证日期切换时统计数据是否正确重置
+ * Test script: verify that statistics reset correctly when the date changes
  *
- * 测试场景：
- * 1. 当前日期有数据 (2025-10-12: 837次请求)
- * 2. 模拟切换到新的一天 (2025-10-13)
- * 3. 验证getTodayStats()是否返回0
+ * Test scenarios:
+ * 1. The current date has data (2025-10-12: 837 requests)
+ * 2. Simulate switching to a new day (2025-10-13)
+ * 3. Verify that getTodayStats() returns 0
  */
 
 import { getTodayStats, getStatsSummary } from '../utils/request-stats.js';
 
 console.log('========================================');
-console.log('📅 日期重置测试');
+console.log('📅 Daily reset test');
 console.log('========================================\n');
 
-// 1. 获取当前日期
+// 1. Get the current date
 const currentDate = new Date().toISOString().split('T')[0];
-console.log(`当前日期: ${currentDate}\n`);
+console.log(`Current date: ${currentDate}\n`);
 
-// 2. 获取今日统计
+// 2. Get statistics for today
 const todayStats = getTodayStats();
-console.log('📊 getTodayStats() 返回:');
+console.log('📊 getTodayStats() returned:');
 console.log(JSON.stringify(todayStats, null, 2));
 console.log('');
 
-// 3. 获取统计摘要
+// 3. Get the statistics summary
 const summary = getStatsSummary();
-console.log('📈 getStatsSummary() 返回:');
+console.log('📈 getStatsSummary() returned:');
 console.log(`  - total_requests: ${summary.total_requests}`);
 console.log(`  - today_requests: ${summary.today_requests}`);
 console.log(`  - total_tokens: ${summary.total_tokens}`);
 console.log(`  - today_tokens: ${summary.today_tokens}`);
 console.log('');
 
-// 4. 分析问题
+// 4. Analyze the issue
 console.log('========================================');
-console.log('🔍 问题分析:');
+console.log('🔍 Issue analysis:');
 console.log('========================================');
 
 if (summary.total_requests === summary.today_requests) {
-  console.log('⚠️  警告: total_requests 等于 today_requests');
-  console.log('   这说明今日数据没有正确重置，或者所有请求都在今天发生');
+  console.log('⚠️  Warning: total_requests equals today_requests');
+  console.log('   This means daily data did not reset correctly, or all requests occurred today');
 } else {
-  console.log('✅ 正常: total_requests ≠ today_requests');
+  console.log('✅ OK: total_requests ≠ today_requests');
 }
 
 if (summary.today_requests === 0) {
-  console.log('✅ 今日请求数为0（正常，如果今天是新的一天）');
+  console.log('✅ Today has 0 requests (expected if a new day has started)');
 } else {
-  console.log(`ℹ️  今日已有 ${summary.today_requests} 次请求`);
+  console.log(`ℹ️  Requests so far today: ${summary.today_requests} requests`);
 }
 
 console.log('\n========================================');
-console.log('💡 建议:');
+console.log('💡 Suggestions:');
 console.log('========================================');
-console.log('如果日期切换后 today_requests 没有清零：');
-console.log('1. 检查服务器时区设置');
-console.log('2. 检查 new Date() 返回的日期是否正确');
-console.log('3. 检查 request_stats.json 中是否有今天的键');
-console.log('4. 检查前端是否正确调用了 /admin/stats/summary API');
+console.log('If today_requests does not reset to zero after the date changes:');
+console.log('1. Check the server time-zone setting');
+console.log('2. Check whether new Date() returns the correct date');
+console.log('3. Check whether request_stats.json has an entry for today');
+console.log('4. Check whether the frontend correctly calls /admin/stats/summary');

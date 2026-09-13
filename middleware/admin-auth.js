@@ -1,6 +1,6 @@
 /**
- * 管理员认证中间件
- * 统一的管理后台认证逻辑
+ * Admin authentication middleware
+ * Shared admin authentication logic
  */
 
 import { logInfo, logError, logWarn } from '../logger.js';
@@ -33,10 +33,10 @@ function normalizeKey(value) {
 }
 
 /**
- * 管理员认证中间件
- * @param {Request} req - 请求对象
- * @param {Response} res - 响应对象
- * @param {Function} next - 下一个中间件
+ * Admin authentication middleware
+ * @param {Request} req - Request object
+ * @param {Response} res - Response object
+ * @param {Function} next - Next middleware
  */
 export function adminAuth(req, res, next) {
   const headerKey = normalizeKey(req.headers['x-admin-key']);
@@ -45,34 +45,34 @@ export function adminAuth(req, res, next) {
   const adminKey = headerKey || bearerKey || queryKey;
   const configuredKey = process.env.ADMIN_ACCESS_KEY;
 
-  // BaSui：检查是否配置了管理密钥
+  // BaSui: Check whether the admin key is configured
   if (!configuredKey) {
-    logError('管理后台访问失败：未配置ADMIN_ACCESS_KEY环境变量');
+    logError('Admin access failed: ADMIN_ACCESS_KEY environment variable is not configured');
     return res.status(500).json({
-      error: '管理后台未正确配置',
-      message: '请设置ADMIN_ACCESS_KEY环境变量'
+      error: 'Admin access is not configured correctly',
+      message: 'Set the ADMIN_ACCESS_KEY environment variable'
     });
   }
 
-  // BaSui：验证管理密钥
+  // BaSui: Validate the admin key
   if (!adminKey) {
-    logWarn(`管理后台访问失败：缺少认证密钥 [IP: ${req.ip}]`);
+    logWarn(`Admin access failed: authentication key missing [IP: ${req.ip}]`);
     return res.status(401).json({
-      error: '需要管理员认证',
-      message: '请提供x-admin-key头、Authorization: Bearer密钥或admin_key参数'
+      error: 'Admin authentication required',
+      message: 'Provide the x-admin-key header, an Authorization: Bearer token, or the admin_key parameter'
     });
   }
 
   if (adminKey !== configuredKey) {
-    logWarn(`管理后台访问失败：密钥错误 [IP: ${req.ip}, Key: ${adminKey.substring(0, 4)}...]`);
+    logWarn(`Admin access failed: incorrect key [IP: ${req.ip}, Key: ${adminKey.substring(0, 4)}...]`);
     return res.status(403).json({
-      error: '认证失败',
-      message: '管理员密钥无效'
+      error: 'Authentication failed',
+      message: 'Invalid admin key'
     });
   }
 
-  // BaSui：记录成功的管理访问
-  logInfo(`管理后台访问成功 [IP: ${req.ip}, Path: ${req.path}]`);
+  // BaSui: Log successful admin access
+  logInfo(`Admin access successful [IP: ${req.ip}, Path: ${req.path}]`);
   next();
 }
 

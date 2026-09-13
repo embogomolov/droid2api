@@ -2,7 +2,7 @@
 
 OpenAI 兼容的 API 代理服务器，统一访问不同的 LLM 模型。
 
-## 核心功能
+### Factory compatibility (verified September 2026)
 
 ### 🔐 五级认证系统（灵活且向后兼容）
 
@@ -10,11 +10,11 @@ droid2api v1.4+ 支持五级认证优先级，满足从个人使用到企业级�
 
 #### 认证优先级（从高到低）
 
-1. **🔑 FACTORY_API_KEY 环境变量**（单用户模式，最高优先级）
-   - 适用场景：个人使用 / 单密钥 / Docker 部署
-   - 优点：配置简单，环境变量配置，Docker 友好
-   - 缺点：无轮询，无负载均衡，配额耗尽无兜底
-   - 配置方式：`FACTORY_API_KEY=fk-your-key`
+Keep `system_prompt` set to
+`You are Droid, an AI software engineering agent built by Factory.\n\n`.
+Factory rejected the tested requests without this introduction with HTTP 403.
+The proxy prepends it to the client's instructions; the remaining instructions
+are preserved. This is an addition to the prompt, so forwarding is not byte-for-byte.
 
 2. **🎯 密钥池管理**（多用户模式，推荐企业使用）
    - 适用场景：多密钥 / 负载均衡 / 高并发 / 企业部署
@@ -41,374 +41,374 @@ droid2api v1.4+ 支持五级认证优先级，满足从个人使用到企业级�
 
 | 场景 | 推荐方案 | 配置复杂度 | 功能强大度 |
 |------|---------|----------|----------|
-| 个人使用 / 单密钥 | FACTORY_API_KEY | ⭐ | ⭐⭐ |
-| 多密钥 / 负载均衡 | 密钥池管理 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| 需要自动刷新 | DROID_REFRESH_KEY | ⭐⭐ | ⭐⭐⭐ |
-| 向后兼容 | 文件认证 | ⭐ | ⭐⭐ |
-| 客户端控制 | Authorization Header | ⭐ | ⭐ |
+| Personal use / single key | FACTORY_API_KEY | ⭐ | ⭐⭐ |
+| Multiple keys / load balancing | Key pool management | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| Automatic refresh | DROID_REFRESH_KEY | ⭐⭐ | ⭐⭐⭐ |
+| Backward compatibility | File-based authentication | ⭐ | ⭐⭐ |
+| Client-controlled authentication | Authorization header | ⭐ | ⭐ |
 
-### 📊 Token使用量追踪系统（Factory专用）
-- **自动记录使用量** - 每次API调用自动记录Token消耗
-- **数据持久化** - 使用量数据保存到 `data/factory_usage.json`
-- **实时统计显示** - 管理界面显示总使用量、今日使用、请求统计
-- **按时间段统计** - 支持每日、每小时的使用量分析
-- **自动数据清理** - 超过设定天数的数据自动清理（默认30天，可配置）
-- **环境变量配置** - 支持通过环境变量控制同步间隔、批量大小、数据保留时间
+### 📊 Token usage tracking (Factory-specific)
+- **Automatic usage recording** - Records token consumption for each API call
+- **Persistent storage** - Saves usage data to `data/factory_usage.json`
+- **Live statistics** - The admin interface shows total usage, today's usage, and request statistics
+- **Time-based analysis** - Daily and hourly usage breakdowns
+- **Automatic cleanup** - Removes data older than the configured retention period (30 days by default)
+- **Environment-variable configuration** - Controls the sync interval, batch size, and retention period
 
-### 🎯 密钥池管理系统（无限量密钥支持）
-- **大规模密钥轮询** - 支持无数量限制的 FACTORY_API_KEY 池化管理
-- **智能轮询算法** - 支持 round-robin、random、least-used、weighted-score 四种算法
-- **🆕 多级密钥池（v1.4.0+）** - 支持创建多个池子，按优先级自动回退
-  - 🎯 **优先级控制** - priority 1 > 2 > 3，优先使用低数字池子
-  - 🔄 **自动回退** - 当前池子无可用密钥时，自动切换到下一优先级
-  - 🏷️ **池子隔离** - 不同来源的密钥独立管理（白嫖池、主力池等）
-  - 📊 **可视化管理** - Dashboard 显示每个池子的统计卡片
-  - ⚙️ **灵活配置** - 通过 Web 界面或配置文件管理池子
-  - 📖 **详细文档** - 参考 `docs/MULTI_TIER_POOL.md` 和 `data/key_pool.example.json`
-- **自动健康检查** - 批量测试密钥可用性，自动标记失效密钥
-- **自动封禁机制** - 测试返回200标记成功，402错误自动封禁，其他错误自动禁用
-- **Web管理界面** - 可视化管理所有密钥，支持添加/删除/测试/导出
-- **密钥状态管理** - active（可用）/disabled（禁用）/banned（封禁）三态管理
-- **批量操作** - 批量导入、批量测试、批量删除禁用/封禁密钥
-- **数据持久化** - 密钥池状态自动保存到 `data/key_pool.json`，带备份和原子写入
+### 🎯 Key pool management (no fixed key limit)
+- **Large-scale key rotation** - Manages pools of FACTORY_API_KEY values without a fixed count limit
+- **Key selection algorithms** - Supports round-robin, random, least-used, and weighted-score
+- **🆕 Multi-tier key pools (v1.4.0+)** - Multiple pools with automatic priority-based fallback
+  - 🎯 **Priority control** - Priority 1 takes precedence over 2, then 3; lower numbers are used first
+  - 🔄 **Automatic fallback** - Switches to the next priority when the current pool has no available keys
+  - 🏷️ **Separate pools** - Manages keys from different sources independently (free keys, primary keys, etc.)
+  - 📊 **Visual management** - The dashboard shows a statistics card for each pool
+  - ⚙️ **Flexible configuration** - Manage pools through the web interface or configuration file
+  - 📖 **Further documentation** - See `docs/MULTI_TIER_POOL.md` and `data/key_pool.example.json`
+- **Automatic health checks** - Batch-tests key availability and marks unusable keys
+- **Automatic proxy blocking** - A test response of 200 marks success; 402 blocks the key in this proxy; other errors disable it
+- **Web admin interface** - Add, delete, test, and export keys visually
+- **Key states** - active (available), disabled (disabled), and banned (blocked by this proxy)
+- **Batch operations** - Bulk import, batch testing, and bulk deletion of disabled or proxy-blocked keys
+- **Persistent storage** - Automatically saves pool state to `data/key_pool.json`, with backups and atomic writes
 
-### 🧠 智能推理级别控制
-- **五档推理级别** - auto/off/low/medium/high，灵活控制推理行为
-- **auto模式** - 完全遵循客户端原始请求，不做任何推理参数修改
-- **固定级别** - off/low/medium/high强制覆盖客户端推理设置
-- **OpenAI模型** - 自动注入reasoning字段，effort参数控制推理强度
-- **Anthropic模型** - 自动配置thinking字段和budget_tokens (4096/12288/24576)
-- **智能头管理** - 根据推理级别自动添加/移除anthropic-beta相关标识
+### 🧠 Reasoning level control
+- **Five levels** - auto/off/low/medium/high to control reasoning behavior
+- **auto mode** - Preserves the original client request without changing reasoning parameters
+- **Fixed levels** - off/low/medium/high override the client's reasoning settings
+- **OpenAI models** - Automatically adds the reasoning field; effort controls the reasoning level
+- **Anthropic models** - Automatically configures thinking and budget_tokens (4096/12288/24576)
+- **Header management** - Adds or removes relevant anthropic-beta flags based on the reasoning level
 
-### 🚀 服务器部署/Docker部署
-- **本地服务器** - 支持npm start快速启动
-- **Docker容器化** - 提供完整的Dockerfile和docker-compose.yml
-- **云端部署** - 支持各种云平台的容器化部署
-- **环境隔离** - Docker部署确保依赖环境的完全一致性
-- **生产就绪** - 包含健康检查、日志管理等生产级特性
+### 🚀 Server and Docker deployment
+- **Local server** - Start quickly with npm start
+- **Docker containers** - Includes a complete Dockerfile and docker-compose.yml
+- **Cloud deployment** - Supports container deployment on various cloud platforms
+- **Environment isolation** - Docker keeps the dependency environment consistent
+- **Production features** - Includes health checks and log management
 
-### 💻 Claude Code直接使用
-- **透明代理模式** - /v1/responses和/v1/messages端点支持直接转发
-- **完美兼容** - 与Claude Code CLI工具无缝集成
-- **系统提示注入** - 自动添加Droid身份标识，保持上下文一致性
-- **请求头标准化** - 自动添加Factory特定的认证和会话头信息
-- **零配置使用** - Claude Code可直接使用，无需额外设置
+### 💻 Direct use with Claude Code
+- **Transparent proxy mode** - /v1/responses and /v1/messages support direct forwarding
+- **CLI integration** - Integrates with the Claude Code CLI
+- **System prompt injection** - Automatically adds the Droid identity to keep context consistent
+- **Standardized headers** - Automatically adds Factory-specific authentication and session headers
+- **No additional setup** - Claude Code can use the proxy directly
 
-## 管理后台
+## Admin interface
 
-### 访问管理界面
+### Accessing the admin interface
 
-启动服务后，访问 `http://localhost:3000/` 进入 Web 管理界面。
+After starting the server, open `http://localhost:3000/` to access the web admin interface.
 
-**主要功能**：
-- 📊 **密钥池统计** - 查看总数、可用、禁用、封禁密钥数量
-- 🎯 **Token使用量监控** - 实时显示总Token使用量、今日使用量、请求统计
-- ➕ **添加密钥** - 单个添加或批量导入密钥（自动识别Provider类型）
-- 🧪 **测试密钥** - 单个测试或批量测试所有密钥可用性
-- 📤 **导出密钥** - 按状态筛选导出为 txt 文件
-- 🗑️ **删除密钥** - 单个删除或批量删除禁用/封禁密钥
-- ⚙️ **配置管理** - 调整轮询算法、重试机制、性能参数
-- 📈 **使用量统计** - Token使用热力图、成功率排行、每日/每小时统计
+**Main features**:
+- 📊 **Key pool statistics** - Counts of total, available, disabled, and proxy-blocked keys
+- 🎯 **Token usage monitoring** - Live total usage, today's usage, and request statistics
+- ➕ **Add keys** - Add individually or import in bulk (provider type is detected automatically)
+- 🧪 **Test keys** - Test availability individually or in batches
+- 📤 **Export keys** - Filter by status and export to a txt file
+- 🗑️ **Delete keys** - Delete individually or bulk-delete disabled/proxy-blocked keys
+- ⚙️ **Configuration** - Adjust key selection, retries, and performance settings
+- 📈 **Usage statistics** - Token usage heatmaps, success-rate rankings, and daily/hourly statistics
 
-### 管理 API 端点
+### Admin API endpoints
 
-所有管理接口需要在请求头中添加 `x-admin-key` 认证：
+All admin endpoints require the `x-admin-key` authentication header:
 
 ```bash
 curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
 ```
 
-**核心接口**：
-- `GET /admin/stats` - 密钥池统计信息
-- `GET /admin/keys` - 密钥列表（支持分页和状态筛选）
-- `POST /admin/keys` - 添加单个密钥
-- `POST /admin/keys/batch` - 批量导入密钥
-- `DELETE /admin/keys/:id` - 删除密钥
-- `PATCH /admin/keys/:id/toggle` - 切换密钥状态
-- `POST /admin/keys/:id/test` - 测试单个密钥
-- `POST /admin/keys/test-all` - 批量测试所有密钥
-- `GET /admin/keys/export` - 导出密钥为txt文件
-- `GET /admin/config` - 获取轮询配置
-- `PUT /admin/config` - 更新轮询配置
+**Core endpoints**:
+- `GET /admin/stats` - Key pool statistics
+- `GET /admin/keys` - List keys (supports pagination and status filtering)
+- `POST /admin/keys` - Add one key
+- `POST /admin/keys/batch` - Import keys in bulk
+- `DELETE /admin/keys/:id` - Delete a key
+- `PATCH /admin/keys/:id/toggle` - Toggle key status
+- `POST /admin/keys/:id/test` - Test one key
+- `POST /admin/keys/test-all` - Test all keys in a batch
+- `GET /admin/keys/export` - Export keys to a txt file
+- `GET /admin/config` - Get key selection settings
+- `PUT /admin/config` - Update key selection settings
 
-**Token使用量接口**：
-- `GET /factory/balance/usage` - 获取Token使用量统计
-- `GET /factory/balance/summary` - 获取使用量汇总
-- `POST /factory/balance/sync` - 手动触发同步
-- `POST /factory/balance/cleanup` - 清理过期数据
+**Token usage endpoints**:
+- `GET /factory/balance/usage` - Get token usage statistics
+- `GET /factory/balance/summary` - Get a usage summary
+- `POST /factory/balance/sync` - Trigger synchronization manually
+- `POST /factory/balance/cleanup` - Clean up expired data
 
-**🆕 多级密钥池接口（v1.4.0+）**：
-- `GET /admin/pool-groups` - 获取所有密钥池及统计信息
-- `POST /admin/pool-groups` - 创建新的密钥池
-- `DELETE /admin/pool-groups/:id` - 删除密钥池（密钥自动迁移到 default 池）
-- `PATCH /admin/keys/:id/pool` - 修改密钥所属的池子
+**🆕 Multi-tier key pool endpoints (v1.4.0+)**:
+- `GET /admin/pool-groups` - Get all pools and their statistics
+- `POST /admin/pool-groups` - Create a pool
+- `DELETE /admin/pool-groups/:id` - Delete a pool (keys move to the default pool automatically)
+- `PATCH /admin/keys/:id/pool` - Change the pool a key belongs to
 
-## 其他特性
+## Other features
 
-- 🎯 **标准 OpenAI API 接口** - 使用熟悉的 OpenAI API 格式访问所有模型
-- 🔄 **自动格式转换** - 自动处理不同 LLM 提供商的格式差异
-- 🌊 **智能流式处理** - 完全尊重客户端stream参数，支持流式和非流式响应
-- ⚙️ **灵活配置** - 通过配置文件自定义模型和端点
-- 📝 **智能日志系统** - 开发模式详细控制台日志，生产模式文件日志（按天轮换）
+- 🎯 **Standard OpenAI API interface** - Access all models using the familiar OpenAI API format
+- 🔄 **Automatic format conversion** - Handles differences between LLM providers
+- 🌊 **Streaming support** - Honors the client's stream parameter for streaming and non-streaming responses
+- ⚙️ **Flexible configuration** - Customize models and endpoints through the configuration file
+- 📝 **Logging** - Detailed console logs in development; daily rotated log files in production
 
-## 🚀 性能优化
+## 🚀 Performance optimization
 
-droid2api 内置三阶段性能优化方案，支持从个人项目到超大规模应用的渐进式扩展。
+droid2api includes three stages of performance optimization for gradual scaling from personal projects to very large applications.
 
-### ⚡ 阶段1：基础优化（默认启用，零配置）
+### ⚡ Stage 1: basic optimizations (enabled by default, no configuration)
 
-**已内置优化**：
-- ✅ **HTTP Keep-Alive 连接池** - 复用TCP连接，减少70%握手开销
-- ✅ **异步批量文件写入** - 不阻塞主线程，减少100%磁盘I/O等待
+**Built-in optimizations**:
+- ✅ **HTTP Keep-Alive connection pooling** - Reuses TCP connections, reducing handshake overhead by 70%
+- ✅ **Asynchronous batch file writes** - Avoids blocking the main thread, eliminating disk I/O wait there
 
-**性能提升**：
-- 延迟降低：250ms → 50ms（⬇️ 80%）
-- 吞吐量提升：500 → 2000+ RPS（⬆️ 300%）
-- CPU占用降低：60-80% → 40-60%
+**Performance improvements**:
+- Lower latency: 250ms → 50ms (⬇️ 80%)
+- Higher throughput: 500 → 2000+ RPS (⬆️ 300%)
+- Lower CPU utilization: 60-80% → 40-60%
 
-**无需任何配置，开箱即用！**
+**Works out of the box without configuration!**
 
 ---
 
-### 🔥 阶段2：Redis 缓存（可选，高并发场景）
+### 🔥 Stage 2: Redis caching (optional, for high concurrency)
 
-**适用场景**：日均请求 > 50万
+**Use case**: more than 500,000 requests per day on average
 
-**快速启用**：
+**Quick setup**:
 ```bash
-# 1. 安装 Redis 包
+# 1. Install the Redis package
 npm install redis
 
-# 2. 启动 Redis 服务（Docker最简单）
+# 2. Start Redis (Docker is the simplest option)
 docker run -d -p 6379:6379 --name redis redis:alpine
 
-# 3. 启动服务（自动检测并启用Redis）
+# 3. Start the server (Redis is detected and enabled automatically)
 npm start
 ```
 
-**效果**：
-- 密钥池访问延迟降低 90%（5-10ms → 0.5-1ms）
-- 吞吐量提升 50%（2000 → 3000+ RPS）
-- 支持集群模式的状态共享
+**Benefits**:
+- 90% lower key pool access latency (5-10ms → 0.5-1ms)
+- 50% higher throughput (2000 → 3000+ RPS)
+- Shared state for cluster mode
 
-**环境变量配置**（可选）：
+**Environment variables** (optional):
 ```bash
-# .env 文件
+# .env file
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
-REDIS_PASSWORD=           # 如果设置了密码
+REDIS_PASSWORD=           # Set if Redis requires a password
 REDIS_DB=0
 ```
 
-**优雅降级**：Redis 不可用时自动降级到文件模式，系统继续正常运行。
+**Graceful fallback**: if Redis is unavailable, the system switches to file storage and continues running.
 
 ---
 
-### 🚄 阶段3：集群模式（可选，超高并发场景）
+### 🚄 Stage 3: cluster mode (optional, for very high concurrency)
 
-**适用场景**：日均请求 > 100万
+**Use case**: more than 1,000,000 requests per day on average
 
-**启用方式**：
+**Enable it**:
 ```bash
-# 在 .env 文件中添加
+# Add to the .env file
 CLUSTER_MODE=true
 
-# 启动服务（自动利用所有CPU核心）
+# Start the server (uses all CPU cores automatically)
 npm start
 ```
 
-**效果**：
-- 吞吐量提升 N 倍（N = CPU核心数，如4核 → 10000+ RPS）
-- 自动故障恢复（单进程崩溃不影响服务）
-- 零停机重载（优雅重启）
+**Benefits**:
+- N-fold throughput increase (N = CPU core count; e.g. 4 cores → 10000+ RPS)
+- Automatic recovery (a single worker crash does not interrupt the service)
+- Zero-downtime reloads (graceful restarts)
 
-**环境变量配置**（可选）：
+**Environment variables** (optional):
 ```bash
-# .env 文件
-CLUSTER_MODE=true         # 启用集群模式
-CLUSTER_WORKERS=4         # Worker进程数（默认等于CPU核心数）
+# .env file
+CLUSTER_MODE=true         # Enable cluster mode
+CLUSTER_WORKERS=4         # Worker count (defaults to the CPU core count)
 ```
 
 ---
 
-### 📊 性能对比表
+### 📊 Performance comparison
 
-| 配置 | 吞吐量(RPS) | 平均延迟 | 适用场景 |
+| Configuration | Throughput (RPS) | Average latency | Use case |
 |------|-------------|----------|----------|
-| **阶段1（默认）** | 2000+ | 50ms | < 50万/天 |
-| **阶段1 + Redis** | 3000+ | 30ms | 50-100万/天 |
-| **阶段1 + Redis + 集群** | 10000+ | 30ms | > 100万/天 |
+| **Stage 1 (default)** | 2000+ | 50ms | < 500,000/day |
+| **Stage 1 + Redis** | 3000+ | 30ms | 500,000-1,000,000/day |
+| **Stage 1 + Redis + cluster** | 10000+ | 30ms | > 1,000,000/day |
 
 ---
 
-### 🎯 选择指南
+### 🎯 Choosing a setup
 
-**个人项目/小型应用**（< 10万/天）：
+**Personal projects / small applications** (< 100,000/day):
 ```bash
-npm start  # 阶段1优化已足够
+npm start  # Stage 1 optimizations are sufficient
 ```
 
-**中型应用**（10-50万/天）：
-```bash
-npm install redis
-docker run -d -p 6379:6379 redis:alpine
-npm start  # 阶段1 + Redis
-```
-
-**大型应用**（50-200万/天）：
+**Medium applications** (100,000-500,000/day):
 ```bash
 npm install redis
 docker run -d -p 6379:6379 redis:alpine
-# 在 .env 中设置 CLUSTER_MODE=true
-npm start  # 阶段1 + Redis + 集群
+npm start  # Stage 1 + Redis
 ```
 
-**超大型应用**（> 200万/天）：
-使用 Nginx 负载均衡 + 多服务器部署（参考 DOCKER_DEPLOY.md）
+**Large applications** (500,000-2,000,000/day):
+```bash
+npm install redis
+docker run -d -p 6379:6379 redis:alpine
+# Set CLUSTER_MODE=true in .env
+npm start  # Stage 1 + Redis + cluster
+```
+
+**Very large applications** (> 2,000,000/day):
+Use Nginx load balancing with multiple servers (see DOCKER_DEPLOY.md).
 
 ---
 
-### 🧪 性能测试
+### 🧪 Performance testing
 
-**内置压测工具**：
+**Built-in load test**:
 ```bash
 node tests/benchmark.js
 ```
 
-**输出示例**：
+**Example output**:
 ```
-📊 GET /v1/models - 性能报告
-总请求数:    1000
-吞吐量:      1923.08 req/s  ← 🔥 比优化前快4倍！
-平均延迟:    51.23ms         ← 🔥 比优化前快5倍！
+📊 GET /v1/models - Performance report
+Total requests:    1000
+Throughput:       1923.08 req/s  ← 🔥 4 times the pre-optimization throughput!
+Average latency:  51.23ms        ← 🔥 One-fifth of the pre-optimization latency!
 ```
 
 ---
 
-### ❓ 常见问题
+### ❓ Frequently asked questions
 
-**Q: Redis 必须安装吗？**
-- 不是！Redis 是可选功能，不安装系统照常运行，只是性能稍低。
+**Q: Is Redis required?**
+- No. Redis is optional. The system runs without it, with somewhat lower performance.
 
-**Q: 集群模式如何选择进程数？**
-- 推荐设置为 CPU 核心数（默认自动检测）
+**Q: How many cluster workers should I use?**
+- Use the CPU core count (automatically detected by default).
 
-**Q: Redis 故障会导致系统崩溃吗？**
-- 不会！系统会自动降级到文件模式，继续正常运行。
+**Q: Will a Redis failure crash the system?**
+- No. The system automatically falls back to file storage and continues running.
 
-详细配置和监控指南请参考 `.env.example` 文件。
+See `.env.example` for detailed configuration and monitoring guidance.
 
-## 环境变量配置
+## Environment variables
 
-创建 `.env` 文件（可参考 `.env.example`）：
+Create a `.env` file (use `.env.example` as a reference):
 
 ```env
-# ===== 认证配置 =====
-ADMIN_ACCESS_KEY=your-admin-key        # 管理后台访问密钥（必需）
-API_ACCESS_KEY=your-api-key           # 客户端API访问密钥（可选）
-FACTORY_API_KEY=fk-xxxxx              # Factory API密钥（可选）
+# ===== Authentication =====
+ADMIN_ACCESS_KEY=your-admin-key        # Admin access key (required)
+API_ACCESS_KEY=your-api-key           # Client API access key (optional)
+FACTORY_API_KEY=fk-xxxxx              # Factory API key (optional)
 
-# ===== Token使用量管理配置 =====
-SYNC_INTERVAL_MINUTES=30              # Token同步间隔（分钟，默认30）
-BATCH_SIZE=5                          # 批量请求大小（默认5）
-DATA_RETENTION_DAYS=30                # 数据保留天数（默认30）
+# ===== Token usage management =====
+SYNC_INTERVAL_MINUTES=30              # Token sync interval in minutes (default: 30)
+BATCH_SIZE=5                          # Request batch size (default: 5)
+DATA_RETENTION_DAYS=30                # Data retention in days (default: 30)
 
-# ===== 服务器配置 =====
-PORT=3000                              # 服务端口
-NODE_ENV=production                    # 运行环境
+# ===== Server settings =====
+PORT=3000                              # Server port
+NODE_ENV=production                    # Runtime environment
 ```
 
-## 安装
+## Installation
 
-### 1. 克隆项目
+### 1. Clone the project
 
 ```bash
 git clone https://github.com/your-username/droid2api.git
 cd droid2api
 ```
 
-### 2. 安装依赖
+### 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-**依赖说明**：
-- `express` - Web服务器框架
-- `node-fetch` - HTTP请求库
+**Dependencies**:
+- `express` - Web server framework
+- `node-fetch` - HTTP request library
 
-> 💡 **首次使用必须执行 `npm install`**，之后只需要 `npm start` 启动服务即可。
+> 💡 **Run `npm install` before first use.** Afterward, use `npm start` to start the server.
 
-### 3. 初始化配置文件
+### 3. Initialize configuration files
 
-首次使用需要从模板创建配置文件：
+Before first use, create configuration files from the templates:
 
 ```bash
-# 复制配置文件模板
+# Copy the configuration template
 cp data/config.json.example data/config.json
 
-# 复制密钥池文件模板
+# Copy the key pool template
 cp data/key_pool.json.example data/key_pool.json
 ```
 
-**说明**：
-- `config.json` - 系统配置（端口、模型、轮询算法等）
-- `key_pool.json` - 密钥池数据（初始为空）
-- 这两个文件包含敏感信息，已在 `.gitignore` 中排除，不会上传到仓库
+**Files**:
+- `config.json` - System settings (port, models, key selection algorithm, etc.)
+- `key_pool.json` - Key pool data (initially empty)
+- These files contain sensitive information and are excluded by `.gitignore` to keep them out of the repository
 
-**默认配置特性**：
-- ✅ **多级密钥池**：默认启用（`multiTier.enabled: true`）
-- ✅ **自动降级**：高优先级池子用完后自动切换（`autoFallback: true`）
-- 📖 详细说明见 `data/README.md` 和 `docs/MULTI_TIER_POOL.md`
+**Default settings**:
+- ✅ **Multi-tier key pools**: enabled by default (`multiTier.enabled: true`)
+- ✅ **Automatic fallback**: switches when the higher-priority pool is exhausted (`autoFallback: true`)
+- 📖 See `data/README.md` and `docs/MULTI_TIER_POOL.md` for details
 
-## 快速开始
+## Quick start
 
-### 1. 配置认证（三种方式）
+### 1. Configure authentication (three methods)
 
-**优先级：FACTORY_API_KEY > refresh_token > 客户端authorization**
+**Priority: FACTORY_API_KEY > refresh_token > client authorization**
 
 ```bash
-# 方式1：固定API密钥（最高优先级）
+# Method 1: fixed API key (highest priority)
 export FACTORY_API_KEY="your_factory_api_key_here"
 
-# 方式2：自动刷新令牌
+# Method 2: automatic token refresh
 export DROID_REFRESH_KEY="your_refresh_token_here"
 
-# 方式3：配置文件 ~/.factory/auth.json
+# Method 3: configuration file ~/.factory/auth.json
 {
   "access_token": "your_access_token", 
   "refresh_token": "your_refresh_token"
 }
 
-# 方式4：无配置（客户端授权）
-# 服务器将使用客户端请求头中的authorization字段
+# Method 4: no server configuration (client authorization)
+# The server uses the authorization header from the client request
 ```
 
-### 2. 配置环境变量
+### 2. Configure environment variables
 
-创建 `.env` 文件配置以下变量：
+Create a `.env` file with the following variables:
 
 ```env
-# ===== API 认证配置（三选一） =====
-FACTORY_API_KEY=your_factory_api_key_here        # 方式1：固定密钥（推荐）
-DROID_REFRESH_KEY=your_refresh_token_here        # 方式2：自动刷新令牌
+# ===== API authentication (choose one of three methods) =====
+FACTORY_API_KEY=your_factory_api_key_here        # Method 1: fixed key (recommended)
+DROID_REFRESH_KEY=your_refresh_token_here        # Method 2: automatic token refresh
 
-# ===== 管理后台配置（必需） =====
-ADMIN_ACCESS_KEY=your-secure-admin-password      # 管理后台访问密钥（强烈推荐设置）
+# ===== Admin settings (required) =====
+ADMIN_ACCESS_KEY=your-secure-admin-password      # Admin access key (strongly recommended)
 
-# ===== 服务配置（可选） =====
-PORT=3000                                        # 服务端口（默认3000）
-NODE_ENV=production                              # 运行环境（development/production）
+# ===== Server settings (optional) =====
+PORT=3000                                        # Server port (default: 3000)
+NODE_ENV=production                              # Runtime environment (development/production)
 ```
 
-**重要说明**：
-- `ADMIN_ACCESS_KEY` 用于保护管理后台 `/admin/*` 接口，请设置强密码
-- `NODE_ENV=development` 启用详细日志但不写入文件（开发模式）
-- `NODE_ENV=production` 启用文件日志到 `logs/` 目录（生产模式）
+**Important notes**:
+- `ADMIN_ACCESS_KEY` protects the `/admin/*` endpoints; use a strong password
+- `NODE_ENV=development` enables detailed console logging without writing files
+- `NODE_ENV=production` enables file logging in the `logs/` directory
 
-### 3. 配置模型（可选）
+### 3. Configure models (optional)
 
-编辑 `data/config.json` 添加或修改模型：
+Edit `data/config.json` to add or change models:
 
 ```json
 {
@@ -431,50 +431,50 @@ NODE_ENV=production                              # 运行环境（development/pr
 }
 ```
 
-#### 推理级别配置
+#### Reasoning level configuration
 
-每个模型支持五种推理级别：
+Each model supports five reasoning levels:
 
-- **`auto`** - 遵循客户端原始请求，不做任何推理参数修改
-- **`off`** - 强制关闭推理功能，删除所有推理字段
-- **`low`** - 低级推理 (Anthropic: 4096 tokens, OpenAI: low effort)
-- **`medium`** - 中级推理 (Anthropic: 12288 tokens, OpenAI: medium effort) 
-- **`high`** - 高级推理 (Anthropic: 24576 tokens, OpenAI: high effort)
+- **`auto`** - Preserves the original client request without changing reasoning parameters
+- **`off`** - Forces reasoning off and removes all reasoning fields
+- **`low`** - Low reasoning (Anthropic: 4096 tokens, OpenAI: low effort)
+- **`medium`** - Medium reasoning (Anthropic: 12288 tokens, OpenAI: medium effort)
+- **`high`** - High reasoning (Anthropic: 24576 tokens, OpenAI: high effort)
 
-**对于Anthropic模型 (Claude)**：
+**Anthropic models (Claude)**:
 ```json
 {
   "name": "Claude Sonnet 4.5", 
   "id": "claude-sonnet-4-5-20250929",
   "type": "anthropic",
-  "reasoning": "auto"  // 推荐：让客户端控制推理
+  "reasoning": "auto"  // Recommended: let the client control reasoning
 }
 ```
-- `auto`: 保留客户端thinking字段，不修改anthropic-beta头
-- `low/medium/high`: 自动添加thinking字段和anthropic-beta头，budget_tokens根据级别设置
+- `auto`: preserves the client's thinking field and leaves the anthropic-beta header unchanged
+- `low/medium/high`: automatically adds thinking and anthropic-beta, with budget_tokens set for the selected level
 
-**对于OpenAI模型 (GPT)**：
+**OpenAI models (GPT)**:
 ```json
 {
   "name": "GPT-5",
   "id": "gpt-5-2025-08-07",
   "type": "openai", 
-  "reasoning": "auto"  // 推荐：让客户端控制推理
+  "reasoning": "auto"  // Recommended: let the client control reasoning
 }
 ```
-- `auto`: 保留客户端reasoning字段不变
-- `low/medium/high`: 自动添加reasoning字段，effort参数设置为对应级别
+- `auto`: preserves the client's reasoning field unchanged
+- `low/medium/high`: automatically adds reasoning, with effort set to the selected level
 
-## 使用方法
+## Usage
 
-### 启动服务器
+### Starting the server
 
-**方式1：使用npm命令**
+**Method 1: npm command**
 ```bash
 npm start
 ```
 
-**方式2：使用启动脚本**
+**Method 2: startup script**
 
 Linux/macOS：
 ```bash
@@ -486,30 +486,30 @@ Windows：
 start.bat
 ```
 
-服务器默认运行在 `http://localhost:3000`。
+The server runs at `http://localhost:3000` by default.
 
-### Docker部署
+### Docker deployment
 
-#### 使用docker-compose（推荐）
+#### Using docker-compose (recommended)
 
 ```bash
-# 构建并启动服务
+# Build and start the service
 docker-compose up -d
 
-# 查看日志
+# View logs
 docker-compose logs -f
 
-# 停止服务
+# Stop the service
 docker-compose down
 ```
 
-#### 使用Dockerfile
+#### Using the Dockerfile
 
 ```bash
-# 构建镜像
+# Build the image
 docker build -t droid2api .
 
-# 运行容器
+# Run the container
 docker run -d \
   -p 3000:3000 \
   -e DROID_REFRESH_KEY="your_refresh_token" \
@@ -517,166 +517,166 @@ docker run -d \
   droid2api
 ```
 
-#### 环境变量配置
+#### Environment variables
 
-Docker部署支持以下环境变量：
+Docker deployments support the following environment variables:
 
-- `DROID_REFRESH_KEY` - 刷新令牌（必需）
-- `PORT` - 服务端口（默认3000）
-- `NODE_ENV` - 运行环境（production/development）
+- `DROID_REFRESH_KEY` - Refresh token (required)
+- `PORT` - Server port (default: 3000)
+- `NODE_ENV` - Runtime environment (production/development)
 
-### Claude Code集成
+### Claude Code integration
 
-#### 配置Claude Code使用droid2api
+#### Configure Claude Code to use droid2api
 
-1. **设置代理地址**（在Claude Code配置中）：
+1. **Set the proxy address** in the Claude Code configuration:
    ```
    API Base URL: http://localhost:3000
    ```
 
-2. **可用端点**：
-   - `/v1/chat/completions` - 标准OpenAI格式，自动格式转换
-   - `/v1/responses` - 直接转发到OpenAI端点（透明代理）
-   - `/v1/messages` - 直接转发到Anthropic端点（透明代理）
-   - `/v1/models` - 获取可用模型列表
+2. **Available endpoints**:
+   - `/v1/chat/completions` - Standard OpenAI format with automatic conversion
+   - `/v1/responses` - Direct forwarding to the OpenAI endpoint (transparent proxy)
+   - `/v1/messages` - Direct forwarding to the Anthropic endpoint (transparent proxy)
+   - `/v1/models` - List available models
 
-3. **自动功能**：
-   - ✅ 系统提示自动注入
-   - ✅ 认证头自动添加
-   - ✅ 推理级别自动配置
-   - ✅ 会话ID自动生成
+3. **Automatic features**:
+   - ✅ System prompt injection
+   - ✅ Authentication headers
+   - ✅ Reasoning level configuration
+   - ✅ Session ID generation
 
-#### 示例：Claude Code + 推理级别
+#### Example: Claude Code with a reasoning level
 
-当使用Claude模型时，代理会根据配置自动添加推理功能：
+For Claude models, the proxy automatically adds reasoning settings according to the configuration:
 
 ```bash
-# Claude Code发送的请求会自动转换为：
+# A Claude Code request is automatically transformed into:
 {
   "model": "claude-sonnet-4-5-20250929",
   "thinking": {
     "type": "enabled",
-    "budget_tokens": 24576  // high级别自动设置
+    "budget_tokens": 24576  // Set automatically for the high level
   },
   "messages": [...],
-  // 同时自动添加 anthropic-beta: interleaved-thinking-2025-05-14 头
+  // Also adds the anthropic-beta: interleaved-thinking-2025-05-14 header
 }
 ```
 
-### API 使用
+### API usage
 
-#### 获取模型列表
+#### List models
 
 ```bash
 curl http://localhost:3000/v1/models
 ```
 
-#### 对话补全
+#### Chat completions
 
-**流式响应**（实时返回）：
+**Streaming response** (content arrives in real time):
 ```bash
 curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-opus-4-1-20250805",
     "messages": [
-      {"role": "user", "content": "你好"}
+      {"role": "user", "content": "Hello"}
     ],
     "stream": true
   }'
 ```
 
-**非流式响应**（等待完整结果）：
+**Non-streaming response** (waits for the complete result):
 ```bash
 curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-opus-4-1-20250805",
     "messages": [
-      {"role": "user", "content": "你好"}
+      {"role": "user", "content": "Hello"}
     ],
     "stream": false
   }'
 ```
 
-**支持的参数：**
-- `model` - 模型 ID（必需）
-- `messages` - 对话消息数组（必需）
-- `stream` - 流式输出控制（可选）
-  - `true` - 启用流式响应，实时返回内容
-  - `false` - 禁用流式响应，等待完整结果
-  - 未指定 - 由服务器端决定默认行为
-- `max_tokens` - 最大输出长度
-- `temperature` - 温度参数（0-1）
+**Supported parameters:**
+- `model` - Model ID (required)
+- `messages` - Array of conversation messages (required)
+- `stream` - Controls streaming output (optional)
+  - `true` - Streams content as it becomes available
+  - `false` - Waits for the complete result
+  - Omitted - The server chooses the default behavior
+- `max_tokens` - Maximum output length
+- `temperature` - Sampling temperature (0-1)
 
-## 常见问题
+## Frequently asked questions
 
-### 如何配置授权机制？
+### How do I configure authentication?
 
-droid2api支持三级授权优先级：
+droid2api supports three authentication priorities:
 
-1. **FACTORY_API_KEY**（最高优先级）
+1. **FACTORY_API_KEY** (highest priority)
    ```bash
    export FACTORY_API_KEY="your_api_key"
    ```
-   使用固定API密钥，停用自动刷新机制。
+   Uses a fixed API key and disables automatic refresh.
 
-2. **refresh_token机制**
+2. **refresh_token authentication**
    ```bash
    export DROID_REFRESH_KEY="your_refresh_token"
    ```
-   自动刷新令牌，每6小时更新一次。
+   Refreshes the token automatically every 6 hours.
 
-3. **客户端授权**（fallback）
-   无需配置，直接使用客户端请求头的authorization字段。
+3. **Client authorization** (fallback)
+   No configuration required; uses the authorization header from the client request.
 
-### 什么时候使用FACTORY_API_KEY？
+### When should I use FACTORY_API_KEY?
 
-- **开发环境** - 使用固定密钥避免令牌过期问题
-- **CI/CD流水线** - 稳定的认证，不依赖刷新机制
-- **临时测试** - 快速设置，无需配置refresh_token
+- **Development** - A fixed key avoids token expiration issues
+- **CI/CD pipelines** - Stable authentication without depending on refresh
+- **Ad hoc testing** - Quick setup without configuring refresh_token
 
-### 如何控制流式和非流式响应？
+### How do I control streaming and non-streaming responses?
 
-droid2api完全尊重客户端的stream参数设置：
+droid2api honors the client's stream parameter:
 
-- **`"stream": true`** - 启用流式响应，内容实时返回
-- **`"stream": false`** - 禁用流式响应，等待完整结果后返回
-- **不设置stream** - 由服务器端决定默认行为，不强制转换
+- **`"stream": true`** - Streams content in real time
+- **`"stream": false`** - Returns the complete result once ready
+- **stream omitted** - The server chooses the default; no forced conversion
 
-### 什么是auto推理模式？
+### What is auto reasoning mode?
 
-`auto` 是v1.3.0新增的推理级别，完全遵循客户端的原始请求：
+`auto`, introduced in v1.3.0, preserves the original client request:
 
-**行为特点**：
-- 🎯 **零干预** - 不添加、不删除、不修改任何推理相关字段
-- 🔄 **完全透传** - 客户端发什么就转发什么
-- 🛡️ **头信息保护** - 不修改anthropic-beta等推理相关头信息
+**Behavior**:
+- 🎯 **No intervention** - Does not add, remove, or modify reasoning fields
+- 🔄 **Pass-through** - Forwards the client's settings as received
+- 🛡️ **Preserved headers** - Leaves reasoning-related headers such as anthropic-beta unchanged
 
-**使用场景**：
-- 客户端需要完全控制推理参数
-- 与原始API行为保持100%一致
-- 不同客户端有不同的推理需求
+**Use cases**:
+- The client needs full control over reasoning parameters
+- Behavior must match the original API exactly
+- Different clients have different reasoning requirements
 
-**示例对比**：
+**Comparison**:
 ```bash
-# 客户端请求包含推理字段
+# Client request includes reasoning fields
 {
   "model": "claude-opus-4-1-20250805",
-  "reasoning": "auto",           // 配置为auto
+  "reasoning": "auto",           // Configured as auto
   "messages": [...],
   "thinking": {"type": "enabled", "budget_tokens": 8192}
 }
 
-# auto模式：完全保留客户端设置
-→ thinking字段原样转发，不做任何修改
+# auto mode: preserves the client settings completely
+→ The thinking field is forwarded unchanged
 
-# 如果配置为"high"：会被覆盖为 {"type": "enabled", "budget_tokens": 24576}
+# With "high" configured, this is overridden with {"type": "enabled", "budget_tokens": 24576}
 ```
 
-### 如何配置推理级别？
+### How do I configure the reasoning level?
 
-在 `data/config.json` 中为每个模型设置 `reasoning` 字段：
+Set the `reasoning` field for each model in `data/config.json`:
 
 ```json
 {
@@ -690,52 +690,52 @@ droid2api完全尊重客户端的stream参数设置：
 }
 ```
 
-**推理级别说明**：
+**Reasoning levels**:
 
-| 级别 | 行为 | 适用场景 |
+| Level | Behavior | Use case |
 |------|------|----------|
-| `auto` | 完全遵循客户端原始请求参数 | 让客户端自主控制推理 |
-| `off` | 强制禁用推理，删除所有推理字段 | 快速响应场景 |
-| `low` | 轻度推理 (4096 tokens) | 简单任务 |
-| `medium` | 中度推理 (12288 tokens) | 平衡性能与质量 |
-| `high` | 深度推理 (24576 tokens) | 复杂任务 |
+| `auto` | Preserves the original client parameters | Client-controlled reasoning |
+| `off` | Disables reasoning and removes all reasoning fields | Fast responses |
+| `low` | Light reasoning (4096 tokens) | Simple tasks |
+| `medium` | Moderate reasoning (12288 tokens) | Balance of performance and quality |
+| `high` | Deep reasoning (24576 tokens) | Complex tasks |
 
-### 令牌多久刷新一次？
+### How often are tokens refreshed?
 
-系统每6小时自动刷新一次访问令牌。刷新令牌有效期为8小时，确保有2小时的缓冲时间。
+The system automatically refreshes the access token every 6 hours. The refresh token is valid for 8 hours, leaving a 2-hour buffer.
 
-### 如何检查令牌状态？
+### How do I check token status?
 
-查看服务器日志，成功刷新时会显示：
+Check the server logs. A successful refresh displays:
 ```
 Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
 ```
 
-### Claude Code无法连接怎么办？
+### What if Claude Code cannot connect?
 
-1. 确保droid2api服务器正在运行：`curl http://localhost:3000/v1/models`
-2. 检查Claude Code的API Base URL设置
-3. 确认防火墙没有阻止端口3000
+1. Confirm that droid2api is running: `curl http://localhost:3000/v1/models`
+2. Check Claude Code's API Base URL setting
+3. Confirm that the firewall is not blocking port 3000
 
-### 推理功能为什么没有生效？
+### Why is reasoning not taking effect?
 
-**如果推理级别设置无效**：
-1. 检查模型配置中的 `reasoning` 字段是否为有效值 (`auto/off/low/medium/high`)
-2. 确认模型ID是否正确匹配data/config.json中的配置
-3. 查看服务器日志确认推理字段是否正确处理
+**If the configured reasoning level has no effect**:
+1. Check that the model's `reasoning` field is valid (`auto/off/low/medium/high`)
+2. Confirm that the model ID matches its entry in data/config.json
+3. Check server logs to confirm that reasoning fields are handled correctly
 
-**如果使用auto模式但推理不生效**：
-1. 确认客户端请求中包含了推理字段 (`reasoning` 或 `thinking`)
-2. auto模式不会添加推理字段，只会保留客户端原有的设置
-3. 如需强制推理，请改用 `low/medium/high` 级别
+**If reasoning does not work in auto mode**:
+1. Confirm that the client request includes `reasoning` or `thinking`
+2. auto mode only preserves existing client settings; it does not add reasoning fields
+3. To force reasoning, select `low/medium/high`
 
-**推理字段对应关系**：
-- OpenAI模型 (`gpt-*`) → 使用 `reasoning` 字段
-- Anthropic模型 (`claude-*`) → 使用 `thinking` 字段
+**Reasoning field mapping**:
+- OpenAI models (`gpt-*`) → use `reasoning`
+- Anthropic models (`claude-*`) → use `thinking`
 
-### 如何更改端口？
+### How do I change the port?
 
-编辑 `data/config.json` 中的 `port` 字段：
+Edit the `port` field in `data/config.json`:
 
 ```json
 {
@@ -743,9 +743,9 @@ Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
 }
 ```
 
-### 如何启用调试日志？
+### How do I enable debug logs?
 
-在 `data/config.json` 中设置：
+Set the following in `data/config.json`:
 
 ```json
 {
@@ -753,17 +753,17 @@ Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
 }
 ```
 
-## 故障排查
+## Troubleshooting
 
-### 认证失败
+### Authentication failure
 
-确保已正确配置 refresh token：
-- 设置环境变量 `DROID_REFRESH_KEY`
-- 或创建 `~/.factory/auth.json` 文件
+Make sure the refresh token is configured correctly:
+- Set the `DROID_REFRESH_KEY` environment variable
+- Or create `~/.factory/auth.json`
 
-### 模型不可用
+### Model unavailable
 
-检查 `data/config.json` 中的模型配置，确保模型 ID 和类型正确。
+Check the model configuration in `data/config.json` and confirm that the model ID and type are correct.
 
 ## 许可证
 

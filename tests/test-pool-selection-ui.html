@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎯 密钥池选择 UI 测试页面</title>
+    <title>🎯 Key pool selector UI test page</title>
     <link rel="stylesheet" href="../public/style.css">
     <style>
         body {
@@ -53,121 +53,121 @@
         <header>
             <div class="header-content">
                 <div class="header-title">
-                    <h1>🎯 密钥池选择 UI 测试</h1>
-                    <p class="subtitle">测试四个核心功能按钮的池子选择能力</p>
+                    <h1>🎯 Key pool selector UI tests</h1>
+                    <p class="subtitle">Test pool selection in the four main key management actions</p>
                 </div>
             </div>
         </header>
 
-        <!-- 测试区域 1：添加密钥 -->
+        <!-- Test section 1: Add key -->
         <div class="test-section">
-            <h2>1️⃣ 添加密钥测试</h2>
-            <p>测试添加密钥时选择池子功能</p>
+            <h2>1️⃣ Add key test</h2>
+            <p>Test pool selection when adding a key</p>
             <div class="test-buttons">
-                <button onclick="testShowAddKeyModal()" class="btn btn-primary">打开添加密钥弹窗</button>
-                <button onclick="testAddKey()" class="btn btn-success">模拟添加密钥</button>
+                <button onclick="testShowAddKeyModal()" class="btn btn-primary">Open Add key dialog</button>
+                <button onclick="testAddKey()" class="btn btn-success">Simulate adding a key</button>
             </div>
             <div id="addKeyResult" class="test-result" style="display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results:</h3>
                 <pre id="addKeyOutput"></pre>
             </div>
         </div>
 
-        <!-- 测试区域 2：批量导入 -->
+        <!-- Test section 2: Bulk import -->
         <div class="test-section">
-            <h2>2️⃣ 批量导入测试</h2>
-            <p>测试批量导入时选择池子功能</p>
+            <h2>2️⃣ Bulk import test</h2>
+            <p>Test pool selection for bulk import</p>
             <div class="test-buttons">
-                <button onclick="testShowBatchImportModal()" class="btn btn-secondary">打开批量导入弹窗</button>
-                <button onclick="testBatchImport()" class="btn btn-success">模拟批量导入</button>
+                <button onclick="testShowBatchImportModal()" class="btn btn-secondary">Open bulk import dialog</button>
+                <button onclick="testBatchImport()" class="btn btn-success">Simulate bulk import</button>
             </div>
             <div id="batchImportResult" class="test-result" style="display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results:</h3>
                 <pre id="batchImportOutput"></pre>
             </div>
         </div>
 
-        <!-- 测试区域 3：导出密钥 -->
+        <!-- Test section 3: Export keys -->
         <div class="test-section">
-            <h2>3️⃣ 导出密钥测试</h2>
-            <p>测试导出密钥时选择池子和格式功能</p>
+            <h2>3️⃣ Key export test</h2>
+            <p>Test pool and file format selection for key exports</p>
             <div class="test-buttons">
-                <button onclick="testShowExportKeysModal()" class="btn btn-secondary">打开导出密钥弹窗</button>
-                <button onclick="testExportKeys()" class="btn btn-success">模拟导出密钥</button>
+                <button onclick="testShowExportKeysModal()" class="btn btn-secondary">Open Export keys dialog</button>
+                <button onclick="testExportKeys()" class="btn btn-success">Simulate key export</button>
             </div>
             <div id="exportKeysResult" class="test-result" style="display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results:</h3>
                 <pre id="exportKeysOutput"></pre>
             </div>
         </div>
 
-        <!-- 测试区域 4：批量测试 -->
+        <!-- Test section 4: Bulk testing -->
         <div class="test-section">
-            <h2>4️⃣ 批量测试测试</h2>
-            <p>测试批量测试时选择池子和并发数功能</p>
+            <h2>4️⃣ Bulk testing test</h2>
+            <p>Test pool selection and concurrency settings for bulk key testing</p>
             <div class="test-buttons">
-                <button onclick="testShowBatchTestModal()" class="btn btn-info">打开批量测试弹窗</button>
-                <button onclick="testBatchTest()" class="btn btn-success">模拟批量测试</button>
+                <button onclick="testShowBatchTestModal()" class="btn btn-info">Open bulk test dialog</button>
+                <button onclick="testBatchTest()" class="btn btn-success">Simulate bulk testing</button>
             </div>
             <div id="batchTestResult" class="test-result" style="display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results:</h3>
                 <pre id="batchTestOutput"></pre>
             </div>
         </div>
 
-        <!-- 测试区域 5：池子选项加载 -->
+        <!-- Test section 5: Loading pool options -->
         <div class="test-section">
-            <h2>5️⃣ 池子选项加载测试</h2>
-            <p>测试动态加载池子选项功能</p>
+            <h2>5️⃣ Pool option loading test</h2>
+            <p>Test dynamic loading of pool options</p>
             <div class="test-buttons">
-                <button onclick="testLoadPoolOptions()" class="btn btn-primary">加载池子选项</button>
-                <button onclick="testInitializeAllSelects()" class="btn btn-success">初始化所有下拉框</button>
+                <button onclick="testLoadPoolOptions()" class="btn btn-primary">Load pool options</button>
+                <button onclick="testInitializeAllSelects()" class="btn btn-success">Initialize all selectors</button>
             </div>
             <div id="poolOptionsResult" class="test-result" style="display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results:</h3>
                 <pre id="poolOptionsOutput"></pre>
             </div>
         </div>
     </div>
 
-    <!-- 引入所有模态框 -->
+    <!-- Dialog definitions -->
     <div id="addKeyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('addKeyModal')">&times;</span>
-            <h2>➕ 添加密钥</h2>
+            <h2>➕ Add key</h2>
             <div class="form-group">
-                <label for="newKeyInput">密钥：</label>
+                <label for="newKeyInput">Key:</label>
                 <input type="text" id="newKeyInput" placeholder="fk-xxxxxxxx" class="modal-input" />
             </div>
             <div class="form-group">
-                <label for="newKeyPoolGroup">🎯 所属密钥池：</label>
+                <label for="newKeyPoolGroup">🎯 Assigned key pool:</label>
                 <select id="newKeyPoolGroup" class="modal-input">
-                    <option value="">默认池 (default)</option>
+                    <option value="">Default pool (default)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="newKeyNotes">备注：</label>
-                <textarea id="newKeyNotes" placeholder="备注(可选)" class="modal-textarea"></textarea>
+                <label for="newKeyNotes">Notes:</label>
+                <textarea id="newKeyNotes" placeholder="Notes (optional)" class="modal-textarea"></textarea>
             </div>
-            <button onclick="simulateAddKey()" class="btn btn-primary">添加</button>
+            <button onclick="simulateAddKey()" class="btn btn-primary">Add</button>
         </div>
     </div>
 
     <div id="batchImportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchImportModal')">&times;</span>
-            <h2>📤 批量导入密钥</h2>
+            <h2>📤 Import keys in bulk</h2>
             <div class="form-group">
-                <label for="batchImportPoolGroup">🎯 导入到哪个池：</label>
+                <label for="batchImportPoolGroup">🎯 Destination pool:</label>
                 <select id="batchImportPoolGroup" class="modal-input">
-                    <option value="">默认池 (default)</option>
+                    <option value="">Default pool (default)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="batchKeysInput">密钥列表 (每行一个)：</label>
+                <label for="batchKeysInput">Keys (one per line):</label>
                 <textarea id="batchKeysInput" placeholder="fk-xxx&#10;fk-yyy&#10;fk-zzz" class="modal-textarea large"></textarea>
             </div>
-            <button onclick="simulateBatchImport()" class="btn btn-primary">📥 开始导入</button>
+            <button onclick="simulateBatchImport()" class="btn btn-primary">📥 Start import</button>
             <div id="importResult" class="import-result"></div>
         </div>
     </div>
@@ -175,84 +175,84 @@
     <div id="exportKeysModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('exportKeysModal')">&times;</span>
-            <h2>📥 导出密钥</h2>
+            <h2>📥 Export keys</h2>
             <div class="form-group">
-                <label>🎯 导出哪个池：</label>
+                <label>🎯 Pools to export:</label>
                 <div class="checkbox-group">
                     <label class="filter-checkbox">
                         <input type="checkbox" id="exportAllPools" checked onchange="toggleExportAllPools()">
-                        全部池 (导出所有密钥)
+                        All pools (export all keys)
                     </label>
                 </div>
                 <div id="exportPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="exportPoolGroup" class="modal-input" multiple size="5">
-                        <option value="default">默认池 (default)</option>
+                        <option value="default">Default pool (default)</option>
                     </select>
                 </div>
             </div>
             <div class="form-group">
-                <label>导出格式：</label>
+                <label>Export format:</label>
                 <div class="radio-group">
                     <label>
                         <input type="radio" name="exportFormat" value="json" checked>
-                        JSON (完整数据)
+                        JSON (complete records)
                     </label>
                     <label>
                         <input type="radio" name="exportFormat" value="text">
-                        纯文本 (仅密钥)
+                        Plain text (keys only)
                     </label>
                     <label>
                         <input type="radio" name="exportFormat" value="csv">
-                        CSV (表格)
+                        CSV (table)
                     </label>
                 </div>
             </div>
             <div class="form-group">
-                <label>状态筛选：</label>
+                <label>Status filter:</label>
                 <select id="exportStatusFilter" class="modal-input">
-                    <option value="all">全部状态</option>
-                    <option value="active">仅可用</option>
-                    <option value="disabled">仅禁用</option>
-                    <option value="banned">仅封禁</option>
+                    <option value="all">All statuses</option>
+                    <option value="active">Active only</option>
+                    <option value="disabled">Disabled only</option>
+                    <option value="banned">Blocked by proxy only</option>
                 </select>
             </div>
-            <button onclick="simulateExportKeys()" class="btn btn-primary">📥 导出文件</button>
+            <button onclick="simulateExportKeys()" class="btn btn-primary">📥 Export file</button>
         </div>
     </div>
 
     <div id="batchTestModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchTestModal')">&times;</span>
-            <h2>🧪 批量测试密钥</h2>
+            <h2>🧪 Test keys in bulk</h2>
             <div class="form-group">
-                <label>🎯 测试哪个池：</label>
+                <label>🎯 Pools to test:</label>
                 <div class="radio-group">
                     <label>
                         <input type="radio" name="testPool" value="all" checked>
-                        全部池 (测试所有密钥)
+                        All pools (test all keys)
                     </label>
                     <label>
                         <input type="radio" name="testPool" value="specific">
-                        指定池
+                        Specific pool
                     </label>
                 </div>
                 <div id="testPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="testPoolGroup" class="modal-input">
-                        <option value="default">默认池 (default)</option>
+                        <option value="default">Default pool (default)</option>
                     </select>
                 </div>
             </div>
             <div class="form-group">
-                <label for="testConcurrency">测试并发数：</label>
+                <label for="testConcurrency">Concurrent tests:</label>
                 <input type="number" id="testConcurrency" min="1" max="10" value="5" class="modal-input" />
             </div>
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="testAutoRefresh" checked>
-                    测试完成后自动刷新列表
+                    Refresh the list automatically after testing
                 </label>
             </div>
-            <button onclick="simulateBatchTest()" class="btn btn-primary">🧪 开始测试</button>
+            <button onclick="simulateBatchTest()" class="btn btn-primary">🧪 Start test</button>
             <div id="testResult" class="import-result" style="margin-top: 15px;"></div>
         </div>
     </div>
@@ -260,23 +260,23 @@
     <script src="../public/app.js"></script>
     <script src="../public/pool-selection-ui.js"></script>
     <script>
-        // 模拟 API 请求函数（避免真实调用后端）
+        // Mock API request helper (avoids actual backend calls)
         window.apiRequest = async function(url, method = 'GET', body = null) {
-            console.log(`🚀 模拟 API 请求: ${method} ${url}`, body);
+            console.log(`🚀 Mock API request: ${method} ${url}`, body);
 
-            // 模拟池子列表数据
+            // Mock pool list data
             if (url === '/pool-groups') {
                 return {
                     success: true,
                     data: [
-                        { id: 'freebies', name: '白嫖池', priority: 1, description: '优先消耗白嫖密钥' },
-                        { id: 'main', name: '主力池', priority: 2, description: '付费密钥兜底' },
-                        { id: 'backup', name: '备用池', priority: 3, description: '备用密钥' }
+                        { id: 'freebies', name: 'Free-tier pool', priority: 1, description: 'Use free-tier keys first' },
+                        { id: 'main', name: 'Primary pool', priority: 2, description: 'Use paid keys as a fallback' },
+                        { id: 'backup', name: 'Backup pool', priority: 3, description: 'Backup keys' }
                     ]
                 };
             }
 
-            // 模拟添加密钥
+            // Simulate adding a key
             if (url === '/keys' && method === 'POST') {
                 return {
                     success: true,
@@ -284,7 +284,7 @@
                 };
             }
 
-            // 模拟批量导入
+            // Simulate bulk import
             if (url === '/keys/batch' && method === 'POST') {
                 return {
                     success: true,
@@ -297,7 +297,7 @@
                 };
             }
 
-            // 模拟批量测试
+            // Simulate bulk testing
             if (url.startsWith('/keys/test-all')) {
                 return {
                     success: true,
@@ -314,11 +314,11 @@
             return { success: true, data: {} };
         };
 
-        // 测试函数
+        // Test helpers
         function testShowAddKeyModal() {
             showAddKeyModal();
             document.getElementById('addKeyResult').style.display = 'block';
-            document.getElementById('addKeyOutput').textContent = '✅ 成功打开"添加密钥"模态框\n已加载池子选项！';
+            document.getElementById('addKeyOutput').textContent = '✅ Opened the Add key dialog.\nPool options loaded.';
         }
 
         function testAddKey() {
@@ -326,14 +326,14 @@
             document.getElementById('addKeyOutput').textContent = JSON.stringify({
                 key: 'fk-test-key',
                 poolGroup: 'freebies',
-                notes: '测试密钥'
+                notes: 'Test key'
             }, null, 2);
         }
 
         function testShowBatchImportModal() {
             showBatchImportModal();
             document.getElementById('batchImportResult').style.display = 'block';
-            document.getElementById('batchImportOutput').textContent = '✅ 成功打开"批量导入"模态框\n已加载池子选项！';
+            document.getElementById('batchImportOutput').textContent = '✅ Opened the bulk import dialog.\nPool options loaded.';
         }
 
         function testBatchImport() {
@@ -347,7 +347,7 @@
         function testShowExportKeysModal() {
             showExportKeysModal();
             document.getElementById('exportKeysResult').style.display = 'block';
-            document.getElementById('exportKeysOutput').textContent = '✅ 成功打开"导出密钥"模态框\n已加载池子选项！';
+            document.getElementById('exportKeysOutput').textContent = '✅ Opened the Export keys dialog.\nPool options loaded.';
         }
 
         function testExportKeys() {
@@ -362,7 +362,7 @@
         function testShowBatchTestModal() {
             showBatchTestModal();
             document.getElementById('batchTestResult').style.display = 'block';
-            document.getElementById('batchTestOutput').textContent = '✅ 成功打开"批量测试"模态框\n已加载池子选项！';
+            document.getElementById('batchTestOutput').textContent = '✅ Opened the bulk test dialog.\nPool options loaded.';
         }
 
         function testBatchTest() {
@@ -377,38 +377,38 @@
         function testLoadPoolOptions() {
             loadPoolGroupOptions('newKeyPoolGroup', true).then(() => {
                 document.getElementById('poolOptionsResult').style.display = 'block';
-                document.getElementById('poolOptionsOutput').textContent = '✅ 成功加载池子选项到 newKeyPoolGroup！';
+                document.getElementById('poolOptionsOutput').textContent = '✅ Loaded pool options into newKeyPoolGroup.';
             });
         }
 
         function testInitializeAllSelects() {
             initializeAllPoolSelects().then(() => {
                 document.getElementById('poolOptionsResult').style.display = 'block';
-                document.getElementById('poolOptionsOutput').textContent = '✅ 成功初始化所有下拉框的池子选项！';
+                document.getElementById('poolOptionsOutput').textContent = '✅ Initialized pool options in all selectors.';
             });
         }
 
-        // 模拟按钮点击
+        // Simulate button clicks
         function simulateAddKey() {
             const key = document.getElementById('newKeyInput').value;
             const poolGroup = document.getElementById('newKeyPoolGroup').value;
             const notes = document.getElementById('newKeyNotes').value;
-            alert(`模拟添加密钥：\n密钥: ${key}\n池子: ${poolGroup || 'default'}\n备注: ${notes}`);
+            alert(`Simulate adding a key:\nKey: ${key}\nPool: ${poolGroup || 'default'}\nNotes: ${notes}`);
             closeModal('addKeyModal');
         }
 
         function simulateBatchImport() {
             const keys = document.getElementById('batchKeysInput').value.split('\n').filter(k => k.trim());
             const poolGroup = document.getElementById('batchImportPoolGroup').value;
-            alert(`模拟批量导入：\n密钥数: ${keys.length}\n池子: ${poolGroup || 'default'}`);
+            alert(`Simulate bulk import:\nKey count: ${keys.length}\nPool: ${poolGroup || 'default'}`);
             document.getElementById('importResult').innerHTML = `
                 <div class="result-summary success">
-                    <h3>✅ 成功导入 ${keys.length} 个密钥！</h3>
-                    <p>📊 总数: ${keys.length}</p>
-                    <p>✅ 成功: ${keys.length}</p>
-                    <p>🔄 重复: 0</p>
-                    <p>❌ 无效: 0</p>
-                    <p>🎯 导入到池: ${poolGroup || 'default'}</p>
+                    <h3>✅ Successfully imported ${keys.length} keys.</h3>
+                    <p>📊 Total: ${keys.length}</p>
+                    <p>✅ Successful: ${keys.length}</p>
+                    <p>🔄 Duplicates: 0</p>
+                    <p>❌ Invalid: 0</p>
+                    <p>🎯 Imported into pool: ${poolGroup || 'default'}</p>
                 </div>
             `;
         }
@@ -417,7 +417,7 @@
             const exportAll = document.getElementById('exportAllPools').checked;
             const format = document.querySelector('input[name="exportFormat"]:checked').value;
             const status = document.getElementById('exportStatusFilter').value;
-            alert(`模拟导出密钥：\n导出全部: ${exportAll}\n格式: ${format}\n状态: ${status}`);
+            alert(`Simulate key export:\nExport all: ${exportAll}\nFormat: ${format}\nStatus: ${status}`);
             closeModal('exportKeysModal');
         }
 
@@ -425,20 +425,20 @@
             const testAll = document.querySelector('input[name="testPool"][value="all"]').checked;
             const poolGroup = document.getElementById('testPoolGroup').value;
             const concurrency = document.getElementById('testConcurrency').value;
-            alert(`模拟批量测试：\n测试全部: ${testAll}\n池子: ${poolGroup}\n并发数: ${concurrency}`);
+            alert(`Simulate bulk testing:\nTest all: ${testAll}\nPool: ${poolGroup}\nConcurrency: ${concurrency}`);
             document.getElementById('testResult').innerHTML = `
                 <div class="result-summary success">
-                    <h3>🎉 批量测试完成</h3>
-                    <p>📊 总密钥数: 100 个</p>
-                    <p>🔍 已测试: 100 个</p>
-                    <p>✅ 测试通过: 95 个</p>
-                    <p>❌ 测试失败: 5 个</p>
-                    <p>🚫 自动封禁: 5 个</p>
+                    <h3>🎉 Bulk test complete</h3>
+                    <p>📊 Total keys: 100</p>
+                    <p>🔍 Tested: 100</p>
+                    <p>✅ Passed: 95</p>
+                    <p>❌ Failed: 5</p>
+                    <p>🚫 Automatically blocked by proxy: 5</p>
                 </div>
             `;
         }
 
-        // 页面加载时初始化
+        // Initialize on page load
         window.addEventListener('load', () => {
             setTimeout(() => {
                 initializeAllPoolSelects();

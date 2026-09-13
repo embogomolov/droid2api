@@ -27,7 +27,7 @@ import {
   normalizeTokenStats
 } from './utils/token-counter.js';
 import { log403Error } from './utils/error-403-logger.js';
-// 🔧 优化：导入公共函数，移除重复代码
+// 🔧 Optimization: import shared functions to remove duplicate code
 import {
   getApiKey,
   handle402Error,
@@ -43,15 +43,15 @@ const router = express.Router();
 
 
 /**
- * BaSui：将 Anthropic Messages API 响应转换为 OpenAI Chat Completions 格式
- * 用于非流式响应
+ * BaSui: Convert Anthropic Messages API responses to OpenAI Chat Completions format
+ * For non-streaming responses
  */
 function convertAnthropicToChatCompletion(anthropicResp) {
   if (!anthropicResp || typeof anthropicResp !== 'object') {
-    throw new Error('无效的 Anthropic 响应对象');
+    throw new Error('Invalid Anthropic response object');
   }
 
-  // 提取文本内容和工具调用
+  // Extract text content and tool calls
   const content = [];
   const toolCalls = [];
   
@@ -72,7 +72,7 @@ function convertAnthropicToChatCompletion(anthropicResp) {
     }
   }
 
-  // 映射 stop_reason
+  // Map stop_reason
   let finishReason = 'stop';
   if (anthropicResp.stop_reason === 'end_turn') {
     finishReason = 'stop';
@@ -87,7 +87,7 @@ function convertAnthropicToChatCompletion(anthropicResp) {
     content: content.join('')
   };
 
-  // 如果有工具调用，添加到message
+  // Add tool calls, if present, to message
   if (toolCalls && toolCalls.length > 0) {
     message.tool_calls = toolCalls;
   }
@@ -120,7 +120,7 @@ function convertAnthropicToChatCompletion(anthropicResp) {
  */
 function convertResponseToChatCompletion(resp) {
   if (!resp || typeof resp !== 'object') {
-    throw new Error('无效的响应对象');
+    throw new Error('Invalid response object');
   }
 
   const outputMsg = (resp.output || []).find(o => o.type === 'message');
@@ -176,18 +176,18 @@ router.get('/v1/models', (req, res) => {
     res.json(response);
   } catch (error) {
     logError('Error in GET /v1/models', error);
-    // 🔧 修复：添加headersSent检查
+    // 🔧 Fix: check headersSent
     if (!res.headersSent) {
-      res.status(500).json({ error: '内部服务器错误' });
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 });
 
-// 标准 OpenAI 聊天补全处理函数（带格式转换和自动重试）
+// Standard OpenAI Chat Completions handler (with format conversion and automatic retries)
 async function handleChatCompletions(req, res) {
   logInfo('POST /v1/chat/completions');
   
-  // 记录请求开始时间（用于延迟计算）
+  // Record request start time (for latency calculation)
   req.startTime = Date.now();
   
   // 最大重试次数（使用密钥池中的活动密钥数量，但最多5次，别成无限火力）
@@ -201,22 +201,22 @@ async function handleChatCompletions(req, res) {
     const modelId = openaiRequest.model;
 
     if (!modelId) {
-      return res.status(400).json({ error: '缺少必需参数：model' });
+      return res.status(400).json({ error: 'Missing required parameter: model' });
     }
 
     const model = getModelById(modelId);
     if (!model) {
-      return res.status(404).json({ error: `未找到模型：${modelId}` });
+      return res.status(404).json({ error: `Model not found: ${modelId}` });
     }
 
     const endpoint = getEndpointByType(model.type);
     if (!endpoint) {
-      return res.status(500).json({ error: `未找到端点类型：${model.type}` });
+      return res.status(500).json({ error: `Endpoint type not found: ${model.type}` });
     }
 
     logInfo(`Routing to ${model.type} endpoint: ${endpoint.base_url}`);
 
-    // 🎯 Token预估：在请求前估算token使用量
+    // 🎯 Token estimation: estimate token usage before the request
     const estimatedTokens = estimateRequestTokens(openaiRequest, modelId);
     logInfo(`Token预估 - 模型: ${modelId}, 输入: ${estimatedTokens.estimated_prompt_tokens}, 预计输出: ${estimatedTokens.estimated_completion_tokens}, 总计: ${estimatedTokens.estimated_total_tokens}`);
 
@@ -244,10 +244,10 @@ async function handleChatCompletions(req, res) {
       'user-agent': clientHeaders['user-agent']
     });
 
-    // BaSui：根据模型类型选择合适的转换器
-    // 所有模型都使用统一的OpenAI输入格式，转换器自动适配到目标API
+    // BaSui: Select the appropriate transformer for the model type
+    // All models accept the same OpenAI input format; transformers adapt it to the target API
     if (model.type === 'anthropic') {
-      // 如果配置了 backend_model，使用它作为实际调用的模型ID（用于模型别名）
+      // Use backend_model as the actual model ID when configured (for model aliases)
       const backendModel = model.backend_model || null;
       transformedRequest = transformToAnthropic(openaiRequest, backendModel);
       const isStreaming = openaiRequest.stream === true;
@@ -263,7 +263,7 @@ async function handleChatCompletions(req, res) {
       transformedRequest = transformToCommon(openaiRequest);
       headers = getCommonHeaders(authHeader, clientHeaders);
     } else {
-      return res.status(500).json({ error: `未知的模型类型：${model.type}` });
+      return res.status(500).json({ error: `Unknown model type: ${model.type}` });
     }
 
     logRequest('POST', endpoint.base_url, headers, transformedRequest);
@@ -353,20 +353,20 @@ async function handleChatCompletions(req, res) {
     const isStreaming = transformedRequest.stream === true;
 
     if (isStreaming) {
-      // 🔧 优化：使用公共函数设置流响应头
+      // 🔧 Optimization: use the shared function to set streaming response headers
       setStreamingHeaders(res);
 
-      // BaSui: 收集流式响应中的Token统计（完整版 - 包含 thinking 和 cache tokens）
+      // BaSui: Collect token statistics from streaming responses (including thinking and cache tokens)
       const tokenStats = createTokenStats();
 
-      // common 类型直接转发，不使用 transformer
+      // common type is forwarded directly without using transformer
       if (model.type === 'common') {
         try {
           let buffer = '';
           for await (const chunk of response.body) {
             res.write(chunk);
 
-            // BaSui: 解析SSE流，提取Token使用量
+            // BaSui: Parse the SSE stream to extract token usage
             buffer += chunk.toString();
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -377,10 +377,10 @@ async function handleChatCompletions(req, res) {
                   const dataStr = line.slice(5).trim();
                   if (dataStr === '[DONE]') continue;
                   const data = JSON.parse(dataStr);
-                  // 使用新的 Token 提取工具函数
+                  // Use the new token extraction helper
                   extractCommonTokens(data, tokenStats);
                 } catch (e) {
-                  // 忽略非JSON行
+                  // Ignore non-JSON lines
                 }
               }
             }
@@ -392,7 +392,7 @@ async function handleChatCompletions(req, res) {
           res.end();
         }
       } else {
-        // anthropic 和 openai 类型使用 transformer
+        // anthropic and openai types use transformer
         let transformer;
         let buffer = '';
 
@@ -403,20 +403,20 @@ async function handleChatCompletions(req, res) {
         }
 
         try {
-          // BaSui: 🔧 修复内存泄漏 - 使用流式处理，设置最大缓冲区大小
-          const MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB 最大缓冲
+          // BaSui: 🔧 Fix memory leaks: stream data with a maximum buffer size
+          const MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB maximum buffer
           let bufferSize = 0;
           const rawChunks = [];
           let isOversized = false;
 
-          // 流式处理，边读边转换边发送
+          // Stream data, converting and sending as it arrives
           for await (const chunk of response.body) {
-            // 检查缓冲区大小
+            // Check buffer size
             bufferSize += chunk.length;
             if (bufferSize > MAX_BUFFER_SIZE) {
               logError(`Response too large: ${bufferSize} bytes (max: ${MAX_BUFFER_SIZE})`);
               isOversized = true;
-              // 对于超大响应，直接流式转发，不再积累
+              // Forward oversized responses directly without further accumulation
               if (transformer) {
                 const chunkStream = (async function* () { yield chunk; })();
                 for await (const transformed of transformer.transformStream(chunkStream)) {
@@ -426,14 +426,14 @@ async function handleChatCompletions(req, res) {
                 res.write(chunk);
               }
             } else {
-              // 正常大小，积累用于Token统计
+              // Accumulate normal-sized responses for token statistics
               rawChunks.push(chunk);
             }
           }
 
           if (!isOversized) {
-            // 只对正常大小的响应进行Token统计
-            let buffer = '';  // 🔧 修复：声明buffer变量
+            // Calculate token statistics only for normal-sized responses
+            let buffer = '';  // 🔧 Fix: declare the buffer variable
             for (const chunk of rawChunks) {
               buffer += chunk.toString();
               const lines = buffer.split('\n');
@@ -453,13 +453,13 @@ async function handleChatCompletions(req, res) {
                       extractOpenAITokens(data, tokenStats);
                     }
                   } catch (e) {
-                    // 忽略非JSON行
+                    // Ignore non-JSON lines
                   }
                 }
               }
             }
 
-            // 转换并转发积累的chunks
+            // Convert and forward accumulated chunks
             const rawStream = (async function* () {
               for (const chunk of rawChunks) {
                 yield chunk;
@@ -483,7 +483,7 @@ async function handleChatCompletions(req, res) {
         }
       }
 
-      // BaSui: 记录Token使用量统计（包含完整的 Token 类型）
+      // BaSui: Record token usage statistics (all supported token types)
       try {
         if (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0) {
           const { recordRequest } = await import('./utils/request-stats.js');
@@ -496,38 +496,38 @@ async function handleChatCompletions(req, res) {
             model: modelId,
             success: true
           });
-          logDebug(`流式响应Token统计(/v1/chat/completions): input=${tokenStats.inputTokens}, output=${tokenStats.outputTokens}, thinking=${tokenStats.thinkingTokens}, cache_creation=${tokenStats.cacheCreationTokens}, cache_read=${tokenStats.cacheReadTokens}`);
+          logDebug(`Streaming response token statistics (/v1/chat/completions): input=${tokenStats.inputTokens}, output=${tokenStats.outputTokens}, thinking=${tokenStats.thinkingTokens}, cache_creation=${tokenStats.cacheCreationTokens}, cache_read=${tokenStats.cacheReadTokens}`);
         }
       } catch (err) {
-        logError('记录Token统计失败', err);
+        logError('Failed to record token statistics', err);
       }
     } else {
-      // 🔧 修复：添加JSON解析错误处理
+      // 🔧 Fix: handle JSON parsing errors
       let data;
       try {
         data = await response.json();
       } catch (jsonError) {
         logError('Failed to parse JSON response', jsonError);
-        // 🔧 修复：response body已经被消费，不能再次读取
+        // 🔧 Fix: the response body has already been consumed and cannot be read again
         return res.status(502).json({
           error: 'Invalid JSON response from upstream',
           details: jsonError.message
         });
       }
 
-      // 记录Token使用量（包含预估值和延迟）
-      const requestLatency = Date.now() - req.startTime; // 需要在请求开始时记录startTime
+      // Record token usage (including estimates and latency)
+      const requestLatency = Date.now() - req.startTime; // startTime must be recorded at request start
       recordTokenUsage(data, model.type, currentKeyId, openaiRequest, estimatedTokens, requestLatency);
 
       if (model.type === 'anthropic') {
-        // BaSui：转换 Anthropic 响应为 OpenAI 格式
+        // BaSui: Convert the Anthropic response to OpenAI format
         try {
           const converted = convertAnthropicToChatCompletion(data);
           logResponse(200, null, converted);
           res.json(converted);
         } catch (e) {
-          logError('Anthropic响应转换失败', e);
-          // 如果转换失败，回退为原始数据
+          logError('Anthropic response conversion failed', e);
+          // Fall back to the original data if conversion fails
           logResponse(200, null, data);
           res.json(data);
         }
@@ -537,12 +537,12 @@ async function handleChatCompletions(req, res) {
           logResponse(200, null, converted);
           res.json(converted);
         } catch (e) {
-          // 如果转换失败，回退为原始数据
+          // Fall back to the original data if conversion fails
           logResponse(200, null, data);
           res.json(data);
         }
       } else {
-        // common: 直接转发
+        // common: Forward directly
         logResponse(200, null, data);
         res.json(data);
       }
@@ -558,8 +558,8 @@ async function handleChatCompletions(req, res) {
       logError('Upstream retry exhausted in /v1/chat/completions', error);
       if (!res.headersSent) {
         res.status(504).json({
-          error: '上游服务重试已耗尽',
-          message: `请求失败：${error.message}`,
+          error: 'Upstream service retries exhausted',
+          message: `Request failed: ${error.message}`,
           attempts: error.attempts
         });
       } else {
@@ -569,20 +569,20 @@ async function handleChatCompletions(req, res) {
     }
 
     logError('Error in /v1/chat/completions', error);
-    // BaSui：检查响应是否已经开始发送，避免重复发送导致崩溃
+    // BaSui: Check whether the response has started to prevent errors from sending it twice
     if (!res.headersSent) {
       res.status(500).json({
-        error: '内部服务器错误',
-        message: `服务器处理异常：${error.message}`
+        error: 'Internal server error',
+        message: `Server processing error: ${error.message}`
       });
     } else {
-      // 流式响应已开始，直接结束连接
+      // Streaming response has started; end the connection
       res.end();
     }
   }
 }
 
-// 直接转发 OpenAI 请求（不做格式转换）
+// Forward OpenAI requests directly (without format conversion)
 async function handleDirectResponses(req, res) {
   logInfo('POST /v1/responses');
   
@@ -591,32 +591,32 @@ async function handleDirectResponses(req, res) {
     const modelId = openaiRequest.model;
 
     if (!modelId) {
-      return res.status(400).json({ error: '缺少必需参数：model' });
+      return res.status(400).json({ error: 'Missing required parameter: model' });
     }
 
     const model = getModelById(modelId);
     if (!model) {
-      return res.status(404).json({ error: `未找到模型：${modelId}` });
+      return res.status(404).json({ error: `Model not found: ${modelId}` });
     }
 
-    // 只允许 openai 类型端点
+    // Allow only openai endpoint types
     if (model.type !== 'openai') {
       return res.status(400).json({
         error: 'Invalid endpoint type',
-        message: `/v1/responses 接口只支持 openai 类型端点，当前模型 ${modelId} 是 ${model.type} 类型`
+        message: `/v1/responses endpoint supports only openai endpoints; model ${modelId} has type ${model.type}`
       });
     }
 
     const endpoint = getEndpointByType(model.type);
     if (!endpoint) {
-      return res.status(500).json({ error: `未找到端点类型：${model.type}` });
+      return res.status(500).json({ error: `Endpoint type not found: ${model.type}` });
     }
 
     logInfo(`Direct forwarding to ${model.type} endpoint: ${endpoint.base_url}`);
 
     const clientHeaders = req.headers;
 
-    // 注入系统提示到 instructions 字段
+    // Inject the system prompt into the instructions field
     const systemPrompt = getSystemPrompt();
     const modifiedRequest = { ...openaiRequest };
     if (systemPrompt) {
@@ -627,10 +627,10 @@ async function handleDirectResponses(req, res) {
       }
     }
 
-    // 处理reasoning字段
+    // Handle the reasoning field
     const reasoningLevel = getModelReasoning(modelId);
     if (reasoningLevel === 'auto') {
-      // Auto模式：保持原始请求的reasoning字段不变
+      // Auto mode: preserve the original request reasoning field
     } else if (reasoningLevel && ['low', 'medium', 'high'].includes(reasoningLevel)) {
       modifiedRequest.reasoning = {
         effort: reasoningLevel,
@@ -755,7 +755,7 @@ async function handleDirectResponses(req, res) {
                   const data = JSON.parse(dataStr);
                   extractOpenAITokens(data, tokenStats);
                 } catch (e) {
-                  // 忽略非JSON行
+                  // Ignore non-JSON lines
                 }
               }
             }
@@ -774,7 +774,7 @@ async function handleDirectResponses(req, res) {
               model: modelId,
               success: true
             });
-            logDebug(`流式响应Token统计(/v1/responses): input=${tokenStats.inputTokens}, output=${tokenStats.outputTokens}, thinking=${tokenStats.thinkingTokens}, cache_creation=${tokenStats.cacheCreationTokens}, cache_read=${tokenStats.cacheReadTokens}`);
+            logDebug(`Streaming response token statistics (/v1/responses): input=${tokenStats.inputTokens}, output=${tokenStats.outputTokens}, thinking=${tokenStats.thinkingTokens}, cache_creation=${tokenStats.cacheCreationTokens}, cache_read=${tokenStats.cacheReadTokens}`);
           }
         } catch (streamError) {
           logError('Stream error', streamError);
@@ -795,8 +795,8 @@ async function handleDirectResponses(req, res) {
       logError('Upstream retry exhausted in /v1/responses', error);
       if (!res.headersSent) {
         res.status(504).json({
-          error: '上游服务重试已耗尽',
-          message: `请求失败：${error.message}`,
+          error: 'Upstream service retries exhausted',
+          message: `Request failed: ${error.message}`,
           attempts: error.attempts
         });
       } else {
@@ -806,20 +806,20 @@ async function handleDirectResponses(req, res) {
     }
 
     logError('Error in /v1/responses', error);
-    // BaSui：检查响应是否已经开始发送，避免重复发送导致崩溃
+    // BaSui: Check whether the response has started to prevent errors from sending it twice
     if (!res.headersSent) {
       res.status(500).json({
-        error: '内部服务器错误',
-        message: `服务器处理异常：${error.message}`
+        error: 'Internal server error',
+        message: `Server processing error: ${error.message}`
       });
     } else {
-      // 流式响应已开始，直接结束连接
+      // Streaming response has started; end the connection
       res.end();
     }
   }
 }
 
-// 直接转发 Anthropic 请求（不做格式转换）
+// Forward Anthropic requests directly (without format conversion)
 async function handleDirectMessages(req, res) {
   logInfo('POST /v1/messages');
   
@@ -828,24 +828,24 @@ async function handleDirectMessages(req, res) {
     const modelId = anthropicRequest.model;
 
     if (!modelId) {
-      return res.status(400).json({ error: '缺少必需参数：model' });
+      return res.status(400).json({ error: 'Missing required parameter: model' });
     }
 
     const model = getModelById(modelId);
     if (!model) {
-      return res.status(404).json({ error: `未找到模型：${modelId}` });
+      return res.status(404).json({ error: `Model not found: ${modelId}` });
     }
 
     if (model.type !== 'anthropic') {
       return res.status(400).json({ 
         error: 'Invalid endpoint type',
-        message: `/v1/messages 接口只支持 anthropic 类型端点，当前模型 ${modelId} 是 ${model.type} 类型`
+        message: `/v1/messages endpoint supports only anthropic endpoints; model ${modelId} has type ${model.type}`
       });
     }
 
     const endpoint = getEndpointByType(model.type);
     if (!endpoint) {
-      return res.status(500).json({ error: `未找到端点类型：${model.type}` });
+      return res.status(500).json({ error: `Endpoint type not found: ${model.type}` });
     }
 
     logInfo(`Direct forwarding to ${model.type} endpoint: ${endpoint.base_url}`);
@@ -1033,8 +1033,8 @@ async function handleDirectMessages(req, res) {
       logError('Upstream retry exhausted in /v1/messages', error);
       if (!res.headersSent) {
         res.status(504).json({
-          error: '上游服务重试已耗尽',
-          message: `请求失败：${error.message}`,
+          error: 'Upstream service retries exhausted',
+          message: `Request failed: ${error.message}`,
           attempts: error.attempts
         });
       } else {
@@ -1046,8 +1046,8 @@ async function handleDirectMessages(req, res) {
     logError('Error in /v1/messages', error);
     if (!res.headersSent) {
       res.status(500).json({
-        error: '内部服务器错误',
-        message: `服务器处理异常：${error.message}`
+        error: 'Internal server error',
+        message: `Server processing error: ${error.message}`
       });
     } else {
       res.end();
@@ -1055,7 +1055,7 @@ async function handleDirectMessages(req, res) {
   }
 }
 
-// BaSui: 处理Anthropic token计数请求（不调用模型，只计算token数）
+// BaSui: Handle Anthropic token count requests (count tokens without invoking the model)
 async function handleCountTokens(req, res) {
   logInfo('POST /v1/messages/count_tokens');
 
@@ -1064,25 +1064,25 @@ async function handleCountTokens(req, res) {
     const modelId = anthropicRequest.model;
 
     if (!modelId) {
-      return res.status(400).json({ error: '缺少必需参数：model' });
+      return res.status(400).json({ error: 'Missing required parameter: model' });
     }
 
     const model = getModelById(modelId);
     if (!model) {
-      return res.status(404).json({ error: `未找到模型：${modelId}` });
+      return res.status(404).json({ error: `Model not found: ${modelId}` });
     }
 
-    // 只允许 anthropic 类型端点
+    // Allow only anthropic endpoint types
     if (model.type !== 'anthropic') {
       return res.status(400).json({
         error: 'Invalid endpoint type',
-        message: `/v1/messages/count_tokens 接口只支持 anthropic 类型端点，当前模型 ${modelId} 是 ${model.type} 类型`
+        message: `/v1/messages/count_tokens endpoint supports only anthropic endpoints; model ${modelId} has type ${model.type}`
       });
     }
 
     const endpoint = getEndpointByType(model.type);
     if (!endpoint) {
-      return res.status(500).json({ error: `未找到端点类型：${model.type}` });
+      return res.status(500).json({ error: `Endpoint type not found: ${model.type}` });
     }
 
     logInfo(`Counting tokens for ${model.type} endpoint: ${endpoint.base_url}/count_tokens`);
@@ -1127,8 +1127,8 @@ async function handleCountTokens(req, res) {
     if (error instanceof FetchRetryError) {
       logError('Upstream retry exhausted in /v1/messages/count_tokens', error);
       res.status(504).json({
-        error: '上游服务重试已耗尽',
-        message: `请求失败：${error.message}`,
+        error: 'Upstream service retries exhausted',
+        message: `Request failed: ${error.message}`,
         attempts: error.attempts
       });
       return;
@@ -1136,16 +1136,16 @@ async function handleCountTokens(req, res) {
 
     logError('Error in /v1/messages/count_tokens', error);
     res.status(500).json({
-      error: '内部服务器错误',
-      message: `服务器处理异常：${error.message}`
+      error: 'Internal server error',
+      message: `Server processing error: ${error.message}`
     });
   }
 }
 
-// 注册路由
+// Register routes
 router.post('/v1/chat/completions', handleChatCompletions);
 router.post('/v1/responses', handleDirectResponses);
 router.post('/v1/messages', handleDirectMessages);
-router.post('/v1/messages/count_tokens', handleCountTokens);  // BaSui: 新增token计数端点
+router.post('/v1/messages/count_tokens', handleCountTokens);  // BaSui: Add the token counting endpoint
 
 export default router;

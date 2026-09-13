@@ -1,6 +1,6 @@
 /**
- * 测试配置初始化机制
- * 用法: node tests/test-config-init.js
+ * Test configuration initialization
+ * Usage: node tests/test-config-init.js
  */
 
 import fs from 'fs';
@@ -13,47 +13,47 @@ const projectRoot = path.join(__dirname, '..');
 const configPath = path.join(projectRoot, 'data', 'config.json');
 const backupPath = path.join(projectRoot, 'data', 'config.json.test-backup');
 
-console.log('🧪 测试配置初始化机制\n');
+console.log('🧪 Test configuration initialization\n');
 console.log('='.repeat(60));
 
-// 步骤 1: 备份现有配置
-console.log('\n📦 步骤 1: 备份现有配置');
+// Step 1: Back up the existing configuration
+console.log('\n📦 Step 1: Back up the existing configuration');
 if (fs.existsSync(configPath)) {
   fs.copyFileSync(configPath, backupPath);
-  console.log('✅ 已备份 config.json → config.json.test-backup');
+  console.log('✅ Backed up config.json → config.json.test-backup');
   fs.unlinkSync(configPath);
-  console.log('✅ 已删除 config.json');
+  console.log('✅ Deleted config.json');
 } else {
-  console.log('ℹ️  config.json 不存在，跳过备份');
+  console.log('ℹ️  config.json does not exist; skipping backup');
 }
 
-// 步骤 2: 设置环境变量
-console.log('\n⚙️  步骤 2: 设置测试环境变量');
+// Step 2: Set environment variables
+console.log('\n⚙️  Step 2: Set test environment variables');
 process.env.KEY_POOL_ALGORITHM = 'least-token-used';
 process.env.KEY_POOL_MULTI_TIER_ENABLED = 'true';
 process.env.NOTES_MAX_LENGTH = '2000';
 process.env.REASONING_BUDGET_LOW = '8192';
-console.log('✅ 已设置环境变量：');
+console.log('✅ Environment variables set:');
 console.log('   KEY_POOL_ALGORITHM=least-token-used');
 console.log('   KEY_POOL_MULTI_TIER_ENABLED=true');
 console.log('   NOTES_MAX_LENGTH=2000');
 console.log('   REASONING_BUDGET_LOW=8192');
 
-// 步骤 3: 动态导入 config.js 触发初始化
-console.log('\n🚀 步骤 3: 加载 config.js（触发初始化）');
+// Step 3: Dynamically import config.js to trigger initialization
+console.log('\n🚀 Step 3: Load config.js (triggers initialization)');
 try {
   const config = await import('../config.js');
-  console.log('✅ config.js 加载成功');
+  console.log('✅ config.js loaded successfully');
   
-  // 步骤 4: 验证配置文件已创建
-  console.log('\n🔍 步骤 4: 验证配置文件');
+  // Step 4: Verify that the configuration file was created
+  console.log('\n🔍 Step 4: Verify the configuration file');
   if (fs.existsSync(configPath)) {
-    console.log('✅ config.json 已创建');
+    console.log('✅ config.json created');
     
     const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
-    // 验证配置项
-    console.log('\n🎯 步骤 5: 验证配置项');
+    // Verify configuration values
+    console.log('\n🎯 Step 5: Verify configuration values');
     const tests = [
       {
         name: 'KEY_POOL_ALGORITHM',
@@ -85,38 +85,38 @@ try {
     tests.forEach(test => {
       const status = test.pass ? '✅' : '❌';
       console.log(`${status} ${test.name}:`);
-      console.log(`   期望: ${test.expected}`);
-      console.log(`   实际: ${test.actual}`);
+      console.log(`   Expected: ${test.expected}`);
+      console.log(`   Actual: ${test.actual}`);
       if (!test.pass) allPassed = false;
     });
     
     if (allPassed) {
-      console.log('\n✅ 所有测试通过！');
+      console.log('\n✅ All tests passed!');
     } else {
-      console.log('\n❌ 部分测试失败！');
+      console.log('\n❌ Some tests failed!');
     }
     
   } else {
-    console.log('❌ config.json 未创建');
+    console.log('❌ config.json was not created');
   }
   
 } catch (error) {
-  console.error('❌ 加载失败:', error.message);
+  console.error('❌ Loading failed:', error.message);
 }
 
-// 步骤 6: 恢复备份
-console.log('\n🔄 步骤 6: 恢复备份');
+// Step 6: Restore the backup
+console.log('\n🔄 Step 6: Restore the backup');
 if (fs.existsSync(configPath)) {
   fs.unlinkSync(configPath);
-  console.log('✅ 已删除测试 config.json');
+  console.log('✅ Removed test file config.json');
 }
 if (fs.existsSync(backupPath)) {
   fs.copyFileSync(backupPath, configPath);
   fs.unlinkSync(backupPath);
-  console.log('✅ 已恢复备份 config.json');
+  console.log('✅ Backup restored config.json');
 } else {
-  console.log('ℹ️  无备份需要恢复');
+  console.log('ℹ️  No backup to restore');
 }
 
 console.log('\n' + '='.repeat(60));
-console.log('🎉 测试完成！\n');
+console.log('🎉 Tests complete!\n');

@@ -2,8 +2,8 @@ import { getUserAgent } from '../config.js';
 import { generateUUID } from '../utils/uuid.js';
 
 /**
- * 生成会话Headers（x-session-id 和 x-assistant-message-id）
- * 如果客户端已提供则使用客户端的，否则自动生成UUID
+ * Generate session headers (x-session-id and x-assistant-message-id)
+ * Use client-supplied values when available; otherwise generate them UUID
  */
 export function generateSessionHeaders(clientHeaders = {}) {
   return {
@@ -13,7 +13,7 @@ export function generateSessionHeaders(clientHeaders = {}) {
 }
 
 /**
- * 获取Stainless SDK默认Headers配置
+ * Get default Stainless SDK header settings
  */
 export function getStainlessDefaults() {
   return {
@@ -28,7 +28,7 @@ export function getStainlessDefaults() {
 }
 
 /**
- * 应用Stainless SDK Headers（客户端提供优先，否则使用默认值）
+ * Apply Stainless SDK headers (client values take precedence over defaults)
  */
 export function applyStainlessDefaults(headers, clientHeaders = {}) {
   const defaults = getStainlessDefaults();
@@ -41,7 +41,7 @@ export function applyStainlessDefaults(headers, clientHeaders = {}) {
 }
 
 /**
- * 生成通用基础Headers
+ * Generate common base Headers
  */
 export function getBaseHeaders(authHeader, clientHeaders = {}) {
   const sessionHeaders = generateSessionHeaders(clientHeaders);

@@ -1,58 +1,58 @@
 /**
- * 日志收集中间件 - 实时日志推送系统
+ * Log collection middleware: live log streaming
  *
  * @author BaSui
- * @description 拦截所有请求和响应，收集日志并推送到SSE客户端
+ * @description Intercept requests and responses, collect logs, and push them to SSE clients
  */
 
 import { EventEmitter } from 'events';
 
-// 全局日志事件发射器（单例）
+// Global log event emitter (singleton)
 export const logEmitter = new EventEmitter();
-logEmitter.setMaxListeners(50); // 支持最多50个并发SSE连接
+logEmitter.setMaxListeners(50); // Support up to 50 concurrent SSE connections
 
-// 日志缓冲区（最多保存最近500条日志）
+// Log buffer (keeps at most the latest 500 entries)
 const LOG_BUFFER = [];
 const MAX_BUFFER_SIZE = 500;
 
 /**
- * 添加日志到缓冲区
+ * Add a log entry to the buffer
  */
 function addLogToBuffer(logEntry) {
   LOG_BUFFER.push(logEntry);
 
-  // 超过最大容量，删除最旧的日志
+  // Remove the oldest entries when capacity is exceeded
   if (LOG_BUFFER.length > MAX_BUFFER_SIZE) {
     LOG_BUFFER.shift();
   }
 
-  // 发射日志事件（推送给所有SSE客户端）
+  // Emit a log event to all SSE clients
   logEmitter.emit('log', logEntry);
 }
 
 /**
- * 获取缓冲区中的历史日志
+ * Get historical logs from the buffer
  */
 export function getLogBuffer(limit = 100) {
-  return LOG_BUFFER.slice(-limit); // 返回最近的N条日志
+  return LOG_BUFFER.slice(-limit); // Return the latest N log entries
 }
 
 /**
- * 清空日志缓冲区
+ * Clear the log buffer
  */
 export function clearLogBuffer() {
   LOG_BUFFER.length = 0;
 }
 
 /**
- * 格式化时间戳
+ * Format a timestamp
  */
 function getTimestamp() {
   return new Date().toISOString();
 }
 
 /**
- * 智能截断大对象（避免日志太长）
+ * Truncate large objects to keep logs manageable
  */
 function truncateData(data, maxLength = 500) {
   if (!data) return null;
@@ -64,18 +64,18 @@ function truncateData(data, maxLength = 500) {
     }
     return jsonStr;
   } catch (error) {
-    return '[JSON序列化失败]';
+    return '[JSON Serialization failed]';
   }
 }
 
 /**
- * 日志收集中间件 - 记录请求信息
+ * Log collection middleware: record request information
  */
 export function logCollectorMiddleware(req, res, next) {
   const startTime = Date.now();
   const timestamp = getTimestamp();
 
-  // 🔍 记录请求日志
+  // 🔍 Record the request log
   const requestLog = {
     type: 'request',
     level: 'info',
@@ -94,14 +94,14 @@ export function logCollectorMiddleware(req, res, next) {
 
   addLogToBuffer(requestLog);
 
-  // 🎯 拦截响应（记录响应日志）
+  // 🎯 Intercept the response to record its log
   const originalSend = res.send;
   const originalJson = res.json;
 
   res.send = function(data) {
     const duration = Date.now() - startTime;
 
-    // 📊 记录响应日志
+    // 📊 Record the response log
     const responseLog = {
       type: 'response',
       level: res.statusCode >= 400 ? 'error' : res.statusCode >= 300 ? 'warn' : 'info',
@@ -115,14 +115,14 @@ export function logCollectorMiddleware(req, res, next) {
 
     addLogToBuffer(responseLog);
 
-    // 调用原始send方法
+    // Call the original send method
     return originalSend.call(this, data);
   };
 
   res.json = function(data) {
     const duration = Date.now() - startTime;
 
-    // 📊 记录响应日志
+    // 📊 Record the response log
     const responseLog = {
       type: 'response',
       level: res.statusCode >= 400 ? 'error' : res.statusCode >= 300 ? 'warn' : 'info',
@@ -136,7 +136,7 @@ export function logCollectorMiddleware(req, res, next) {
 
     addLogToBuffer(responseLog);
 
-    // 调用原始json方法
+    // Call the original json method
     return originalJson.call(this, data);
   };
 
@@ -144,7 +144,7 @@ export function logCollectorMiddleware(req, res, next) {
 }
 
 /**
- * 手动记录日志（供其他模块调用）
+ * Record logs manually (for use by other modules)
  */
 export function logMessage(level, message, data = null) {
   const logEntry = {
@@ -159,7 +159,7 @@ export function logMessage(level, message, data = null) {
 }
 
 /**
- * 记录错误日志
+ * Record an error log
  */
 export function logError(message, error = null) {
   const logEntry = {
@@ -169,11 +169,11 @@ export function logError(message, error = null) {
     message,
     error: error ? {
       message: error.message,
-      stack: error.stack?.split('\n').slice(0, 3).join('\n'), // 只保留前3行堆栈
+      stack: error.stack?.split('\n').slice(0, 3).join('\n'), // Keep only the first 3 stack lines
     } : null,
   };
 
   addLogToBuffer(logEntry);
 }
 
-console.log('✅ 日志收集中间件已加载 - BaSui');
+console.log('✅ Log collection middleware loaded - BaSui');
