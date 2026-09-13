@@ -1,14 +1,32 @@
 # droid2api
 
-OpenAI 兼容的 API 代理服务器，统一访问不同的 LLM 模型。
+**Claude Code:** see [CLAUDE_CODE.md](CLAUDE_CODE.md) for the prepared Factory launcher,
+verified cache/tool behavior, and the remaining upstream limitations.
 
 ### Factory compatibility (verified September 2026)
 
-### 🔐 五级认证系统（灵活且向后兼容）
+Factory Responses requests now use the official WebSocket route
+`wss://api.factory.ai/api/llm/o/v1/responses/ws` (EU stays in the EU).
+Clients still connect to the same local HTTP `/v1/responses` endpoint. Streaming
+clients receive Responses SSE; non-streaming clients receive the final JSON response.
+Requests use a retained connection for the same task when available. The proxy sends
+one prepared full context, or a matching continuation with `previous_response_id`.
+There are no `generate:false` warm-up chains. Native-compatible PNG/JPEG preparation
+reduces image payloads; text history is not silently trimmed or summarized.
+See the native transport verification notes below for reconnect and image details.
+Background requests keep HTTP semantics.
 
-droid2api v1.4+ 支持五级认证优先级，满足从个人使用到企业级多用户场景的所有需求：
+A missing server-side `previous_response_id` is returned as an error, never silently
+dropped. Idle connections eventually close; broken or accepted-but-failed
+turns are not replayed. The bridge honors downstream backpressure and reuses the
+same account cooldown/failover rules. Other configured providers retain HTTP.
+Run `node tests/test-factory-websocket.js` for an offline 6 MiB end-to-end check,
+request-field preservation, handshake/event failures, account switching and cancellation.
 
-#### 认证优先级（从高到低）
+For GPT-6 Astra, use `type: "openai"`, `reasoning: "auto"`, and
+an inexpensive `key_test_model` for any manual checks in `data/config.json`. The proxy's OpenAI
+requests use `x-api-provider: openai`. Use a current `user_agent`
+(the verified value is `factory-cli/0.213.0`).
 
 Keep `system_prompt` set to
 `You are Droid, an AI software engineering agent built by Factory.\n\n`.
@@ -16,30 +34,75 @@ Factory rejected the tested requests without this introduction with HTTP 403.
 The proxy prepends it to the client's instructions; the remaining instructions
 are preserved. This is an addition to the prompt, so forwarding is not byte-for-byte.
 
-2. **🎯 密钥池管理**（多用户模式，推荐企业使用）
-   - 适用场景：多密钥 / 负载均衡 / 高并发 / 企业部署
-   - 优点：支持无限密钥，自动轮询，负载均衡，自动封禁失效密钥
-   - 支持算法：round-robin, random, least-used, weighted-score, least-token-used, max-remaining
-   - 配置方式：通过管理 API 添加密钥（`POST /admin/keys/add`）
+The admin key test uses `key_test_model` (legacy fallback: Sonnet 4.5).
+A successful test activates and saves the key. `API_ACCESS_KEY` authenticates
+clients of this proxy and must never be forwarded as a Factory credential.
 
-3. **🔄 DROID_REFRESH_KEY 环境变量**（OAuth 自动刷新，兼容原 droid2api）
-   - 适用场景：需要自动刷新 token / 兼容原项目
-   - 优点：WorkOS OAuth 集成，6小时自动刷新，失败时使用旧 token 兜底
-   - 缺点：依赖 WorkOS API，需要有效的 refresh_token
-   - 配置方式：`DROID_REFRESH_KEY=rt-your-refresh-token` 或创建 `data/auth.json`
+Offline regression check: `node tests/test-factory-proxy-fix.js`.
 
-4. **📁 文件认证**（data/auth.json / ~/.factory/auth.json）
-   - 适用场景：向后兼容 / 跨项目共享认证
-   - 优先级：`data/auth.json`（项目级，Docker 友好）> `~/.factory/auth.json`（用户级，兜底）
-   - 支持格式：`{ "refresh_token": "...", "api_key": "..." }`
+Account selection now checks Factory's Standard usage windows (5 hours, 7 days,
+30 days); Core models use their separate group. The admin dashboard shows each
+account's percentages and reset times instead of adding trial allowances.
+Measurements refresh on use and in the dashboard, cached for one minute.
+Unavailable telemetry is shown as unknown/stale, not zero remaining usage.
+Already-enabled prepaid Extra Usage permits an upstream check; the proxy never
+enables paid usage or substitutes a different model.
 
-5. **🌐 客户端 Authorization Header**（透传模式）
-   - 适用场景：客户端直接提供密钥 / 无服务器端配置
-   - 由 middleware 处理，无需服务器端配置
+HTTP 402/429 temporarily pause the affected account. Retry-After is honored;
+without a reset hint, the proxy probes again after one minute. HTTP 401 disables
+the rejected key until a successful retest. HTTP 403 and invalid-request errors
+are returned unchanged without banning accounts. Explicit 5xx rejections try
+another eligible key. A request never retries the same key, and ambiguous network
+failures or interrupted streams are not replayed. Client disconnect cancels the
+upstream request. The upstream status/body are preserved after failed attempts.
 
-#### 选择建议
+The `round-robin` setting remains selected. Quota-based legacy algorithm names
+now rank eligible accounts by their Factory usage-window headroom.
+Run `node tests/test-factory-limits.js` for isolated failure/recovery checks.
+Factory billing fields are observed internal API data; malformed or unavailable
+measurements fall back to direct requests, whose responses remain authoritative.
 
-| 场景 | 推荐方案 | 配置复杂度 | 功能强大度 |
+
+An OpenAI-compatible API proxy that provides a unified interface to different LLMs.
+
+## Core features
+
+### 🔐 Five-level authentication (flexible and backward-compatible)
+
+droid2api v1.4+ supports five authentication sources in priority order, covering personal use through enterprise multi-user deployments:
+
+#### Authentication priority (highest to lowest)
+
+1. **🔑 FACTORY_API_KEY environment variable** (single-user mode, highest priority)
+   - Use cases: personal use / a single key / Docker deployments
+   - Advantages: simple environment-variable configuration, convenient for Docker
+   - Limitations: no key rotation, load balancing, or fallback when the quota runs out
+   - Configuration: `FACTORY_API_KEY=fk-your-key`
+
+2. **🎯 Key pool management** (multi-user mode, recommended for enterprise use)
+   - Use cases: multiple keys / load balancing / high concurrency / enterprise deployments
+   - Advantages: no fixed key limit, automatic rotation, load balancing, and automatic blocking of unusable keys in the proxy
+   - Supported algorithms: round-robin, random, least-used, weighted-score, least-token-used, max-remaining
+   - Configuration: add keys through the admin API (`POST /admin/keys/add`)
+
+3. **🔄 DROID_REFRESH_KEY environment variable** (automatic OAuth refresh, compatible with the original droid2api)
+   - Use cases: automatic token refresh / compatibility with the original project
+   - Advantages: WorkOS OAuth integration, automatic refresh every 6 hours, and fallback to the old token if refresh fails
+   - Limitations: depends on the WorkOS API and requires a valid refresh_token
+   - Configuration: `DROID_REFRESH_KEY=rt-your-refresh-token` or create `data/auth.json`
+
+4. **📁 File-based authentication** (data/auth.json / ~/.factory/auth.json)
+   - Use cases: backward compatibility / sharing authentication across projects
+   - Priority: `data/auth.json` (project-level, convenient for Docker) > `~/.factory/auth.json` (user-level fallback)
+   - Supported format: `{ "refresh_token": "...", "api_key": "..." }`
+
+5. **🌐 Client Authorization header** (pass-through mode)
+   - Use cases: clients supply their own keys / no server-side configuration
+   - Handled by middleware; no server-side configuration required
+
+#### Choosing an authentication method
+
+| Use case | Recommended method | Setup complexity | Feature coverage |
 |------|---------|----------|----------|
 | Personal use / single key | FACTORY_API_KEY | ⭐ | ⭐⭐ |
 | Multiple keys / load balancing | Key pool management | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
@@ -765,6 +828,64 @@ Make sure the refresh token is configured correctly:
 
 Check the model configuration in `data/config.json` and confirm that the model ID and type are correct.
 
-## 许可证
+## Factory request preparation and transport
+
+Image preparation follows the installed Droid CLI 0.213.0 default attachment
+pipeline: alpha-weighted area resize to a maximum dimension of 1024 pixels,
+PNG/JPEG decoding and encoding with pngjs 7.0.0 and jpeg-js 0.4.4, and a 200 KiB
+encoded-image target. JPEG quality starts at 100 and decreases by the native
+0.8 sequence down to 20 when required. This changes the transmitted image
+resolution/encoding; original files and Codex history are not rewritten.
+The native Read tool's explicit high-quality preset is 2048 pixels/1 MiB;
+OpenAI input_image.detail is a different field, not that tool argument.
+
+The bridge sends one prepared Responses request, never internally generated
+`generate:false` warm-up chains. Matching continuations use previous_response_id;
+current request settings are sent on every turn. A task remains on its eligible
+account only when the configured pool policy selects it again. Every request,
+including an existing task's continuation, follows that policy. Account bindings
+are no longer used or stored; legacy bindings are discarded when the pool loads.
+When selection changes the account, the bridge reconnects with the prepared full
+context and the same cache identity instead of reusing another account's socket
+response ID. Same-account matching continuations can still use the delta path.
+
+The configured OpenAI path uses WebSocket (the installed CLI's cached feature
+flag was enabled). Idle connections close after 30 seconds, as in Droid. On
+reconnect the prepared context is sent once. After two WebSocket transport
+failures, subsequent requests in that session use HTTP, as in Droid. Ambiguous
+failed requests are not silently replayed. Cache keys remain stable; the managed
+OpenAI cache retention is 24h when a cache key is supplied, matching `_Xf`.
+
+The application remains Codex: its instructions, tools, history and compaction
+are owned by Codex. A Responses bridge cannot reproduce Droid's entire agent
+loop or infer the original attachment/tool provenance from every flattened
+Responses item. Typed output normalization preserves Codex tool-call IDs and
+edited encrypted reasoning; it does not blindly discard them as Droid's own
+transcript comparator does. These integration differences are explicit.
+
+Live Luna verification on 2026-09-07: ten actual image blocks totaling 25.7 MB
+in the input were prepared into a roughly 1.28 MB request. Initial generation,
+immediate custom-tool continuation and continuation after 36 seconds all passed:
+three physical generations, zero warm-ups. After the idle reconnect, 10432 of
+10595 input tokens were cached. Cross-account cache reuse was also observed on
+Luna. These findings do not establish equal cost for different Codex/Droid
+histories or constitute an Astra cost benchmark. A first cold context is still
+chargeable.
+
+`GET /admin/stats/full` (admin authentication) exposes `factory_transport` totals
+and per-key usage. Logs include frame size, image preparation sizes, cache reads,
+cache writes, output tokens, missing usage and reasons for rebuilding context.
+
+Offline checks:
+
+```text
+node tests/test-factory-images.js
+node tests/test-factory-websocket.js
+node tests/test-factory-limits.js
+```
+
+Live probes require explicit `--live`; do not run them as a background health check.
+
+## License
 
 MIT
