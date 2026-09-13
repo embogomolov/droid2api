@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+import { fetchFactoryJSON } from './factory-telemetry.js';
 import { logDebug, logError, logInfo } from '../logger.js';
 import { getFactoryApiConcurrency } from '../config.js';
 
@@ -9,11 +9,8 @@ import { getFactoryApiConcurrency } from '../config.js';
  * Endpoints were confirmed by capturing Factory console API calls with Playwright.
  * Reference implementation: https://github.com/AAEE86/droid-apikey
  *
- * 重要发现 (2025-10-12):
- * - /api/organization/members/chat-usage 返回的 totalAllowance 不准确,永远是20M
- * - /api/organization 包含 freeTrialAllocation.standardTokens,这才是真实额度
- * - 邀请码注册: freeTrialAllocation.standardTokens = 38M (20M + 18M邀请奖励)
- * - 普通注册: freeTrialAllocation.standardTokens = 20M
+ * Legacy token counters are informational only. Paid allowance fields take precedence
+ * over trial allocation. Routing uses /api/billing/limits rolling windows instead.
  */
 
 const FACTORY_API_BASE = 'https://app.factory.ai/api';
@@ -40,43 +37,12 @@ async function fetchOrganization(apiKey, options = {}) {
 
   logDebug(`Calling the Factory organization API: ${url}`);
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json'
-      },
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      logDebug(`/api/organization非JSON响应: ${text.substring(0, 200)}`);
-      throw new Error('API返回非JSON格式响应');
-    }
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${data?.message || response.statusText}`);
-    }
-
-    return data;
-  } catch (fetchError) {
-    clearTimeout(timeoutId);
-    if (fetchError.name === 'AbortError') {
-      throw new Error(`组织API请求超时(${timeout}ms)`);
-    }
-    throw fetchError;
-  }
+  const { response, data } = await fetchFactoryJSON(url, {
+    timeout,
+    headers: { Authorization: `Bearer ${apiKey}`, 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', Accept: 'application/json' }
+  });
+  if (!response.ok) throw new Error(`Organization API returned HTTP ${response.status}`);
+  return data;
 }
 
 /**
@@ -128,20 +94,18 @@ export async function fetchTokenUsage(apiKey, options = {}) {
     // Call both APIs in parallel.
     const [orgResult, usageResult] = await Promise.allSettled([
       fetchOrganization(apiKey, { timeout }),
-      fetch(`${FACTORY_API_BASE}${FACTORY_USAGE_ENDPOINT}`, {
-        method: 'GET',
+      fetchFactoryJSON(`${FACTORY_API_BASE}${FACTORY_USAGE_ENDPOINT}`, {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
           'Accept': 'application/json'
         },
-        signal: AbortSignal.timeout(timeout)
+        timeout
       })
     ]);
 
     // Handle the organization API result.
     if (orgResult.status === 'rejected') {
-      logError(`组织API调用失败: ${orgResult.reason?.message}`);
       throw orgResult.reason;
     }
 
@@ -149,22 +113,12 @@ export async function fetchTokenUsage(apiKey, options = {}) {
 
     // Handle the usage API result.
     if (usageResult.status === 'rejected') {
-      logError(`使用量API调用失败: ${usageResult.reason?.message}`);
       throw usageResult.reason;
     }
 
-    const usageResponse = usageResult.value;
-    const contentType = usageResponse.headers.get('content-type');
+    const { response: usageResponse, data: usageBody } = usageResult.value;
 
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await usageResponse.text();
-      logDebug(`使用量API非JSON响应: ${text.substring(0, 200)}`);
-      throw new Error('使用量API返回非JSON格式响应');
-    }
-
-    const usageBody = await usageResponse.json();
-
-    // 处理认证失败
+    // Handle authentication failure.
     if (usageResponse.status === 401 || usageResponse.status === 403) {
       return {
         success: false,
@@ -207,8 +161,8 @@ export async function fetchTokenUsage(apiKey, options = {}) {
 
     // Prefer the paid usage allowance; trial allocation is a legacy fallback.
     const freeTrialAllocation = orgData.organization?.subscription?.freeTrialAllocation || {};
-    const realStandardAllowance = freeTrialAllocation.standardTokens || 0;
-    const realPremiumAllowance = freeTrialAllocation.premiumTokens || 0;
+    const realStandardAllowance = usage.standard?.totalAllowance ?? usage.standard?.basicAllowance ?? freeTrialAllocation.standardTokens ?? 0;
+    const realPremiumAllowance = usage.premium?.totalAllowance ?? usage.premium?.basicAllowance ?? freeTrialAllocation.premiumTokens ?? 0;
 
     // Extract statistics from the usage API.
     const standardUsage = usage.standard || {};
@@ -257,7 +211,6 @@ export async function fetchTokenUsage(apiKey, options = {}) {
     };
 
   } catch (error) {
-    logError(`Factory API调用失败: ${error.message}`, error);
     return {
       success: false,
       error: 'api_call_failed',

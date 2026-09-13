@@ -163,6 +163,8 @@ export function logError(message, error = null) {
 }
 
 export function logRequest(method, url, headers = null, body = null) {
+  if (headers) headers = Object.fromEntries(Object.entries(headers).map(([name, value]) =>
+    [name, /authorization|api-key|cookie|token/i.test(name) ? '[REDACTED]' : value]));
   const isDev = isDevMode();
 
   if (isDev) {

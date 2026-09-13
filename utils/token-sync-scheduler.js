@@ -6,6 +6,7 @@
 
 import { logInfo, logDebug, logError, logWarn } from '../logger.js';
 import { fetchTokenUsage } from './factory-api-client.js';
+import { preserveUsageOnFailure } from './factory-telemetry.js';
 import keyPoolManager from '../auth.js';
 import fs from 'fs';
 import path from 'path';
@@ -84,7 +85,8 @@ async function performSync() {
     const activeKeys = allKeys.filter(k => k.status === 'active');
 
     if (activeKeys.length === 0) {
-      logWarn('⚠️ 没有活跃密钥，跳过同步');
+      lastSyncTime = new Date();
+      logWarn('⚠️ No active keys; skipping synchronization');
       return { skipped: true, reason: 'no_active_keys' };
     }
 
@@ -99,36 +101,26 @@ async function performSync() {
 
     for (const keyObj of activeKeys) {
       try {
+        await keyPoolManager.refreshBillingLimits(keyObj);
         const usage = await fetchTokenUsage(keyObj.key, { timeout: 10000 });
 
         if (usage.success) {
-          syncData.keys[keyObj.id] = {
-            ...usage,
-            last_sync: new Date().toISOString()
-          };
+          syncData.keys[keyObj.id] = { ...usage, stale: false, last_sync: new Date().toISOString() };
           successCount++;
           logDebug(`✅ Key ${keyObj.id.substring(0, 20)}... synchronized successfully`);
         } else {
           failCount++;
           logWarn(`⚠️ Usage query failed for key ${keyObj.id.substring(0, 20)}...: ${usage.message}`);
 
-          // 保留失败信息
-          syncData.keys[keyObj.id] = {
-            ...usage,
-            last_sync: new Date().toISOString()
-          };
+          // Retain failure information.
+          syncData.keys[keyObj.id] = preserveUsageOnFailure(syncData.keys[keyObj.id], usage.message);
         }
       } catch (error) {
         failCount++;
         logError(`❌ Usage query raised an error for key ${keyObj.id.substring(0, 20)}...`, error);
 
-        // 记录错误
-        syncData.keys[keyObj.id] = {
-          success: false,
-          error: 'exception',
-          message: error.message,
-          last_sync: new Date().toISOString()
-        };
+        // Record the error.
+        syncData.keys[keyObj.id] = preserveUsageOnFailure(syncData.keys[keyObj.id], error.message);
       }
 
       // Wait 200 ms between keys to avoid rate limits.
