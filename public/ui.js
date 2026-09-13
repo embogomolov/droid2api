@@ -1,6 +1,6 @@
 export const $ = id => document.getElementById(id);
 export const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export const suffix = id => '…' + String(id).slice(-9);
+export const suffix = id => state.keys.find(key => key.id === id)?.keySuffix || 'Unavailable key';
 export const date = value => value && Number.isFinite(new Date(value).getTime()) ? new Date(value).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
 export const number = value => Number.isFinite(value) ? new Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1}).format(value) : '—';
 export const state = {keys:[], limits:{}, sync:null, config:{}, pools:[], group:'standard', tab:'accounts'};

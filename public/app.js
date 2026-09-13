@@ -19,8 +19,8 @@ function showTab(){
 async function loadKeys(){
   const keys=[];let page=1,total=1;
   do{const data=await api('/keys?limit=100&page='+page);keys.push(...data.keys);total=data.pagination?.totalPages??data.pagination?.total_pages??1;page++;}while(page<=total);
-  // Credentials returned by the old admin API are never retained in UI state or rendered.
-  state.keys=keys.map(({key,...metadata})=>metadata);
+  // Keep only the display suffix; full credentials never enter UI state or the DOM.
+  state.keys=keys.map(({key,...metadata})=>({...metadata,keySuffix:typeof key==='string'&&key.length>9?'…'+key.slice(-9):null}));
 }
 export async function refresh(force=false){
   while(refreshing)await refreshing;
