@@ -17,6 +17,8 @@ const { getConfig } = await import('../config.js');
 const { validateClientAuth } = await import('../middleware/client-auth.js');
 const { getFactorySession } = await import('../utils/factory-sessions.js');
 const { prepareDirectAnthropic } = await import('../transformers/request-anthropic.js');
+const { logCollectorMiddleware, getLogBuffer } = await import('../middleware/log-collector.js');
+const { upstreamEventError } = await import('../utils/factory-upstream.js');
 const { destroyPool } = await import('../utils/http-client.js');
 const cfg = getConfig();
 cfg.system_prompt = 'You are Droid, an AI software engineering agent built by Factory.';
@@ -30,20 +32,22 @@ const upstream = http.createServer(async (req, res) => {
   let raw = ''; for await (const chunk of req) raw += chunk;
   const body = JSON.parse(raw); calls.push({ body, headers: req.headers, path: req.url });
   if (scenario === 'quota' && req.headers.authorization === 'Bearer fake-a') { res.writeHead(429, { 'content-type':'application/json','retry-after':'1' }).end('{"type":"error","error":{"type":"rate_limit_error","message":"exhausted"}}'); return; }
+  if (scenario === 'json-error') {res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({type:'error',error:{type:'authentication_error',message:'Invalid credentials'}}));return;}
   if (scenario === 'bad') { res.writeHead(400, { 'content-type':'application/json' }).end('{"type":"error","error":{"type":"invalid_request_error","message":"thinking signature rejected"}}'); return; }
   if (req.url.endsWith('/count_tokens')) { res.writeHead(200, { 'content-type':'application/json' }).end('{"input_tokens":321}'); return; }
   const message = { id:'msg_native',type:'message',role:'assistant',model:body.model,content:[{type:'text',text:'Привет 👋'}],stop_reason:'end_turn',usage:{input_tokens:7,cache_creation_input_tokens:11,cache_read_input_tokens:1000,output_tokens:9,output_tokens_details:{thinking_tokens:3}} };
   if (!body.stream) { res.writeHead(200, {'content-type':'application/json','request-id':'test-request'}).end(JSON.stringify(message)); return; }
   const event = data => `event: ${data.type}\r\ndata: ${JSON.stringify(data)}\r\n\r\n`;
   wire = ': keepalive\n\n' + event({type:'message_start',message:{...message,content:[]}}) + event({type:'ping'}) + event({type:'content_block_delta',index:0,delta:{type:'text_delta',text:'Привет 👋'}});
-  if (scenario !== 'broken') wire += event({type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}}) + event({type:'message_stop'});
+  if (scenario === 'overloaded') wire = event({type:'error',error:{type:'overloaded_error',message:'The upstream AI model provider is currently overloaded.'}});
+  else if (scenario !== 'broken') wire += event({type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:9}}) + event({type:'message_stop'});
   res.writeHead(200, { 'content-type':'text/event-stream','request-id':'test-request','anthropic-ratelimit-requests-remaining':'17' });
   const bytes = Buffer.from(wire);
   for (let i=0; i<bytes.length; i+=7) res.write(bytes.subarray(i,i+7));
   if (scenario === 'held-open') { res.once('close', () => { upstreamClosed = true; }); return; }
   res.end();
 });
-const app = express(); app.use(express.json({limit:'32mb'})); app.use(validateClientAuth); app.use(router);
+const app = express(); app.use(express.json({limit:'32mb'})); app.use(validateClientAuth); app.use(logCollectorMiddleware);app.use(router);
 await new Promise(r => upstream.listen(0,'127.0.0.1',r));
 cfg.endpoint.find(e=>e.name==='anthropic').base_url = `http://127.0.0.1:${upstream.address().port}/messages`;
 const server=app.listen(0,'127.0.0.1'); await once(server,'listening');
@@ -96,6 +100,7 @@ try {
   assert.equal(stats.factory_transport.total.output_tokens,18); assert.equal(stats.factory_transport.total.reasoning_tokens,6);
   assert.equal(calls[2].headers.authorization,'Bearer fake-a','rotation returns to first account with identical cache markers');
   scenario='bad'; const bad=await call(); assert.equal(bad.status,400); assert.equal(await bad.text(),'{"type":"error","error":{"type":"invalid_request_error","message":"thinking signature rejected"}}');
+  assert.equal(getLogBuffer().filter(row=>row.type==='generation').at(-1).summary.upstreamError.code,'invalid_request_error','HTTP error bodies are also logged');
   scenario='quota'; const migrated=await call(); assert.equal(migrated.status,200);await migrated.json();assert.equal(calls.at(-1).headers.authorization,'Bearer fake-b');
   scenario='ok'; await (await call()).json(); assert.equal(calls.at(-1).headers.authorization,'Bearer fake-b','exhausted account remains on cooldown');
   pool.keys[0].billing_limits=structuredClone(limits);
@@ -105,6 +110,19 @@ try {
   const parent=getFactorySession({headers,body});
   const child=getFactorySession({headers:{...headers,'x-claude-code-agent-id':'child'},body});
   assert.notEqual(parent.id,child.id,'parallel subagents do not share a turn queue');
+  scenario='json-error';const jsonError=await call();assert.equal((await jsonError.json()).error.type,'authentication_error');
+  assert.equal(getLogBuffer().filter(row=>row.type==='generation').at(-1).summary.upstreamError.message,'Invalid credentials');
+  scenario='overloaded'; const overloaded=await call({stream:true});assert.equal(await overloaded.text(),wire,'Error SSE bytes remain unchanged');
+  await delay(10);
+  const failure=getLogBuffer().filter(row=>row.type==='generation').at(-1);
+  assert.equal(failure.summary.upstreamError.code,'overloaded_error');
+  assert.equal(failure.summary.upstreamError.message,'The upstream AI model provider is currently overloaded.');
+  const logfile=readFileSync(join(process.cwd(),'logs','droid2api_'+new Date().toISOString().slice(0,10)+'.log'),'utf8');
+  assert.ok(logfile.includes('"upstreamError"'));assert.ok(logfile.includes('The upstream AI model provider is currently overloaded.'));
+  assert.deepEqual(upstreamEventError({type:'response.failed',response:{error:{code:'server_error',message:'Try again'}}}),{eventType:'response.failed',code:'server_error',type:null,message:'Try again'});
+  assert.equal(upstreamEventError({type:'error',code:'rate_limit_exceeded',message:'Slow down'}).code,'rate_limit_exceeded');
+  assert.equal(upstreamEventError({type:'http_error',error:{status:403,detail:'Forbidden'}}).message,'Forbidden');
+  assert.equal(upstreamEventError({type:'error',error:{message:'token fk-secret123 Bearer abc123'}}).message,'token [key hidden] Bearer [hidden]');
   scenario='broken'; await assert.rejects(async()=>{const r=await call({stream:true});await r.text();});
   console.log('PASS: Claude gateway auth, cache/signatures/tools/thinking/betas, exact counting prompt, streaming UTF-8/pings/EOF, physical usage, quota failover and subagent isolation');
 } finally { server.closeAllConnections();server.close();upstream.closeAllConnections();upstream.close();destroyPool(); }
