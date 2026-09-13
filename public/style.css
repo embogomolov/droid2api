@@ -171,3 +171,8 @@ nav a{font-size:13px;padding:10px}
 .row-actions [data-action="exclude"]{grid-column:1/-1;grid-row:1;white-space:normal;overflow-wrap:anywhere}
 .row-actions [data-action="test"],.row-actions [data-action="edit"]{grid-row:2}
 @media(max-width:700px){.row-actions{margin-left:0}}
+
+.sync-title{font-size:16px;font-weight:600;margin-bottom:10px}
+.sync-facts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 16px;margin:18px 0;font-size:13px}
+.sync-facts dd{text-align:right}
+@media(max-width:450px){.sync-facts{grid-template-columns:1fr;gap:4px}.sync-facts dd{text-align:left;margin-bottom:8px}}
