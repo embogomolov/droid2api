@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
-import { getNotesMaxLength, getConfig, updateConfig as updateFullConfig } from '../config.js';
+import { getNotesMaxLength, getConfig } from '../config.js';
 import {
   sendSuccessResponse,
   sendErrorResponse,
@@ -480,8 +480,9 @@ router.put('/config', wrapSync((req, res) => {
     return sendSuccessResponse(res, { key_pool: updatedConfig }, 'Key pool config updated successfully');
   }
 
-  // 更新完整配置
-  const updatedFullConfig = updateFullConfig(updates);
+  // Update the full configuration
+  keyPoolManager.updateConfig(updates.key_pool ?? {}, updates);
+  const updatedFullConfig = getConfig();
 
   logInfo('Admin updated full config', { changes: updates });
 

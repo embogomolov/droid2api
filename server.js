@@ -38,6 +38,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // Create worker processes
   const workers = new Map();
+  let shuttingDown = false;
 
   for (let i = 0; i < CLUSTER_WORKERS; i++) {
     const worker = cluster.fork();
@@ -52,6 +53,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // Automatically restart workers when they exit
   cluster.on('exit', (worker, code, signal) => {
+    if (shuttingDown) return;
     const workerInfo = workers.get(worker.id);
 
     if (signal) {
@@ -95,21 +97,24 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // Graceful shutdown handling
   const shutdown = async (signal) => {
-    logInfo(`\n收到 ${signal} 信号，正在优雅关闭...`);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logInfo(`\n Received ${signal}; shutting down gracefully...`);
 
-    // 停止接受新连接
-    for (const { worker } of workers.values()) {
-      worker.send('shutdown');
-    }
+    // Stop accepting new connections
+    const exits = [...workers.values()].filter(({ worker }) => !worker.isDead()).map(({ worker }) =>
+      new Promise(resolve => { worker.once('exit', resolve); if (worker.isConnected()) worker.send('shutdown'); else worker.kill(); }));
 
     // Wait for all workers to exit
     const shutdownTimeout = setTimeout(() => {
-      logError('⚠️ 优雅关闭超时，强制退出');
+      logError('⚠️ Graceful shutdown timed out; forcing exit');
+      for (const { worker } of workers.values()) if (!worker.isDead()) worker.kill();
       process.exit(1);
     }, 30000); // 30-second timeout
 
     try {
-      // 关闭 Redis 连接
+      await Promise.all(exits);
+      // Close the Redis connection
       if (process.env.REDIS_HOST) {
         await redisCache.disconnect();
       }
@@ -125,6 +130,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGBREAK', () => shutdown('SIGBREAK'));
 
   // Zero-downtime reload (USR2 signal)
   process.on('SIGUSR2', () => {
@@ -174,10 +180,52 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   const statsTrackerMiddleware = (await import('./middleware/stats-tracker.js')).default;
   const { logCollectorMiddleware } = await import('./middleware/log-collector.js');
   const redisCache = (await import('./utils/redis-cache.js')).default;
-  const { startDailyResetScheduler, onDateChange } = await import('./utils/daily-reset-scheduler.js');
-  const { startTokenSyncScheduler } = await import('./utils/token-sync-scheduler.js');
+  const { startDailyResetScheduler, stopDailyResetScheduler, onDateChange } = await import('./utils/daily-reset-scheduler.js');
+  const { startTokenSyncScheduler, stopTokenSyncScheduler } = await import('./utils/token-sync-scheduler.js');
+  const fileWriterManager = (await import('./utils/async-file-writer.js')).default;
+  const tokenUsageManager = (await import('./utils/token-usage-manager.js')).default;
+  const { destroyPool } = await import('./utils/http-client.js');
 
   const app = express.default();
+  let server, shuttingDown = false;
+  const backgroundTimers = new Set();
+  const scheduleInterval = (...args) => { const timer = setInterval(...args); backgroundTimers.add(timer); return timer; };
+  const scheduleTimeout = (...args) => { const timer = setTimeout(...args); backgroundTimers.add(timer); return timer; };
+  const shutdown = async signal => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logInfo(`Received ${signal}; stopping server...`);
+    const deadline = setTimeout(() => { console.error('Shutdown timed out after 10 seconds'); process.exit(1); }, 10000);
+    let drainTimeout;
+    try {
+      for (const timer of backgroundTimers) clearTimeout(timer);
+      stopDailyResetScheduler();
+      stopTokenSyncScheduler();
+      if (server?.listening) {
+        // SSE clients must not hold shutdown open indefinitely.
+        await new Promise(resolve => {
+          server.close(resolve);
+          drainTimeout = setTimeout(() => server.closeAllConnections(), 1500);
+        });
+        clearTimeout(drainTimeout);
+      }
+      destroyPool();
+      tokenUsageManager.destroy();
+      await redisCache.disconnect();
+      await new Promise(resolve => setImmediate(resolve));
+      await keyPoolManager.saveKeyPoolImmediately();
+      console.log('Flushing all pending writes...');
+      await fileWriterManager.destroyAll();
+      console.log('All pending writes flushed; server stopped');
+      clearTimeout(deadline);
+      process.exit(0);
+    } catch (error) {
+      console.error('Shutdown failed:', error.message);
+      process.exit(1);
+    }
+  };
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(signal, () => void shutdown(signal));
+  if (CLUSTER_MODE) process.on('message', message => { if (message === 'shutdown') void shutdown('cluster shutdown'); });
 
   app.use(express.default.json({ limit: '50mb' }));
   app.use(express.default.urlencoded({ extended: true, limit: '50mb' }));
@@ -231,7 +279,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   // BaSui: Register static file serving before API authentication to prevent authentication from blocking assets
   app.use(express.default.static('public'));
 
-  // 应用API访问控制
+  // Apply API access control
   app.use(apiKeyAuth);
 
   app.use((req, res, next) => {
@@ -392,6 +440,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       // Initialize auth system (load and setup API key if needed)
       // This won't throw error if no auth config is found - will use client auth
       await initializeAuth();
+      if (shuttingDown) return;
 
       // BaSui: Start the daily reset scheduler to perform cleanup when the date changes
       startDailyResetScheduler(60000); // Check for date changes every minute
@@ -421,7 +470,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
             });
             
             // Wait for the initial synchronization to finish
-            const checkInterval = setInterval(async () => {
+            const checkInterval = scheduleInterval(async () => {
               const { default: tokenSyncScheduler } = await import('./utils/token-sync-scheduler.js');
               const status = tokenSyncScheduler.getSyncStatus();
               
@@ -432,7 +481,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
             }, 500);
             
             // Handle timeout
-            setTimeout(() => {
+            scheduleTimeout(() => {
               clearInterval(checkInterval);
               resolve({ timeout: true });
             }, timeoutMs);
@@ -449,76 +498,83 @@ if (CLUSTER_MODE && cluster.isPrimary) {
             intervalMs: intervalMs,
             immediate: tokenSyncConfig.on_startup
           });
-          logInfo(`✅ Token 自动同步调度器已启动（${tokenSyncConfig.on_startup ? '立即同步' : '等待第一个周期'}）`);
+          logInfo(`✅ Token automatic synchronization scheduler started (${tokenSyncConfig.on_startup ? 'syncing immediately' : 'waiting for the first interval'})`);
         }
       } else {
         logWarning('⚠️ Token automatic synchronization is disabled (TOKEN_SYNC_ENABLED=false)');
         logInfo('💡 Token-usage-based selection algorithms, such as least-token-used, will fall back to basic round-robin selection');
       }
 
-      // 🔓 启动自动解封检查定时任务
-      const AUTO_UNBAN_CHECK_INTERVAL = 60 * 60 * 1000; // 每小时检查一次
-      setInterval(async () => {
-        try {
-          logDebug('🔓 执行自动解封检查...');
-          const unbannedCount = await keyPoolManager.checkAutoUnban();
-          if (unbannedCount > 0) {
-            logInfo(`🔓 自动解封检查完成: ${unbannedCount} 个密钥已解封`);
-          }
-        } catch (error) {
-          logError('自动解封检查失败', error);
-        }
-      }, AUTO_UNBAN_CHECK_INTERVAL);
-      
-      // 启动时立即执行一次检查
-      setTimeout(async () => {
-        try {
-          logDebug('🔓 启动时执行自动解封检查...');
-          const unbannedCount = await keyPoolManager.checkAutoUnban();
-          if (unbannedCount > 0) {
-            logInfo(`🔓 启动时自动解封: ${unbannedCount} 个密钥已解封`);
-          }
-        } catch (error) {
-          logError('启动时自动解封检查失败', error);
-        }
-      }, 5000); // 启动5秒后执行
-      
-      logInfo('🔓 自动解封检查已启动（每小时检查一次）');
-
-      const isAutoTestLeader = !CLUSTER_MODE || (cluster.isWorker && cluster.worker?.id === 1);
-      if (isAutoTestLeader) {
-        // 🧪 每小时自动测试启用密钥，确保402及时被拉黑
-        const HOURLY_KEY_TEST_INTERVAL = 60 * 60 * 1000; // 1小时
-        let hourlyKeyTestRunning = false;
-
-        const runHourlyKeyTest = async (trigger = 'scheduled') => {
-          if (hourlyKeyTestRunning) {
-            logWarning(`🧪 自动密钥测试仍在执行，跳过本次触发（${trigger}）`);
-            return;
-          }
-
-          hourlyKeyTestRunning = true;
-          const startedAt = Date.now();
-          logInfo(`🧪 自动密钥测试启动（触发：${trigger}，仅测试启用密钥）...`);
-
+      if (shuttingDown) return;
+      // Background model calls spend quota; require an explicit operator opt-in.
+      if (process.env.AUTOMATIC_KEY_TESTS === 'true') {
+        // 🔓 Start scheduled automatic unban checks
+        const AUTO_UNBAN_CHECK_INTERVAL = 60 * 60 * 1000; // Check every hour
+        scheduleInterval(async () => {
           try {
-            const results = await keyPoolManager.testAllKeys(null, null, {
-              includeDisabled: false,
-              sourceLabel: `${trigger}-auto`
-            });
-
-            const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);
-            logInfo(`🧪 自动密钥测试完成：总计 ${results.total}，成功 ${results.success}，失败 ${results.failed}，封禁 ${results.banned}，耗时 ${elapsed}s`);
+            logDebug('🔓 Running automatic unban check...');
+            const unbannedCount = await keyPoolManager.checkAutoUnban();
+            if (unbannedCount > 0) {
+              logInfo(`🔓 Automatic unban check completed: ${unbannedCount} keys unbanned`);
+            }
           } catch (error) {
-            logError('自动密钥测试失败', error);
-          } finally {
-            hourlyKeyTestRunning = false;
+            logError('Automatic unban check failed', error);
           }
-        };
+        }, AUTO_UNBAN_CHECK_INTERVAL);
+      
+        // Run a check at startup
+        scheduleTimeout(async () => {
+          try {
+            logDebug('🔓 Running automatic unban check at startup...');
+            const unbannedCount = await keyPoolManager.checkAutoUnban();
+            if (unbannedCount > 0) {
+              logInfo(`🔓 Startup automatic unban: ${unbannedCount} keys unbanned`);
+            }
+          } catch (error) {
+            logError('Startup automatic unban check failed', error);
+          }
+        }, 5000); // Run 5 seconds after startup
 
-        setInterval(() => runHourlyKeyTest('hourly'), HOURLY_KEY_TEST_INTERVAL);
-        setTimeout(() => runHourlyKeyTest('startup'), 15_000);
-        logInfo('🧪 自动密钥测试调度器已启动（每小时执行一次，仅启用密钥）');
+        logInfo('🔓 Automatic unban checks started (once per hour)');
+
+        const isAutoTestLeader = !CLUSTER_MODE || (cluster.isWorker && cluster.worker?.id === 1);
+        if (isAutoTestLeader) {
+          // 🧪 Automatically test enabled keys every hour so keys returning HTTP 402 are promptly banned
+          const HOURLY_KEY_TEST_INTERVAL = 60 * 60 * 1000; // 1 hour
+          let hourlyKeyTestRunning = false;
+
+          const runHourlyKeyTest = async (trigger = 'scheduled') => {
+            if (hourlyKeyTestRunning) {
+              logWarning(`🧪 Automatic key testing is still running; skipping this trigger (${trigger})`);
+              return;
+            }
+
+            hourlyKeyTestRunning = true;
+            const startedAt = Date.now();
+            logInfo(`🧪 Automatic key testing started (trigger: ${trigger}, enabled keys only)...`);
+
+            try {
+              const results = await keyPoolManager.testAllKeys(null, null, {
+                includeDisabled: false,
+                sourceLabel: `${trigger}-auto`
+              });
+
+              const elapsed = ((Date.now() - startedAt) / 1000).toFixed(2);
+              logInfo(`🧪 Automatic key testing finished: total ${results.total}, succeeded ${results.success}, failed ${results.failed}, banned ${results.banned}, elapsed ${elapsed}s`);
+            } catch (error) {
+              logError('Automatic key testing failed', error);
+            } finally {
+              hourlyKeyTestRunning = false;
+            }
+          };
+
+          scheduleInterval(() => runHourlyKeyTest('hourly'), HOURLY_KEY_TEST_INTERVAL);
+          scheduleTimeout(() => runHourlyKeyTest('startup'), 15_000);
+          logInfo('🧪 Automatic key test scheduler started (hourly, enabled keys only)');
+        } else {
+          logInfo('🧪 Automatic key test scheduler runs only in the single process or first worker; skipping this process');
+        }
+
       } else {
         logInfo('Automatic model-based key tests are disabled; quota refresh and request failover remain active');
       }
@@ -529,7 +585,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
         logInfo(`Starting server on port ${PORT}...`);
       }
 
-      const server = app.listen(PORT)
+      server = app.listen(PORT)
         .on('listening', () => {
           if (CLUSTER_MODE) {
             logInfo(`Worker ${process.pid} listening on port ${PORT}`);
@@ -563,26 +619,6 @@ if (CLUSTER_MODE && cluster.isPrimary) {
           }
         });
 
-      // 监听主进程的关闭信号（集群模式）
-      if (CLUSTER_MODE) {
-        process.on('message', (msg) => {
-          if (msg === 'shutdown') {
-            logInfo(`Worker ${process.pid} 收到关闭信号，正在优雅关闭...`);
-
-            // 停止接受新连接
-            server.close(() => {
-              logInfo(`Worker ${process.pid} 关闭完成`);
-              process.exit(0);
-            });
-
-            // 强制退出超时
-            setTimeout(() => {
-              logError(`Worker ${process.pid} 关闭超时，强制退出`);
-              process.exit(1);
-            }, 5000); // 5秒超时
-          }
-        });
-      }
 
     } catch (error) {
       logError('Failed to start server', error);

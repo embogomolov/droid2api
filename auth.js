@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
 import { logDebug, logError, logInfo, logWarning } from './logger.js';
 import { transformToAnthropic, getAnthropicHeaders } from './transformers/request-anthropic.js';
-import { getKeyPoolConfig } from './config.js';
+import { getKeyPoolConfig, updateConfig as updateFullConfig } from './config.js';
 import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
@@ -60,27 +60,9 @@ class KeyPoolManager {
         // 🚀 BaSui: Load multi-tier key pool configuration (poolGroups)
         this.poolGroups = pool.poolGroups || [];
 
-        // BaSui：加载配置，如果没有则使用默认值
-    // BaSui：深度合并配置，防止旧版本config覆盖新字段导致undefined！
-    if (pool.config) {
-      // 合并algorithm
-      this.config.algorithm = pool.config.algorithm || this.config.algorithm;
-
-      // 深度合并retry、autoBan、performance（保留默认值）
-      this.config.retry = { ...this.config.retry, ...(pool.config.retry || {}) };
-      this.config.autoBan = { ...this.config.autoBan, ...(pool.config.autoBan || {}) };
-      this.config.performance = { ...this.config.performance, ...(pool.config.performance || {}) };
-
-      // 🚀 BaSui：合并 multiTier 配置（多级密钥池）
-      if (pool.config.multiTier) {
-        this.config.multiTier = { ...this.config.multiTier, ...pool.config.multiTier };
-      }
-
-      // BaSui：保留旧版本的weights字段（向后兼容weighted-score算法）
-      if (pool.config.weights) {
-        this.config.weights = pool.config.weights;
-      }
-    }
+        // config.json owns settings; key_pool.json owns keys and statistics.
+        // Its legacy config snapshot must never override a newer UI save at startup.
+        this.config = getKeyPoolConfig();
         logInfo(`Loaded ${this.keys.length} keys from key pool`);
         if (this.poolGroups.length > 0) {
           logInfo(`📊 Multi-tier pool enabled: ${this.poolGroups.length} pool groups`);
@@ -97,49 +79,18 @@ class KeyPoolManager {
   }
 
   async saveKeyPool() {
-    // 🔧 修复：添加写锁防止并发写入竞态
-    if (this.isWriting) {
-      // 🔧 修复 BaSui：改用 DEBUG 级别，避免日志污染
-      logDebug('[KeyPool] Write in progress, queueing request...');
-      await new Promise(resolve => {
-        this.writeQueue = this.writeQueue || [];
-        this.writeQueue.push(resolve);
-      });
-    }
-    this.isWriting = true;
-
-    // 🔧 修复并发写入竞态条件 - 使用写锁保护
     this.stats.total = this.keys.length;
-    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
-    this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
-    this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
+    this.stats.active = this.keys.filter(k => k.status === 'active').length;
+    this.stats.disabled = this.keys.filter(k => k.status === 'disabled').length;
+    this.stats.banned = this.keys.filter(k => k.status === 'banned').length;
 
-    const data = {
+    // The shared writer owns debouncing and serialization; no second lock/queue.
+    return fileWriterManager.getWriter(this.keyPoolPath).write({
       keys: this.keys,
       stats: this.stats,
-      poolGroups: this.poolGroups,  // 🚀 BaSui：保存多级密钥池配置
+      poolGroups: this.poolGroups,
       config: this.config
-    };
-
-    // 更新待保存数据
-    this.pendingSaveData = data;
-
-    // 如果正在写入，加入队列
-    if (this.writeLock) {
-      return new Promise((resolve, reject) => {
-        this.writeQueue.push({ resolve, reject });
-      });
-    }
-
-    // 执行写入
-    return this._performSave();
-  
-    this.isWriting = false;
-    // 处理等待队列
-    if (this.writeQueue && this.writeQueue.length > 0) {
-      const waiter = this.writeQueue.shift();
-      waiter();
-    }
+    }).catch(error => logError('Failed to save the key pool', error));
   }
 
   async _performSave() {
@@ -1191,8 +1142,11 @@ class KeyPoolManager {
     return this.config;
   }
 
-  updateConfig(newConfig) {
-    // BaSui：验证配置的合法性
+  updateConfig(newConfig, fullUpdates = {}) {
+    if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) {
+      throw new Error('Key pool settings must be an object');
+    }
+    // BaSui: Validate the configuration
     const validAlgorithms = [
       'round-robin',
       'random',
@@ -1204,42 +1158,28 @@ class KeyPoolManager {
       'quota-aware',
       'time-window'
     ];
-    if (newConfig.algorithm && !validAlgorithms.includes(newConfig.algorithm)) {
+    if (newConfig.algorithm !== undefined && !validAlgorithms.includes(newConfig.algorithm)) {
       throw new Error(`Invalid algorithm. Must be one of: ${validAlgorithms.join(', ')}`);
     }
 
+    for (const field of ['retry', 'autoBan', 'performance', 'multiTier', 'weights']) {
+      if (newConfig[field] !== undefined && (!newConfig[field] || typeof newConfig[field] !== 'object' || Array.isArray(newConfig[field]))) {
+        throw new Error(`${field} must be an object`);
+      }
+    }
+
     if (newConfig.retry) {
-      if (typeof newConfig.retry.maxRetries !== 'undefined' && newConfig.retry.maxRetries < 0) {
+      if (newConfig.retry.maxRetries !== undefined && (!Number.isInteger(newConfig.retry.maxRetries) || newConfig.retry.maxRetries < 0)) {
         throw new Error('maxRetries must be >= 0');
       }
-      if (typeof newConfig.retry.retryDelay !== 'undefined' && newConfig.retry.retryDelay < 0) {
+      if (newConfig.retry.retryDelay !== undefined && (!Number.isFinite(newConfig.retry.retryDelay) || newConfig.retry.retryDelay < 0)) {
         throw new Error('retryDelay must be >= 0');
       }
     }
 
-    // BaSui：合并配置（深度合并）
-    if (newConfig.algorithm) {
-      this.config.algorithm = newConfig.algorithm;
-    }
-
-    if (newConfig.retry) {
-      this.config.retry = { ...this.config.retry, ...newConfig.retry };
-    }
-
-    if (newConfig.autoBan) {
-      this.config.autoBan = { ...this.config.autoBan, ...newConfig.autoBan };
-    }
-
-    if (newConfig.performance) {
-      this.config.performance = { ...this.config.performance, ...newConfig.performance };
-    }
-
-    // 🚀 BaSui：合并多级密钥池配置
-    if (newConfig.multiTier) {
-      this.config.multiTier = { ...this.config.multiTier, ...newConfig.multiTier };
-    }
-
-    this.saveKeyPool();
+    // Persist first: failed saves must not change the running selector.
+    updateFullConfig({ ...fullUpdates, key_pool: newConfig });
+    this.config = getKeyPoolConfig();
     logInfo(`Config updated: algorithm=${this.config.algorithm}, multiTier.enabled=${this.config.multiTier?.enabled}`);
     return this.config;
   }
