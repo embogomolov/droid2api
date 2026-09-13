@@ -1,5 +1,5 @@
 {
-  "enabled": true,
+  "enabled": false,
   "rules": [
     {
       "id": "rule-1",

@@ -250,37 +250,14 @@ function renderKeysTable(keys) {
         const errorCount = key.error_count || 0;
         const successRequests = key.success_requests !== undefined
             ? key.success_requests
-            : (totalRequests - errorCount);
+            : Math.max(0, totalRequests - errorCount);
         const successRate = totalRequests > 0 ? (successRequests / totalRequests) : 0;
         const successRateText = totalRequests > 0 ? (successRate * 100).toFixed(1) + '%' : 'N/A';
         const successRateClass = successRate >= 0.9 ? 'success-rate-high' :
                                successRate >= 0.7 ? 'success-rate-medium' :
                                successRate > 0 ? 'success-rate-low' : 'success-rate-none';
 
-        // BaSui: Token使用量显示（带颜色提示和剩余token）
-        let tokenUsageHtml = '-';
-        if (key.token_usage) {
-            const { used, limit, remaining, percentage } = key.token_usage;
-            const percentNum = parseFloat(percentage);
-            let tokenColor = '#10b981';  // 绿色 (低使用率)
-            if (percentNum > 80) {
-                tokenColor = '#ef4444';  // 红色 (高使用率)
-            } else if (percentNum > 60) {
-                tokenColor = '#f59e0b';  // 橙色
-            } else if (percentNum > 40) {
-                tokenColor = '#fbbf24';  // 黄色
-            }
-
-            tokenUsageHtml = `
-                <div style="display: flex; flex-direction: column; align-items: center;">
-                    <span style="font-weight: 600;">${formatTokens(used)} / ${formatTokens(limit)}</span>
-                    <span style="color: ${tokenColor}; font-size: 0.85em;">(剩余 ${formatTokens(remaining)})</span>
-                    <span style="color: ${tokenColor}; font-weight: 600;">${percentage}%</span>
-                </div>
-            `;
-        }
-
-        // BaSui：密钥池显示（小字体、横向、无emoji）
+        // BaSui: Compact horizontal pool label without emoji
         const poolGroupDisplay = key.poolGroup || 'default';
         const poolGroupBadge = poolGroupDisplay === 'default'
             ? `<span class="pool-badge-compact pool-default">${poolGroupDisplay}</span>`
@@ -296,20 +273,20 @@ function renderKeysTable(keys) {
             <td>${successRequests}</td>
             <td>${errorCount}</td>
             <td><span class="${successRateClass}">${successRateText}</span></td>
-            <td>${tokenUsageHtml}</td>
+            <td data-key-limits="${escapeHtml(key.id)}">Loading limits…</td>
             <td><span class="score-badge">${(key.weight_score || 0).toFixed(1)}</span></td>
             <td>${formatDate(key.last_used_at)}</td>
             <td>${testResultHtml}</td>
             <td>${key.notes || '-'}</td>
             <td>
-                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm">测试</button>
+                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm">Test</button>
                 <button onclick="toggleKeyStatus('${key.id}', '${key.status}')" class="btn ${getToggleButtonClass(key.status)} btn-sm">
                     ${getToggleButtonText(key.status)}
                 </button>
-                <button onclick="showEditKeyModal('${key.id}', '${key.key}', '${escapeHtml(key.notes || '')}', '${poolGroupDisplay}')" class="btn btn-primary btn-sm">编辑</button>
-                <button onclick="showEditNotesModal('${key.id}', '${escapeHtml(key.notes || '')}')" class="btn btn-secondary btn-sm">备注</button>
-                <button onclick="showChangePoolModal('${key.id}', '${poolGroupDisplay}')" class="btn btn-warning btn-sm">修改池</button>
-                <button onclick="deleteKey('${key.id}')" class="btn btn-danger btn-sm">删除</button>
+                <button onclick="showEditKeyModal('${key.id}', '${key.key}', '${escapeHtml(key.notes || '')}', '${poolGroupDisplay}')" class="btn btn-primary btn-sm">Edit</button>
+                <button onclick="showEditNotesModal('${key.id}', '${escapeHtml(key.notes || '')}')" class="btn btn-secondary btn-sm">Notes</button>
+                <button onclick="showChangePoolModal('${key.id}', '${poolGroupDisplay}')" class="btn btn-warning btn-sm">Move pool</button>
+                <button onclick="deleteKey('${key.id}')" class="btn btn-danger btn-sm">Delete</button>
             </td>
         </tr>
         `;
@@ -323,6 +300,7 @@ function renderKeysTable(keys) {
     // Replace the tbody contents in one operation
     tbody.innerHTML = '';
     tbody.appendChild(fragment);
+    if (document.getElementById('limitsRows')) updateBalanceDisplay();
 }
 
 // Render pagination
@@ -331,9 +309,9 @@ function renderPagination(pagination) {
     const { page, total_pages, total } = pagination;
 
     container.innerHTML = `
-        <button ${page <= 1 ? 'disabled' : ''} onclick="changePage(${page - 1})">上一页</button>
-        <span class="page-info">第 ${page} / ${total_pages} 页 (共 ${total} 条)</span>
-        <button ${page >= total_pages ? 'disabled' : ''} onclick="changePage(${page + 1})">下一页</button>
+        <button ${page <= 1 ? 'disabled' : ''} onclick="changePage(${page - 1})">Previous</button>
+        <span class="page-info">Page ${page} of ${total_pages} (${total} records)</span>
+        <button ${page >= total_pages ? 'disabled' : ''} onclick="changePage(${page + 1})">Next</button>
     `;
 }
 
@@ -383,7 +361,7 @@ function getToggleButtonText(status) {
 function formatDate(dateStr) {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
-    return date.toLocaleString('zh-CN');
+    return date.toLocaleString('en-US');
 }
 
 function escapeHtml(text) {
@@ -745,7 +723,7 @@ async function executeBatchToggleStatus(keyIds, status) {
             status
         });
         
-        alert(`✅ 批量${action}成功！\n已${action} ${result.data.count} 个密钥`);
+        alert(`✅ ${action} completed for ${result.data.count} keys.`);
         closeModal('batchActionModal');
         refreshData();
     } catch (err) {
@@ -915,9 +893,9 @@ async function batchImport() {
         resultDiv.innerHTML = `
             <h3>${statusEmoji} ${summaryText}</h3>
             <div class="result-details">
-                <p>✅ 成功导入: ${result.success} 个</p>
-                <p>🔄 已存在(跳过): ${result.duplicate} 个</p>
-                <p>❌ 格式错误: ${result.invalid} 个</p>
+                <p>✅ Imported: ${result.success}</p>
+                <p>🔄 Already present (skipped): ${result.duplicate}</p>
+                <p>❌ Invalid format: ${result.invalid}</p>
             </div>
             ${result.errors && result.errors.length > 0 ? `<p class=\"error-info\">Error details: ${result.errors.join(', ')}</p>` : ''}
         `;
@@ -989,7 +967,7 @@ async function exportKeys() {
         }, 100);
 
         // BaSui: Show the success message
-        alert(`✅ 导出成功！\n文件名：${filename}\n状态筛选：${status === 'all' ? '全部' : status}`);
+        alert(`✅ Export complete.\nFilename: ${filename}\nStatus filter: ${status === 'all' ? 'All' : status}`);
 
     } catch (err) {
         alert('❌ Export failed: ' + err.message);
@@ -1506,15 +1484,15 @@ function renderStatusChart(keys) {
         <div class="pie-chart-legend">
             <div class="pie-legend-item">
                 <div class="pie-legend-color" style="background: #28a745;"></div>
-                <span>可用 (${statusCount.active})</span>
+                <span>Active (${statusCount.active})</span>
             </div>
             <div class="pie-legend-item">
                 <div class="pie-legend-color" style="background: #ffc107;"></div>
-                <span>已禁用 (${statusCount.disabled})</span>
+                <span>Disabled (${statusCount.disabled})</span>
             </div>
             <div class="pie-legend-item">
                 <div class="pie-legend-color" style="background: #dc3545;"></div>
-                <span>已封禁 (${statusCount.banned})</span>
+                <span>Blocked by proxy (${statusCount.banned})</span>
             </div>
         </div>
     `;
@@ -1767,11 +1745,11 @@ async function updateTokenUsageDisplay() {
     if (tokenCard) {
         tokenCard.innerHTML = `
             <div class="stat-value">${formatTokenNumber(totalTokens)}</div>
-            <div class="stat-label">总Token使用量</div>
+            <div class="stat-label">Total tokens used</div>
             <div class="token-details">
-                <div>总请求数: ${formatNumber(totalRequests)}</div>
-                <div>今日使用: ${formatTokenNumber(todayTokens)} tokens</div>
-                <div>今日请求: ${todayRequests} 次</div>
+                <div>Total requests: ${formatNumber(totalRequests)}</div>
+                <div>Used today: ${formatTokenNumber(todayTokens)} tokens</div>
+                <div>Requests today: ${todayRequests}</div>
             </div>
         `;
     }
@@ -1839,7 +1817,7 @@ async function fetchAllBalances(forceRefresh = false) {
     updateBalanceDisplay();
     return;
 
-    /* 原始代码 - 等待后端实现后启用
+    /* Original implementation; enable when the backend is ready
     try {
         const url = forceRefresh
             ? '/factory/balance/all?forceRefresh=true'
@@ -1885,7 +1863,7 @@ async function checkKeyBalance(keyId) {
     console.warn('Single-key balance queries are currently unavailable.');
     return null;
 
-    /* 原始代码 - 等待后端实现后启用
+    /* Original implementation; enable when the backend is ready
     try {
         // Use the Factory-specific API with caching
         const response = await fetch(`/factory/balance/check/${keyId}`, {
@@ -2054,8 +2032,8 @@ function formatNumber(num) {
 async function refreshBalanceData(forceRefresh = false) {
     try {
         const url = forceRefresh 
-            ? '/admin/token/usage?forceRefresh=true' 
-            : '/admin/token/usage';
+            ? '/admin/token/limits?forceRefresh=true' 
+            : '/admin/token/limits';
         
         const response = await fetch(url, {
             headers: {
@@ -2082,151 +2060,59 @@ async function refreshBalanceData(forceRefresh = false) {
             document.getElementById('balanceOverview').style.display = 'block';
         }
     } catch (err) {
-        console.error('刷新余额数据失败:', err);
-        // 静默失败,不影响其他功能
+        console.error('Failed to refresh balance data:', err);
+        document.getElementById('limitsSummary').textContent = 'Limits refresh failed. Displayed data may be stale.';
+        // Fail quietly without disrupting other features
     }
 }
 
-// 更新余额显示
+function limitWindowHtml(window, stale = false) {
+    if (!window || !Number.isFinite(window.usedPercent) || window.usedPercent < 0) {
+        return '<div class="limit-meter is-unknown"><strong>No data</strong><div class="limit-meter-empty" aria-hidden="true"></div><small>Awaiting Factory</small></div>';
+    }
+    const end = Date.parse(window.windowEnd);
+    const resetDue = Number.isFinite(end) && end <= Date.now();
+    const used = resetDue ? 0 : window.usedPercent;
+    const value = Math.min(100, used);
+    const uncertain = stale;
+    const tone = uncertain ? 'is-unknown' : used >= 90 ? 'is-critical' : used >= 70 ? 'is-warning' : 'is-healthy';
+    const reset = resetDue || window.awaitingStart || (!Number.isFinite(end) && used === 0)
+        ? 'Starts with next use'
+        : Number.isFinite(end) ? 'Resets ' + new Date(end).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Reset not reported';
+    const label = `${used}% ${uncertain ? 'last reported' : 'used'}`;
+    return `<div class="limit-meter ${tone}">
+        <div class="limit-meter-heading"><strong>${used}%</strong><span>${uncertain ? 'last reported' : `${Math.max(0, 100 - used)}% left`}</span></div>
+        <meter min="0" max="100" low="70" high="90" optimum="0" value="${value}" aria-label="${label}">${used}%</meter>
+        <small>${escapeHtml(reset)}</small>
+    </div>`;
+}
+
 function updateBalanceDisplay() {
-    // 确保数据结构完整
-    const keys = factoryBalanceData.keys || {};
-    const summary = factoryBalanceData.summary || {};
-
-    // 如果没有任何密钥数据，静默返回（避免初始加载时的警告）
-    if (Object.keys(keys).length === 0) {
-        console.debug('余额数据尚未加载');
-        return;
-    }
-
-    // 计算总余额
-    let totalRemaining = 0;
-    let totalUsed = 0;
-    let totalLimit = 0;
-    let earliestExpiry = null;
-
-    Object.values(keys).forEach(keyData => {
-        // BaSui修复：兼容性判断，只要有standard字段就处理
-        if (keyData.standard) {
-            // 只统计成功的数据（success不为false）
-            if (keyData.success !== false) {
-                totalRemaining += keyData.standard.remaining || 0;
-                totalUsed += keyData.standard.orgTotalTokensUsed || 0;
-                totalLimit += keyData.standard.totalAllowance || 0;
-            }
-
-            // 找到最早过期时间
-            if (keyData.trialEndDate) {
-                const expiryTime = new Date(keyData.trialEndDate).getTime();
-                if (!earliestExpiry || expiryTime < earliestExpiry.time) {
-                    earliestExpiry = {
-                        time: expiryTime,
-                        date: keyData.trialEndDate
-                    };
-                }
-            }
-        }
+    const entries = Object.entries(factoryBalanceData.keys || {});
+    document.getElementById('limitsSummary').textContent = entries.length
+        ? 'Updated automatically every minute. Unknown/stale data does not prove an account is exhausted.'
+        : 'No keys configured.';
+    document.getElementById('limitsRows').innerHTML = entries.flatMap(([id, key]) =>
+        ['standard', 'core'].map(group => {
+            const state = key[group];
+            let status = key.status !== 'active' ? key.status : !key.tested ? 'Not tested'
+                : !state.available ? 'Waiting until ' + new Date(state.retryAt).toLocaleString()
+                : !state.known || state.stale ? 'Unknown; next request can check' : 'Available';
+            if (state.extraUsage) status += ' — prepaid Extra Usage enabled';
+            if (key.error) status += ' — limits refresh failed';
+            return `<tr><td><code title="${escapeHtml(id)}">…${escapeHtml(id.slice(-9))}</code></td><td>${group === 'standard' ? 'Standard' : 'Droid Core'}</td>
+                ${['fiveHour','weekly','monthly'].map(name => `<td>${limitWindowHtml(state.windows?.[name], state.stale)}</td>`).join('')}
+                <td>${escapeHtml(status)}</td><td>${key.fetchedAt ? escapeHtml(new Date(key.fetchedAt).toLocaleString()) : 'Never'}</td></tr>`;
+        })).join('');
+    document.querySelectorAll('[data-key-limits]').forEach(cell => {
+        const state = factoryBalanceData.keys?.[cell.dataset.keyLimits]?.standard;
+        cell.innerHTML = state ? ['fiveHour','weekly','monthly'].map((name, i) =>
+            `<div>${['5h','7d','30d'][i]}: ${limitWindowHtml(state.windows?.[name], state.stale)}</div>`).join('') : 'Unknown';
     });
-
-    // 更新统计卡片
-    document.getElementById('totalRemainingBalance').textContent = formatTokens(totalRemaining);
-    document.getElementById('totalUsedBalance').textContent = formatTokens(totalUsed);
-    document.getElementById('totalAllowanceBalance').textContent = formatTokens(totalLimit);
-
-    // 更新过期倒计时
-    updateExpiryCountdown(earliestExpiry);
 }
 
-// 更新过期倒计时显示
-function updateExpiryCountdown(earliestExpiry) {
-    const countdownEl = document.getElementById('expiryCountdown');
-    const hintEl = document.getElementById('expiryHint');
-    const cardEl = document.getElementById('expiryCard');
-    const warningEl = document.getElementById('expiryWarning');
-    const warningTextEl = document.getElementById('expiryWarningText');
-
-    if (!earliestExpiry) {
-        countdownEl.textContent = '无过期';
-        hintEl.textContent = '所有密钥永久有效';
-        cardEl.className = 'balance-stat-card balance-expiry expiry-safe';
-        warningEl.style.display = 'none';
-        return;
-    }
-
-    const now = Date.now();
-    const expiryTime = earliestExpiry.time;
-    const diffMs = expiryTime - now;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    // 格式化倒计时显示
-    if (diffMs < 0) {
-        countdownEl.textContent = '已过期';
-        hintEl.textContent = '密钥已失效';
-        cardEl.className = 'balance-stat-card balance-expiry expiry-critical';
-        
-        warningEl.style.display = 'flex';
-        warningEl.className = 'expiry-warning critical';
-        warningTextEl.textContent = '有密钥已过期!请及时更新!';
-    } else if (diffDays < 3) {
-        // 3天内过期 - 危急
-        countdownEl.textContent = diffDays === 0 
-            ? `${diffHours}小时${diffMinutes}分` 
-            : `${diffDays}天${diffHours}小时`;
-        hintEl.textContent = `${new Date(expiryTime).toLocaleDateString()} 过期`;
-        cardEl.className = 'balance-stat-card balance-expiry expiry-critical';
-        
-        warningEl.style.display = 'flex';
-        warningEl.className = 'expiry-warning critical';
-        warningTextEl.textContent = `警告!最早将在${diffDays}天${diffHours}小时后过期!`;
-    } else if (diffDays < 7) {
-        // 7天内过期 - 警告
-        countdownEl.textContent = `${diffDays}天${diffHours}小时`;
-        hintEl.textContent = `${new Date(expiryTime).toLocaleDateString()} 过期`;
-        cardEl.className = 'balance-stat-card balance-expiry expiry-warning';
-        
-        warningEl.style.display = 'flex';
-        warningEl.className = 'expiry-warning';
-        warningTextEl.textContent = `注意!最早将在${diffDays}天后过期,请提前准备!`;
-    } else {
-        // 7天以上 - 安全
-        countdownEl.textContent = `${diffDays}天`;
-        hintEl.textContent = `${new Date(expiryTime).toLocaleDateString()} 过期`;
-        cardEl.className = 'balance-stat-card balance-expiry expiry-safe';
-        
-        warningEl.style.display = 'none';
-    }
-}
-
-// 启动倒计时定时器 (每分钟更新一次)
 function startCountdownTimer() {
-    // 清除旧定时器
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-    }
-
-    // 启动新定时器
-    countdownInterval = setInterval(() => {
-        const { keys } = factoryBalanceData;
-        if (!keys) return;
-
-        // 重新计算最早过期时间
-        let earliestExpiry = null;
-        Object.values(keys).forEach(keyData => {
-            if (keyData.success && keyData.trialEndDate) {
-                const expiryTime = new Date(keyData.trialEndDate).getTime();
-                if (!earliestExpiry || expiryTime < earliestExpiry.time) {
-                    earliestExpiry = {
-                        time: expiryTime,
-                        date: keyData.trialEndDate
-                    };
-                }
-            }
-        });
-
-        updateExpiryCountdown(earliestExpiry);
-    }, 60000); // 每分钟更新一次
+    if (!countdownInterval) countdownInterval = setInterval(() => refreshBalanceData(false), 60000);
 }
 
 // Refresh balance data on page load via refreshData
@@ -2865,7 +2751,7 @@ function exportLogs() {
     try {
         // Build the log text
         let logText = `# droid2api Live log export\n`;
-        logText += `# 导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
+        logText += `# Exported at: ${new Date().toLocaleString('en-US')}\n`;
         logText += `# Total entries: ${logEntries.length}\n\n`;
 
         logEntries.forEach(log => {

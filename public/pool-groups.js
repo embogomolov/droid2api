@@ -78,10 +78,10 @@ function renderPoolGroups() {
         grid.innerHTML = `
             <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: rgba(255,255,255,0.95); border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                 <div style="font-size: 3em; margin-bottom: 15px;">🎯</div>
-                <h3 style="color: #666; margin-bottom: 10px;">暂无密钥池</h3>
-                <p style="color: #999; margin-bottom: 20px;">点击下方"➕ 创建密钥池"按钮开始创建您的第一个密钥池！</p>
+                <h3 style="color: #666; margin-bottom: 10px;">No key pools yet</h3>
+                <p style="color: #999; margin-bottom: 20px;">Click Create pool below to create your first key pool.</p>
                 <button onclick="showCreatePoolModal()" class="btn btn-primary" style="font-size: 16px; padding: 12px 30px;">
-                    ➕ 创建第一个密钥池
+                    ➕ Create your first pool
                 </button>
             </div>
         `;
@@ -122,27 +122,27 @@ function renderPoolGroups() {
                 <div class="pool-token-section" style="margin-top: 15px; padding: 15px; background: ${tokenBgColor}; border-radius: 12px; border: 2px solid ${tokenColor};">
                     <div class="pool-token-header" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
                         <span style="font-size: 20px;">💰</span>
-                        <span style="font-weight: 700; color: ${tokenColor}; font-size: 14px;">Token使用统计</span>
+                        <span style="font-weight: 700; color: ${tokenColor}; font-size: 14px;">Token usage statistics</span>
                     </div>
                     <div class="pool-token-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
                         <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                             <div style="font-size: 18px; font-weight: 700; color: ${tokenColor}; margin-bottom: 4px;">${formatTokens(total_used)}</div>
-                            <div style="font-size: 12px; color: #6b7280;">已使用</div>
+                            <div style="font-size: 12px; color: #6b7280;">Used</div>
                         </div>
                         <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                             <div style="font-size: 18px; font-weight: 700; color: #10b981; margin-bottom: 4px;">${formatTokens(total_remaining)}</div>
-                            <div style="font-size: 12px; color: #6b7280;">剩余</div>
+                            <div style="font-size: 12px; color: #6b7280;">Remaining</div>
                         </div>
                         <div class="pool-token-item" style="text-align: center; padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                             <div style="font-size: 18px; font-weight: 700; color: #6b7280; margin-bottom: 4px;">${formatTokens(total_limit)}</div>
-                            <div style="font-size: 12px; color: #6b7280;">总额度</div>
+                            <div style="font-size: 12px; color: #6b7280;">Total quota</div>
                         </div>
                     </div>
                     <div class="pool-token-progress">
                         <div class="pool-progress-bar" style="height: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; overflow: hidden;">
                             <div class="pool-progress-fill" style="width: ${percentage}%; height: 100%; background: linear-gradient(90deg, ${tokenColor}, ${tokenColor}dd); transition: width 0.3s ease;"></div>
                         </div>
-                        <div class="pool-progress-text" style="text-align: center; margin-top: 6px; font-weight: 600; color: ${tokenColor}; font-size: 13px;">⚡ 使用率：${percentage}%</div>
+                        <div class="pool-progress-text" style="text-align: center; margin-top: 6px; font-weight: 600; color: ${tokenColor}; font-size: 13px;">⚡ Usage: ${percentage}%</div>
                     </div>
                 </div>
             `;
@@ -151,8 +151,8 @@ function renderPoolGroups() {
                 <div class="pool-token-section" style="margin-top: 15px; padding: 15px; background: rgba(156, 163, 175, 0.1); border-radius: 12px; border: 2px dashed #d1d5db;">
                     <div style="text-align: center; color: #9ca3af;">
                         <div style="font-size: 32px; margin-bottom: 8px;">📊</div>
-                        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">暂无Token使用数据</div>
-                        <div style="font-size: 12px;">该池子的密钥尚未同步Token统计</div>
+                        <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">No token usage data</div>
+                        <div style="font-size: 12px;">Token statistics for this pool have not been synchronized yet.</div>
                     </div>
                 </div>
             `;
@@ -162,7 +162,7 @@ function renderPoolGroups() {
             <div class="pool-group-card ${statusClass}">
                 <div class="pool-group-header">
                     <div class="pool-group-title">
-                        <span class="pool-group-priority">优先级 ${group.priority}</span>
+                        <span class="pool-group-priority">Priority ${group.priority}</span>
                         <h3>${group.name}</h3>
                     </div>
                     <div class="pool-group-actions">
@@ -174,26 +174,26 @@ function renderPoolGroups() {
                 <div class="pool-group-stats">
                     <div class="pool-stat">
                         <div class="pool-stat-value">${group.total}</div>
-                        <div class="pool-stat-label">总密钥</div>
+                        <div class="pool-stat-label">Total keys</div>
                     </div>
                     <div class="pool-stat pool-stat-success">
                         <div class="pool-stat-value">${group.active}</div>
-                        <div class="pool-stat-label">可用</div>
+                        <div class="pool-stat-label">Active</div>
                     </div>
                     <div class="pool-stat pool-stat-warning">
                         <div class="pool-stat-value">${group.disabled}</div>
-                        <div class="pool-stat-label">禁用</div>
+                        <div class="pool-stat-label">Disabled</div>
                     </div>
                     <div class="pool-stat pool-stat-danger">
                         <div class="pool-stat-value">${group.banned}</div>
-                        <div class="pool-stat-label">封禁</div>
+                        <div class="pool-stat-label">Blocked by proxy</div>
                     </div>
                 </div>
                 <div class="pool-group-progress">
                     <div class="pool-progress-bar">
                         <div class="pool-progress-fill" style="width: ${usagePercent}%"></div>
                     </div>
-                    <div class="pool-progress-text">可用率：${usagePercent}%</div>
+                    <div class="pool-progress-text">Active keys: ${usagePercent}%</div>
                 </div>
                 ${tokenStatsHtml}
                 ${group.description ? `<div class="pool-group-description">${escapeHtml(group.description)}</div>` : ''}
@@ -564,35 +564,15 @@ window.renderKeysTable = function(keys) {
         const errorCount = key.error_count || 0;
         const successRequests = key.success_requests !== undefined
             ? key.success_requests
-            : (totalRequests - errorCount);
+            : Math.max(0, totalRequests - errorCount);
         const successRate = totalRequests > 0 ? (successRequests / totalRequests) : 0;
         const successRateText = totalRequests > 0 ? (successRate * 100).toFixed(1) + '%' : 'N/A';
         const successRateClass = successRate >= 0.9 ? 'success-rate-high' :
                                successRate >= 0.7 ? 'success-rate-medium' :
                                successRate > 0 ? 'success-rate-low' : 'success-rate-none';
 
-        // Token使用量显示
-        let tokenUsageHtml = '-';
-        if (key.token_usage) {
-            const { used, limit, remaining, percentage } = key.token_usage;
-            const percentNum = parseFloat(percentage);
-            let tokenColor = '#10b981';
-            if (percentNum > 80) {
-                tokenColor = '#ef4444';
-            } else if (percentNum > 60) {
-                tokenColor = '#f59e0b';
-            } else if (percentNum > 40) {
-                tokenColor = '#fbbf24';
-            }
+        // Display token usage
 
-            tokenUsageHtml = `
-                <div style="display: flex; flex-direction: column; align-items: center;">
-                    <span style="font-weight: 600;">${formatTokens(used)} / ${formatTokens(limit)}</span>
-                    <span style="color: ${tokenColor}; font-size: 0.85em;">(剩余 ${formatTokens(remaining)})</span>
-                    <span style="color: ${tokenColor}; font-weight: 600;">${percentage}%</span>
-                </div>
-            `;
-        }
 
         // 🎯 Display key pool labels
         const poolGroup = key.poolGroup || 'default';
@@ -602,7 +582,7 @@ window.renderKeysTable = function(keys) {
                 ${poolGroupName}
             </span>
             <button onclick="showChangePoolModal('${key.id}')" class="btn btn-info btn-sm" style="margin-top: 5px;">
-                🔄 改池
+                🔄 Move pool
             </button>
         `;
 
@@ -616,23 +596,24 @@ window.renderKeysTable = function(keys) {
             <td>${successRequests}</td>
             <td>${errorCount}</td>
             <td><span class="${successRateClass}">${successRateText}</span></td>
-            <td>${tokenUsageHtml}</td>
+            <td data-key-limits="${escapeHtml(key.id)}">Loading limits…</td>
             <td><span class="score-badge">${(key.weight_score || 0).toFixed(1)}</span></td>
             <td>${formatDate(key.last_used_at)}</td>
             <td>${testResultHtml}</td>
             <td>${key.notes || '-'}</td>
             <td>
-                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm">测试</button>
+                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm">Test</button>
                 <button onclick="toggleKeyStatus('${key.id}', '${key.status}')" class="btn ${getToggleButtonClass(key.status)} btn-sm">
                     ${getToggleButtonText(key.status)}
                 </button>
-                <button onclick="showEditKeyModal('${key.id}', '${key.key}', '${escapeHtml(key.notes || '')}', '${poolGroup}')" class="btn btn-primary btn-sm">编辑</button>
-                <button onclick="showEditNotesModal('${key.id}', '${escapeHtml(key.notes || '')}')" class="btn btn-secondary btn-sm">备注</button>
-                <button onclick="deleteKey('${key.id}')" class="btn btn-danger btn-sm">删除</button>
+                <button onclick="showEditKeyModal('${key.id}', '${key.key}', '${escapeHtml(key.notes || '')}', '${poolGroup}')" class="btn btn-primary btn-sm">Edit</button>
+                <button onclick="showEditNotesModal('${key.id}', '${escapeHtml(key.notes || '')}')" class="btn btn-secondary btn-sm">Notes</button>
+                <button onclick="deleteKey('${key.id}')" class="btn btn-danger btn-sm">Delete</button>
             </td>
         </tr>
         `;
     }).join('');
+    if (typeof updateBalanceDisplay === 'function') updateBalanceDisplay();
 };
 
 /**

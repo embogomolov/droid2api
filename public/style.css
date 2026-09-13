@@ -17,7 +17,7 @@ body {
     position: relative;
 }
 
-/* 海洋波纹背景效果 */
+/* Ocean ripple background */
 body::before {
     content: '';
     position: fixed;
@@ -31,7 +31,7 @@ body::before {
     animation: floatingBubbles 30s ease-in-out infinite;
 }
 
-/* 添加动态光效 */
+/* Add animated lighting */
 body::after {
     content: '';
     position: fixed;
@@ -44,7 +44,7 @@ body::after {
     z-index: -1;
 }
 
-/* 删除未使用的动画 */
+/* Unused animations removed */
 
 
 
@@ -144,7 +144,7 @@ header h1 {
     font-weight: 600;
 }
 
-/* 全局提示信息 */
+/* Global notices */
 .hint {
     text-align: center;
     color: #6b7280;
@@ -170,7 +170,7 @@ header h1 {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
 }
 
-/* 统计卡片 */
+/* Statistics cards */
 .stats-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -214,7 +214,7 @@ header h1 {
     opacity: 1;
 }
 
-/* 统计图标 */
+/* Statistics icons */
 .stat-icon {
     font-size: 3.5em;
     line-height: 1;
@@ -228,7 +228,7 @@ header h1 {
     50% { transform: translateY(-5px); }
 }
 
-/* 统计内容区 */
+/* Statistics content area */
 .stat-content {
     flex: 1;
     z-index: 1;
@@ -243,6 +243,11 @@ header h1 {
     text-shadow: 2px 2px 4px rgba(0,0,0,0.05);
 }
 
+#statAlgorithm {
+    font-size: 1.3rem;
+    overflow-wrap: anywhere;
+}
+
 .stat-label {
     color: #666;
     font-size: 1em;
@@ -251,7 +256,7 @@ header h1 {
     letter-spacing: 0.5px;
 }
 
-/* 不同类型卡片的配色 */
+/* Colors for each card type */
 .stat-card.stat-primary {
     background: linear-gradient(135deg, rgba(224, 242, 254, 0.5) 0%, rgba(186, 230, 253, 0.5) 100%);
 }
@@ -287,7 +292,7 @@ header h1 {
 .stat-card.stat-info:hover { border-color: #3b82f6; }
 .stat-card.stat-info .stat-value { color: #2563eb; }
 
-/* 第二行统计卡片的特殊配色 */
+/* Distinct colors for the second row of statistics cards */
 .stat-card.stat-token-used {
     background: linear-gradient(135deg, rgba(207, 250, 254, 0.5) 0%, rgba(165, 243, 252, 0.5) 100%);
 }
@@ -316,7 +321,7 @@ header h1 {
 .stat-card.stat-requests-today:hover { border-color: #f97316; }
 .stat-card.stat-requests-today .stat-value { color: #ea580c; }
 
-/* 淡入上移动画 */
+/* Fade in while moving upward */
 @keyframes fadeInUp {
     from {
         opacity: 0;
@@ -328,7 +333,7 @@ header h1 {
     }
 }
 
-/* 操作按钮区域 */
+/* Action button area */
 .actions-container {
     display: flex;
     gap: 12px;
@@ -336,11 +341,11 @@ header h1 {
     flex-wrap: wrap;
     justify-content: center;
     background: linear-gradient(135deg, rgba(233, 213, 255, 0.2) 0%, rgba(216, 180, 254, 0.2) 100%);
-    /* BaSui：增加按钮区域的内边距，让按钮更舒展！*/
+    /* BaSui: Increase padding around the action buttons to give them more room.*/
     padding: 24px 25px;
     border-radius: 16px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.12);
-    /* BaSui：添加玻璃拟态效果 */
+    /* BaSui: Add a frosted glass effect */
     backdrop-filter: blur(10px);
     border: 1px solid rgba(102, 126, 234, 0.1);
 }
@@ -438,30 +443,30 @@ header h1 {
 }
 
 .btn-sm {
-    /* BaSui：增加按钮内边距，让按钮更好点击！*/
+    /* BaSui: Increase button padding for larger click targets.*/
     padding: 8px 14px;
     font-size: 12px;
     border-radius: 8px;
     font-weight: 600;
     letter-spacing: 0.3px;
-    /* BaSui：增加最小高度，确保视觉统一 */
+    /* BaSui: Set a greater minimum height for visual consistency */
     min-height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-/* BaSui：表格内按钮间距优化 */
+/* BaSui: Improve spacing between table buttons */
 .keys-table .btn-sm {
     margin: 3px 2px;
     min-width: 52px;
     white-space: nowrap;
 }
 
-/* 筛选区域 */
+/* Filter area */
 .filter-container {
     background: linear-gradient(135deg, rgba(219, 234, 254, 0.3) 0%, rgba(191, 219, 254, 0.3) 100%);
-    /* BaSui：增加筛选区域的内边距，让它更舒适！*/
+    /* BaSui: Increase padding to give the filter controls more room.*/
     padding: 20px 25px;
     border-radius: 16px;
     margin-bottom: 20px;
@@ -469,7 +474,7 @@ header h1 {
     align-items: center;
     gap: 15px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.12);
-    /* BaSui：添加玻璃拟态效果 */
+    /* BaSui: Add a frosted glass effect */
     backdrop-filter: blur(10px);
     border: 1px solid rgba(102, 126, 234, 0.1);
 }
@@ -501,14 +506,14 @@ header h1 {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-/* 表格样式 */
+/* Table styles */
 .table-container {
     border-radius: 20px;
     overflow: hidden;
-    /* BaSui：更强的阴影效果，增加表格的层次感！*/
+    /* BaSui: Use a stronger shadow to give the table more depth.*/
     box-shadow: 0 10px 30px rgba(59, 130, 246, 0.15);
     border: 1px solid rgba(59, 130, 246, 0.15);
-    /* BaSui：添加玻璃拟态效果 */
+    /* BaSui: Add a frosted glass effect */
     backdrop-filter: blur(10px);
     background: linear-gradient(135deg, rgba(219, 234, 254, 0.4) 0%, rgba(191, 219, 254, 0.4) 100%);
 }
@@ -535,12 +540,12 @@ header h1 {
 }
 
 .keys-table td {
-    /* BaSui：增加行高，让内容不那么挤！从 14px → 20px */
+    /* BaSui: Increase row padding from 14px to 20px to reduce crowding. */
     padding: 20px 12px;
     border-bottom: 1px solid #f0f0f0;
     font-size: 13px;
     vertical-align: middle;
-    /* BaSui：确保内容垂直居中对齐 */
+    /* BaSui: Keep cell content vertically centered */
 }
 
 .keys-table tbody tr {
@@ -555,7 +560,7 @@ header h1 {
         -5px 0 0 rgba(59, 130, 246, 0.8),
         0 4px 20px rgba(59, 130, 246, 0.2),
         inset 0 1px 0 rgba(255, 255, 255, 0.5);
-    /* BaSui：极致美化 - 表格行悬停3D效果 ✨ */
+    /* BaSui: Visual enhancement: 3D table row hover effect ✨ */
     position: relative;
     z-index: 1;
 }
@@ -573,14 +578,14 @@ header h1 {
     letter-spacing: 0.8px;
     box-shadow: 0 3px 8px rgba(0,0,0,0.15);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    /* BaSui：徽章加上轻微的3D效果 */
+    /* BaSui: Add a subtle 3D effect to badges */
     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .status-badge:hover {
     transform: scale(1.08) translateY(-2px);
     box-shadow: 0 5px 15px rgba(0,0,0,0.25);
-    /* BaSui：鼠标悬停时弹跳起来 ✨ */
+    /* BaSui: Lift on hover ✨ */
 }
 
 .status-active {
@@ -612,7 +617,7 @@ header h1 {
     cursor: help;
 }
 
-/* BaSui：让用户鼠标悬停时能看到完整的错误信息 */
+/* BaSui: Show the full error message on hover */
 .test-failed:hover {
     text-decoration: underline;
 }
@@ -628,7 +633,7 @@ header h1 {
     color: #2196f3;
     font-weight: 600;
     font-size: 16px;
-    /* BaSui：Loading 加上脉冲动画 ✨ */
+    /* BaSui: Add a pulse animation to the loading indicator ✨ */
     animation: loadingPulse 1.5s ease-in-out infinite;
 }
 
@@ -643,7 +648,7 @@ header h1 {
     }
 }
 
-/* 分页 */
+/* Pagination */
 .pagination {
     display: flex;
     justify-content: center;
@@ -676,7 +681,7 @@ header h1 {
     font-weight: 500;
 }
 
-/* 模态框 - BaSui美化版 */
+/* Dialogs - visual enhancements by BaSui */
 .modal {
     display: none;
     position: fixed;
@@ -685,7 +690,7 @@ header h1 {
     top: 0;
     width: 100%;
     height: 100%;
-    /* BaSui：更深的背景遮罩 + 更强的模糊效果 */
+    /* BaSui: Darker overlay with stronger background blur */
     background: rgba(0,0,0,0.75);
     backdrop-filter: blur(12px);
     animation: fadeIn 0.4s ease;
@@ -703,9 +708,9 @@ header h1 {
     border-radius: 24px;
     width: 90%;
     max-width: 550px;
-    max-height: 80vh; /* BaSui：限制最大高度，防止内容太长覆盖整个页面 */
-    overflow-y: auto; /* BaSui：内容超出时可以滚动 */
-    /* BaSui：更强的阴影 + 边框光晕效果 ✨ */
+    max-height: 80vh; /* BaSui: Limit height so long content does not cover the entire page */
+    overflow-y: auto; /* BaSui: Allow scrolling when content overflows */
+    /* BaSui: Stronger shadow and glowing border ✨ */
     box-shadow: 0 25px 80px rgba(0,0,0,0.5),
                 0 0 0 1px rgba(255,255,255,0.1);
     position: relative;
@@ -713,7 +718,7 @@ header h1 {
     border: 2px solid rgba(102, 126, 234, 0.1);
 }
 
-/* BaSui：极致美化 - 模态框3D弹跳效果！🎉 */
+/* BaSui: Visual enhancement: 3D dialog entrance bounce.🎉 */
 @keyframes modalSlideUp {
     0% {
         transform: translateY(100px) scale(0.8) rotateX(20deg);
@@ -789,7 +794,7 @@ header h1 {
     outline: none;
     border-color: #4facfe;
     background: #f8fafc;
-    /* BaSui：聚焦时添加发光效果 + 轻微缩放 ✨ */
+    /* BaSui: Add a glow and slight scale change on focus ✨ */
     box-shadow: 0 0 0 5px rgba(102, 126, 234, 0.15),
                 0 4px 15px rgba(102, 126, 234, 0.2);
     transform: scale(1.01);
@@ -841,22 +846,22 @@ header h1 {
     opacity: 0.8;
 }
 
-/* BaSui：配置模态框样式 */
+/* BaSui: Configuration dialog styles */
 .modal-content-large {
     max-width: 700px;
-    max-height: 75vh; /* BaSui：进一步降低高度，确保更好的交互性 */
+    max-height: 75vh; /* BaSui: Reduce height further to keep the dialog easier to use */
     overflow-y: auto;
 }
 
-/* BaSui：批量操作模态框专用样式，内容多时滚动 */
+/* BaSui: Bulk action dialog styles; scroll when content is long */
 #batchTestModal .modal-content,
 #batchImportModal .modal-content,
 #exportKeysModal .modal-content {
-    max-height: 70vh; /* 批量操作模态框更低一些 */
+    max-height: 70vh; /* Use a shorter maximum height for bulk action dialogs */
     overflow-y: auto;
 }
 
-/* BaSui：系统配置卡片网格布局 - 响应式设计 ✨ */
+/* BaSui: Responsive grid layout for system configuration cards ✨ */
 .config-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
@@ -890,7 +895,7 @@ header h1 {
     }
 }
 
-/* BaSui：配置卡片样式 - 玻璃拟态设计 ✨ */
+/* BaSui: Configuration cards with a frosted glass effect ✨ */
 .config-card {
     background: linear-gradient(135deg, rgba(254, 249, 195, 0.2) 0%, rgba(253, 224, 71, 0.15) 100%);
     backdrop-filter: blur(15px);
@@ -905,7 +910,7 @@ header h1 {
     z-index: 2;
 }
 
-/* BaSui：顶部彩色装饰条 */
+/* BaSui: Colored accent strip along the top */
 .config-card::before {
     content: '';
     position: absolute;
@@ -922,7 +927,7 @@ header h1 {
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* BaSui：悬停动画 - 提升+发光效果 */
+/* BaSui: Hover animation: lift and glow */
 .config-card:hover {
     box-shadow: 0 20px 60px rgba(102, 126, 234, 0.25), 
                 0 8px 24px rgba(118, 75, 162, 0.15),
@@ -935,7 +940,7 @@ header h1 {
     transform: scaleX(1);
 }
 
-/* BaSui：卡片标题区域 - 更有层次感 */
+/* BaSui: Card header with greater visual depth */
 .config-card-header {
     display: flex;
     align-items: center;
@@ -946,7 +951,7 @@ header h1 {
     position: relative;
 }
 
-/* BaSui：图标动画效果 */
+/* BaSui: Icon animations */
 .config-card-icon {
     font-size: 36px;
     line-height: 1;
@@ -971,13 +976,13 @@ header h1 {
     text-shadow: 0 2px 4px rgba(79, 172, 254, 0.1);
 }
 
-/* BaSui：全宽配置卡片样式 */
+/* BaSui: Full-width configuration card styles */
 .config-card-full {
     grid-column: 1 / -1;
     margin-bottom: 12px;
 }
 
-/* 向后兼容旧样式 */
+/* Backward compatibility with older styles */
 .config-section {
     margin-bottom: 30px;
     padding: 24px;
@@ -1008,7 +1013,7 @@ header h1 {
     margin-bottom: 20px;
 }
 
-/* BaSui：表单标签样式优化 */
+/* BaSui: Refine form label styles */
 .form-group label {
     display: flex;
     align-items: center;
@@ -1039,7 +1044,7 @@ header h1 {
     transform: scale(1.1);
 }
 
-/* BaSui：输入框样式深度优化 */
+/* BaSui: Refine input field styles */
 .modal-input,
 .modal-textarea {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1064,7 +1069,7 @@ header h1 {
     background: #fafbff;
 }
 
-/* BaSui：Select下拉框样式优化 */
+/* BaSui: Refine select dropdown styles */
 select.modal-input {
     cursor: pointer;
     appearance: none;
@@ -1089,7 +1094,7 @@ select.modal-input:focus {
                       linear-gradient(135deg, #4facfe 50%, transparent 50%);
 }
 
-/* BaSui：提示信息样式美化 */
+/* BaSui: Style help text */
 .form-group .hint {
     margin-top: 8px;
     padding: 10px 14px;
@@ -1123,7 +1128,7 @@ select.modal-input:focus {
     min-width: 120px;
 }
 
-/* BaSui：配置页面操作按钮区域 - 悬浮卡片设计 ✨ */
+/* BaSui: Configuration action area styled as a raised card ✨ */
 .config-actions {
     display: flex;
     gap: 18px;
@@ -1154,7 +1159,7 @@ select.modal-input:focus {
     overflow: hidden;
 }
 
-/* BaSui：按钮闪光效果 */
+/* BaSui: Button shine effect */
 .config-actions .btn::before {
     content: '';
     position: absolute;
@@ -1188,7 +1193,7 @@ select.modal-input:focus {
     background: linear-gradient(135deg, #cbd5e0 0%, #a0aec0 100%);
 }
 
-/* BaSui：信息统计卡片样式 */
+/* BaSui: Summary statistics card styles */
 .stat-info {
     background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
     border: 2px solid #818cf8;
@@ -1202,7 +1207,7 @@ select.modal-input:focus {
     color: #4338ca;
 }
 
-/* BaSui：密钥管理页面美化 - 筛选区域 ✨ */
+/* BaSui: Key management page: filter area styling ✨ */
 .filter-container-modern {
     display: flex;
     align-items: flex-end;
@@ -1343,7 +1348,7 @@ select.modal-input:focus {
     animation: pulse 2s ease-in-out infinite;
 }
 
-/* 统一的动画效果库 */
+/* Shared animation effects */
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
@@ -1355,7 +1360,7 @@ select.modal-input:focus {
     }
 }
 
-/* 优雅的呼吸灯效果 */
+/* Soft breathing glow */
 @keyframes breathe {
     0%, 100% {
         box-shadow: 0 0 20px rgba(26, 188, 156, 0.3);
@@ -1367,7 +1372,7 @@ select.modal-input:focus {
     }
 }
 
-/* 新增浮动气泡动画 */
+/* Floating bubble animation */
 @keyframes floatingBubbles {
     0%, 100% {
         transform: translateY(0) scale(1);
@@ -1383,7 +1388,7 @@ select.modal-input:focus {
     }
 }
 
-/* 涟漪扩散效果 */
+/* Expanding ripple effect */
 @keyframes rippleEffect {
     0% {
         transform: scale(0);
@@ -1395,7 +1400,7 @@ select.modal-input:focus {
     }
 }
 
-/* 闪烁高亮动画 */
+/* Flashing highlight animation */
 @keyframes glowPulse {
     0%, 100% {
         box-shadow: 0 0 5px rgba(26, 188, 156, 0.5);
@@ -1405,7 +1410,7 @@ select.modal-input:focus {
     }
 }
 
-/* 渐变背景动画 */
+/* Animated gradient background */
 @keyframes oceanWave {
     0% {
         background-position: 0% 50%;
@@ -1423,7 +1428,7 @@ select.modal-input:focus {
     color: #2196f3;
 }
 
-/* BaSui：美化表格容器 */
+/* BaSui: Style the table container */
 .table-container-modern {
     background: linear-gradient(135deg, rgba(224, 231, 255, 0.3) 0%, rgba(199, 210, 254, 0.3) 100%);
     border-radius: 16px;
@@ -1446,7 +1451,7 @@ select.modal-input:focus {
     }
 }
 
-/* BaSui：美化密钥表格 */
+/* BaSui: Style the key table */
 .keys-table-modern {
     width: 100%;
     border-collapse: collapse;
@@ -1516,7 +1521,7 @@ select.modal-input:focus {
     transform: scale(1.2);
 }
 
-/* BaSui：加载状态美化 */
+/* BaSui: Style the loading state */
 .loading-modern {
     text-align: center;
     padding: 60px 20px !important;
@@ -1542,7 +1547,7 @@ select.modal-input:focus {
     100% { transform: rotate(360deg); }
 }
 
-/* BaSui：美化分页控件 */
+/* BaSui: Style pagination controls */
 .pagination-modern {
     display: flex;
     justify-content: center;
@@ -1601,7 +1606,7 @@ select.modal-input:focus {
     font-weight: 500;
 }
 
-/* 响应式 */
+/* Responsive layout */
 @media (max-width: 1200px) {
     .filter-container-modern {
         gap: 16px;
@@ -1681,7 +1686,7 @@ select.modal-input:focus {
     }
 }
 
-/* BaSui：新增图表容器样式 */
+/* BaSui: Chart container styles */
 .charts-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -1689,9 +1694,9 @@ select.modal-input:focus {
     margin-bottom: 30px;
 }
 
-/* BaSui：宽版图表卡片样式 */
+/* BaSui: Wide chart card styles */
 .chart-card.chart-card-wide {
-    grid-column: 1 / -1; /* 占满整行 */
+    grid-column: 1 / -1; /* Span the full row */
     min-height: 350px;
 }
 
@@ -1728,7 +1733,7 @@ select.modal-input:focus {
     justify-content: center;
 }
 
-/* 图表标题副标题样式 */
+/* Chart title and subtitle styles */
 .chart-card h3 {
     margin-bottom: 16px;
     font-size: 16px;
@@ -1746,7 +1751,7 @@ select.modal-input:focus {
     border-radius: 8px;
 }
 
-/* 排名徽章样式 */
+/* Rank badge styles */
 .rank-badge {
     display: inline-block;
     padding: 3px 8px;
@@ -1761,7 +1766,7 @@ select.modal-input:focus {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* 密钥池徽章样式 */
+/* Key pool badge styles */
 .pool-badge {
     display: inline-block;
     padding: 3px 10px;
@@ -1776,7 +1781,7 @@ select.modal-input:focus {
     letter-spacing: 0.3px;
 }
 
-/* 紧凑型密钥池徽章 - 横向小字体显示 */
+/* Compact key pool badges with small, inline text */
 .pool-badge-compact {
     display: inline-block;
     padding: 2px 8px;
@@ -1800,7 +1805,7 @@ select.modal-input:focus {
     border: 1px solid rgba(79, 172, 254, 0.3);
 }
 
-/* 密钥ID缩短样式 */
+/* Truncated key ID styles */
 .key-id-short {
     font-size: 11px;
     color: #6b7280;
@@ -1824,7 +1829,7 @@ select.modal-input:focus {
     background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
 }
 
-/* 成功率排行样式 */
+/* Success rate ranking styles */
 .success-rate-list {
     width: 100%;
     max-height: 400px;
@@ -1899,7 +1904,7 @@ select.modal-input:focus {
     font-size: 13px;
 }
 
-/* 使用统计热力图样式 */
+/* Usage heatmap styles */
 .usage-stats {
     width: 100%;
     max-height: 400px;
@@ -1980,7 +1985,7 @@ select.modal-input:focus {
     text-align: right;
 }
 
-/* 简单的饼图样式 */
+/* Basic pie chart styles */
 .simple-pie-chart {
     width: 200px;
     height: 200px;
@@ -2016,12 +2021,12 @@ select.modal-input:focus {
     border-radius: 3px;
 }
 
-/* BaSui：新增成功率和评分样式 - 增强版 */
+/* BaSui: Enhanced success rate and score styles */
 .success-rate-high {
     color: #10b981;
     font-weight: 700;
     background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-    /* BaSui：增加内边距，让徽章更大更醒目！*/
+    /* BaSui: Increase padding to make badges larger and more visible.*/
     padding: 6px 14px;
     border-radius: 10px;
     display: inline-block;
@@ -2069,7 +2074,7 @@ select.modal-input:focus {
 .score-badge {
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     color: white;
-    /* BaSui：增加评分徽章的尺寸和视觉效果！*/
+    /* BaSui: Increase score badge size and visual emphasis.*/
     padding: 7px 15px;
     border-radius: 14px;
     font-size: 14px;
@@ -2083,7 +2088,7 @@ select.modal-input:focus {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* 优化表格样式以适应新列 - BaSui增强版 */
+/* Adapt table styles to the new columns - enhancements by BaSui */
 .keys-table {
     width: 100%;
     border-collapse: collapse;
@@ -2121,7 +2126,7 @@ select.modal-input:focus {
     vertical-align: middle;
 }
 
-/* BaSui: 特殊列的文本对齐 */
+/* BaSui: Text alignment for specific columns */
 .keys-table th:nth-child(1),
 .keys-table td:nth-child(1) {
     text-align: center;
@@ -2140,32 +2145,32 @@ select.modal-input:focus {
     width: 90px;
 }
 
-/* 数字列居中 */
-.keys-table th:nth-child(4), .keys-table td:nth-child(4),  /* 使用次数 */
-.keys-table th:nth-child(5), .keys-table td:nth-child(5),  /* 成功次数 */
-.keys-table th:nth-child(6), .keys-table td:nth-child(6),  /* 错误次数 */
-.keys-table th:nth-child(7), .keys-table td:nth-child(7),  /* 成功率 */
-.keys-table th:nth-child(9), .keys-table td:nth-child(9) { /* 评分 */
+/* Center numeric columns */
+.keys-table th:nth-child(4), .keys-table td:nth-child(4),  /* Usage count */
+.keys-table th:nth-child(5), .keys-table td:nth-child(5),  /* Success count */
+.keys-table th:nth-child(6), .keys-table td:nth-child(6),  /* Error count */
+.keys-table th:nth-child(7), .keys-table td:nth-child(7),  /* Success rate */
+.keys-table th:nth-child(9), .keys-table td:nth-child(9) { /* Score */
     text-align: center;
     width: 85px;
 }
 
-.keys-table th:nth-child(8), .keys-table td:nth-child(8) { /* Token使用 */
+.keys-table th:nth-child(8), .keys-table td:nth-child(8) { /* Token usage */
     text-align: center;
     width: 140px;
 }
 
-.keys-table th:nth-child(10), .keys-table td:nth-child(10) { /* 最后使用 */
+.keys-table th:nth-child(10), .keys-table td:nth-child(10) { /* Last used */
     text-align: center;
     width: 140px;
 }
 
-.keys-table th:nth-child(11), .keys-table td:nth-child(11) { /* 测试结果 */
+.keys-table th:nth-child(11), .keys-table td:nth-child(11) { /* Test result */
     text-align: center;
     width: 110px;
 }
 
-.keys-table th:nth-child(12), .keys-table td:nth-child(12) { /* 备注 */
+.keys-table th:nth-child(12), .keys-table td:nth-child(12) { /* Notes */
     text-align: left;
     width: 120px;
     max-width: 150px;
@@ -2174,14 +2179,14 @@ select.modal-input:focus {
     white-space: nowrap;
 }
 
-.keys-table th:nth-child(13), .keys-table td:nth-child(13) { /* 操作 */
+.keys-table th:nth-child(13), .keys-table td:nth-child(13) { /* Actions */
     text-align: center;
     width: 280px;
 }
 
 .keys-table code {
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
-    /* BaSui：增加代码块的内边距和视觉效果 */
+    /* BaSui: Increase code block padding and visual emphasis */
     padding: 6px 12px;
     border-radius: 8px;
     font-size: 11px;
@@ -2193,7 +2198,7 @@ select.modal-input:focus {
     line-height: 1.4;
 }
 
-/* 表格横向滚动支持 */
+/* Allow horizontal table scrolling */
 .table-container {
     overflow-x: auto;
     border-radius: 15px;
@@ -2201,7 +2206,7 @@ select.modal-input:focus {
     border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* BaSui：优化表格滚动条样式 */
+/* BaSui: Refine table scrollbar styles */
 .table-container::-webkit-scrollbar {
     height: 10px;
 }
@@ -2220,9 +2225,9 @@ select.modal-input:focus {
     background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
 }
 
-/* ===================== 余额管理样式 ===================== */
+/* ===================== Balance management styles ===================== */
 
-/* 余额统计卡片 */
+/* Balance statistics cards */
 .stat-card.stat-primary {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
@@ -2236,7 +2241,7 @@ select.modal-input:focus {
     color: rgba(255, 255, 255, 0.9);
 }
 
-/* 余额详情样式 */
+/* Balance detail styles */
 .balance-details {
     margin-top: 10px;
     font-size: 12px;
@@ -2254,7 +2259,7 @@ select.modal-input:focus {
     margin-right: 8px;
 }
 
-/* 使用量详情样式 */
+/* Usage detail styles */
 .usage-details {
     margin-top: 10px;
     font-size: 12px;
@@ -2266,7 +2271,7 @@ select.modal-input:focus {
     margin-top: 4px;
 }
 
-/* 余额查询按钮 */
+/* Balance lookup button */
 .btn.btn-primary.btn-sm {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     padding: 4px 12px;
@@ -2278,7 +2283,7 @@ select.modal-input:focus {
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
-/* stat-info样式 */
+/* stat-info styles */
 .stat-card.stat-info {
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
     color: white;
@@ -2292,7 +2297,7 @@ select.modal-input:focus {
     color: rgba(255, 255, 255, 0.9);
 }
 
-/* Token统计容器样式 */
+/* Token statistics container styles */
 .token-stats-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -2305,7 +2310,7 @@ select.modal-input:focus {
     min-height: 120px;
 }
 
-/* Token详情样式 */
+/* Token detail styles */
 .token-details {
     margin-top: 10px;
     font-size: 12px;
@@ -2333,9 +2338,9 @@ select.modal-input:focus {
     }
 }
 
-/* ===================== Token余额概览样式 (BaSui新增) ===================== */
+/* ===================== Token balance overview styles (added by BaSui) ===================== */
 
-/* 余额概览容器 */
+/* Balance overview container */
 .balance-overview-container {
     background: linear-gradient(135deg, rgba(207, 250, 254, 0.3) 0%, rgba(165, 243, 252, 0.3) 100%);
     border-radius: 20px;
@@ -2345,7 +2350,7 @@ select.modal-input:focus {
     animation: slideIn 0.5s ease;
 }
 
-/* BaSui：页面标题样式美化 ✨ */
+/* BaSui: Page title styling ✨ */
 .section-title {
     font-size: 2em;
     font-weight: 800;
@@ -2385,7 +2390,7 @@ select.modal-input:focus {
     }
 }
 
-/* 余额统计网格 */
+/* Balance statistics grid */
 .balance-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -2393,7 +2398,7 @@ select.modal-input:focus {
     margin-bottom: 25px;
 }
 
-/* 余额统计卡片 */
+/* Balance statistics cards */
 .balance-stat-card {
     background: linear-gradient(135deg, rgba(252, 231, 243, 0.3) 0%, rgba(251, 207, 232, 0.3) 100%);
     border-radius: 16px;
@@ -2421,7 +2426,7 @@ select.modal-input:focus {
 }
 
 .balance-stat-value {
-    font-size: 1.6em;  /* BaSui: 减小字体大小，防止数字溢出卡片 */
+    font-size: 1.6em;  /* BaSui: Reduce font size to keep numbers within the card */
     font-weight: 700;
     margin-bottom: 5px;
     line-height: 1.2;
@@ -2439,7 +2444,7 @@ select.modal-input:focus {
     color: #999;
 }
 
-/* 余额卡片主题颜色 */
+/* Balance card theme colors */
 .balance-total {
     border-color: #10b981;
 }
@@ -2472,13 +2477,13 @@ select.modal-input:focus {
     color: #f59e0b;
 }
 
-/* 倒计时特殊样式 */
+/* Countdown styles */
 .countdown-value {
     font-family: 'Courier New', monospace;
     letter-spacing: 1px;
 }
 
-/* 过期状态动态颜色 */
+/* Dynamic colors for expiration status */
 .balance-expiry.expiry-critical {
     border-color: #ef4444;
     background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
@@ -2507,10 +2512,10 @@ select.modal-input:focus {
     color: #059669;
 }
 
-/* 脉冲动画 */
+/* Pulse animation */
 
 
-/* 过期警告条 */
+/* Expiration warning banner */
 .expiry-warning {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     border-left: 4px solid #f59e0b;
@@ -2541,9 +2546,9 @@ select.modal-input:focus {
     color: #991b1b;
 }
 
-/* ===================== Tab标签页样式 (BaSui新增) ===================== */
+/* ===================== Tab styles (added by BaSui) ===================== */
 
-/* Header布局 */
+/* Header layout */
 .header-content {
     display: flex;
     justify-content: space-between;
@@ -2561,10 +2566,10 @@ select.modal-input:focus {
     font-size: 14px;
 }
 
-/* Tab导航栏 */
+/* Tab navigation */
 .tab-navigation {
     display: flex;
-    justify-content: center;  /* BaSui: 居中tab按钮 */
+    justify-content: center;  /* BaSui: Center tab buttons */
     gap: 10px;
     margin-bottom: 30px;
     border-bottom: 3px solid rgba(255, 255, 255, 0.3);
@@ -2602,7 +2607,7 @@ select.modal-input:focus {
     backdrop-filter: blur(10px);
 }
 
-/* Tab内容区域 */
+/* Tab content area */
 .tab-content {
     display: none;
     animation: fadeInTab 0.4s ease;
@@ -2623,9 +2628,9 @@ select.modal-input:focus {
     }
 }
 
-/* BaSui: 移除重复的 config-actions 定义，已在前面定义 */
+/* BaSui: Duplicate config-actions definition removed; defined above */
 
-/* 响应式优化 */
+/* Responsive layout refinements */
 @media (max-width: 768px) {
     .tab-navigation {
         flex-direction: column;
@@ -2652,9 +2657,9 @@ select.modal-input:focus {
     }
 }
 
-/* ===================== 实时日志样式 (BaSui新增) ===================== */
+/* ===================== Live log styles (added by BaSui) ===================== */
 
-/* 日志统计卡片 */
+/* Log statistics cards */
 .log-stats-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -2702,7 +2707,7 @@ select.modal-input:focus {
 .log-stat-warn .log-stat-value { color: #f59e0b; }
 .log-stat-error .log-stat-value { color: #ef4444; }
 
-/* 日志控制面板 */
+/* Log controls */
 .log-controls {
     background: linear-gradient(135deg, rgba(254, 226, 226, 0.2) 0%, rgba(254, 202, 202, 0.2) 100%);
     border-radius: 12px;
@@ -2738,7 +2743,7 @@ select.modal-input:focus {
     border: 1px solid #ef4444;
 }
 
-/* 日志筛选器 */
+/* Log filters */
 .log-filters {
     background: linear-gradient(135deg, rgba(255, 237, 213, 0.3) 0%, rgba(254, 215, 170, 0.3) 100%);
     border-radius: 12px;
@@ -2783,7 +2788,7 @@ select.modal-input:focus {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-/* 日志显示区域 */
+/* Log display area */
 .log-display-container {
     background: #1e1e1e;
     border-radius: 12px;
@@ -2806,7 +2811,7 @@ select.modal-input:focus {
     font-size: 14px;
 }
 
-/* 日志条目 */
+/* Log entries */
 .log-entry {
     padding: 10px;
     margin-bottom: 8px;
@@ -2832,7 +2837,7 @@ select.modal-input:focus {
     }
 }
 
-/* 日志级别样式 */
+/* Log level styles */
 .log-entry.log-level-info {
     border-left-color: #10b981;
 }
@@ -2850,7 +2855,7 @@ select.modal-input:focus {
     border-left-color: #6b7280;
 }
 
-/* 日志头部 */
+/* Log entry header */
 .log-entry-header {
     display: flex;
     align-items: center;
@@ -2952,7 +2957,7 @@ select.modal-input:focus {
     color: white;
 }
 
-/* 日志内容 */
+/* Log content */
 .log-entry-content {
     color: #d4d4d4;
     word-break: break-all;
@@ -2977,7 +2982,7 @@ select.modal-input:focus {
     overflow-x: auto;
 }
 
-/* 响应式优化 */
+/* Responsive layout refinements */
 @media (max-width: 768px) {
     .log-filters {
         flex-direction: column;
@@ -2999,7 +3004,7 @@ select.modal-input:focus {
     }
 }
 
-/* ===================== Token使用趋势图表样式 ===================== */
+/* ===================== Token usage trend chart styles ===================== */
 
 .token-trend-stats {
     width: 100%;
@@ -3023,7 +3028,7 @@ select.modal-input:focus {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* BaSui: Token趋势图表头部（排名+池标签+密钥） */
+/* BaSui: Token trend chart header (rank, pool label, and key) */
 .token-trend-header {
     display: flex;
     align-items: center;
@@ -3080,9 +3085,9 @@ select.modal-input:focus {
     text-align: right;
 }
 
-/* ===================== 🚀 BaSui：多级密钥池样式 (Multi-Tier Pool Groups) ===================== */
+/* ===================== 🚀 BaSui: Multi-tier key pool styles ===================== */
 
-/* 池子容器 */
+/* Pool container */
 .pool-groups-container {
     background: linear-gradient(135deg, rgba(254, 215, 226, 0.3) 0%, rgba(252, 231, 243, 0.3) 100%);
     border-radius: 20px;
@@ -3092,7 +3097,7 @@ select.modal-input:focus {
     animation: slideIn 0.5s ease;
 }
 
-/* 池子网格布局 */
+/* Pool grid layout */
 .pool-groups-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -3100,7 +3105,7 @@ select.modal-input:focus {
     margin-bottom: 20px;
 }
 
-/* 池子卡片 */
+/* Pool cards */
 .pool-group-card {
     background: linear-gradient(135deg, rgba(224, 242, 254, 0.3) 0%, rgba(186, 230, 253, 0.3) 100%);
     border-radius: 16px;
@@ -3117,7 +3122,7 @@ select.modal-input:focus {
     box-shadow: 0 8px 20px rgba(0,0,0,0.15);
 }
 
-/* 池子卡片状态颜色 */
+/* Pool card status colors */
 .pool-group-card.pool-group-safe {
     border-color: #10b981;
     background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
@@ -3133,7 +3138,7 @@ select.modal-input:focus {
     background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
 }
 
-/* 池子卡片头部 */
+/* Pool card header */
 .pool-group-header {
     display: flex;
     justify-content: space-between;
@@ -3170,7 +3175,7 @@ select.modal-input:focus {
     gap: 8px;
 }
 
-/* 池子统计信息 */
+/* Pool statistics */
 .pool-group-stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -3218,7 +3223,7 @@ select.modal-input:focus {
     color: #ef4444;
 }
 
-/* 池子进度条 */
+/* Pool progress bar */
 .pool-group-progress {
     margin-top: 15px;
 }
@@ -3245,12 +3250,12 @@ select.modal-input:focus {
     font-size: 0.9em;
     font-weight: 600;
     color: #666;
-    /* BaSui：⚡使用率发光效果 - 让数据更炫酷 */
+    /* BaSui: ⚡Usage percentage glow for visual emphasis */
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.4), 0 0 12px rgba(251, 191, 36, 0.2);
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
-/* 池子描述 */
+/* Pool description */
 .pool-group-description {
     margin-top: 15px;
     padding: 12px;
@@ -3262,7 +3267,7 @@ select.modal-input:focus {
     line-height: 1.6;
 }
 
-/* 池子操作按钮 */
+/* Pool action buttons */
 .pool-groups-actions {
     display: flex;
     gap: 12px;
@@ -3271,10 +3276,10 @@ select.modal-input:focus {
     border-top: 2px solid #e5e7eb;
 }
 
-/* 密钥表格中的池子徽章 */
+/* Pool badges in the key table */
 .pool-group-badge {
     display: inline-block;
-    /* BaSui：增加密钥池徽章的尺寸，让它更醒目！*/
+    /* BaSui: Enlarge key pool badges to make them more visible.*/
     padding: 7px 16px;
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     color: white;
@@ -3294,7 +3299,7 @@ select.modal-input:focus {
     background: linear-gradient(135deg, #5fbdff 0%, #10d9ff 100%);
 }
 
-/* 响应式优化 */
+/* Responsive layout refinements */
 @media (max-width: 768px) {
     .pool-groups-grid {
         grid-template-columns: 1fr;
@@ -3313,12 +3318,12 @@ select.modal-input:focus {
     }
 }
 
-/* ===================== 结束：多级密钥池样式 ===================== */
+/* ===================== End of multi-tier key pool styles ===================== */
 
 
-/* ===================== 🎯 密钥池选择 UI 样式 (Pool Selection UI) ===================== */
+/* ===================== 🎯 Key pool selection UI styles ===================== */
 
-/* 单选按钮组样式 */
+/* Radio button group styles */
 .radio-group {
     display: flex;
     flex-direction: column;
@@ -3355,7 +3360,7 @@ select.modal-input:focus {
     color: #2196f3;
 }
 
-/* 多选框组样式 */
+/* Checkbox group styles */
 .checkbox-group {
     display: flex;
     flex-direction: column;
@@ -3376,7 +3381,7 @@ select.modal-input:focus {
     border-color: #4facfe;
 }
 
-/* 导出/测试模态框结果样式 */
+/* Results in export and test dialogs */
 .result-summary {
     padding: 20px;
     border-radius: 12px;
@@ -3420,7 +3425,7 @@ select.modal-input:focus {
     font-size: 0.95em;
 }
 
-/* 多选下拉框样式优化 */
+/* Refine multiple-selection dropdown styles */
 select[multiple] {
     min-height: 150px;
     padding: 10px;
@@ -3445,7 +3450,7 @@ select[multiple] option:checked {
     font-weight: 600;
 }
 
-/* Loading 动画 */
+/* Loading animation */
 .loading {
     text-align: center;
     padding: 20px;
@@ -3456,11 +3461,11 @@ select[multiple] option:checked {
 
 
 
-/* ===================== 结束：密钥池选择 UI 样式 ===================== */
+/* ===================== End of key pool selection UI styles ===================== */
 
-/* ===================== 🎯 BaSui：密钥表格中的密钥池徽章样式 ===================== */
+/* ===================== 🎯 BaSui: Key pool badge styles in the key table ===================== */
 
-/* 默认池徽章 */
+/* Default pool badge */
 .pool-badge {
     display: inline-block;
     padding: 6px 14px;
@@ -3478,23 +3483,23 @@ select[multiple] option:checked {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
-/* 默认池 (default) 样式 */
+/* Default pool styles */
 .pool-badge.pool-default {
     background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
     color: #374151;
     border: 1px solid #9ca3af;
 }
 
-/* 自定义池样式 */
+/* Custom pool styles */
 .pool-badge.pool-custom {
     background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
     color: white;
     border: 1px solid rgba(79, 172, 254, 0.5);
 }
 
-/* ===================== 结束：密钥表格密钥池徽章样式 ===================== */
+/* ===================== End of key table pool badge styles ===================== */
 
-/* 关键词过滤 Tab 美化 */
+/* Keyword filter tab styling */
 .keyword-section-header {
     display: flex;
     align-items: center;
@@ -4023,3 +4028,33 @@ select[multiple] option:checked {
         justify-content: flex-start;
     }
 }
+
+/* Per-account Factory usage windows. */
+#balanceOverview { color: #edf7ff; }
+.factory-limits-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+.factory-limits-table th, .factory-limits-table td {
+  padding: 12px 14px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid rgba(255,255,255,.2);
+}
+.factory-limits-table th { color: #86e5ff; }
+.factory-limits-table td { min-width: 105px; }
+.factory-limits-table small { display: inline-block; margin-top: 5px; color: #d4e8f2; }
+.factory-limits-table strong { font-size: 1.1rem; }
+
+.limit-meter { min-width: 160px; --meter-fill: #52e0a5; }
+.limit-meter.is-warning { --meter-fill: #ffc657; }
+.limit-meter.is-critical { --meter-fill: #ff7b83; }
+.limit-meter.is-unknown { --meter-fill: #a8bbc7; }
+.limit-meter-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.limit-meter-heading strong { color: var(--meter-fill); font-variant-numeric: tabular-nums; }
+.limit-meter-heading span { font-size: .8rem; opacity: .85; white-space: nowrap; }
+.limit-meter meter { display: block; width: 100%; height: 12px; margin: 9px 0 4px; border: 0; border-radius: 6px; background: #213e49; }
+.limit-meter meter::-webkit-meter-bar { background: #213e49; border: 0; border-radius: 6px; }
+.limit-meter meter::-webkit-meter-optimum-value,
+.limit-meter meter::-webkit-meter-suboptimum-value,
+.limit-meter meter::-webkit-meter-even-less-good-value { background: var(--meter-fill); border-radius: 6px; }
+.limit-meter meter::-moz-meter-bar { background: var(--meter-fill); border-radius: 6px; }
+.limit-meter-empty { height: 12px; margin: 9px 0 4px; border-radius: 6px; background: repeating-linear-gradient(135deg, #213e49, #213e49 6px, #405c66 6px, #405c66 12px); }
+.limit-meter small { display: block; font-size: .75rem; line-height: 1.45; }
+[data-key-limits] { min-width: 190px; }
+[data-key-limits] > div + div { margin-top: 12px; }
