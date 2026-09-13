@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>密钥池管理系统 - droid2api</title>
+    <title>Key Pool Manager - droid2api</title>
     <!-- Main stylesheet, including visual enhancements -->
     <link rel="stylesheet" href="style.css">
     <!-- Hide the dashboard filter -->
@@ -16,11 +16,11 @@
         <header>
             <div class="header-content">
                 <div class="header-title">
-                    <h1>🔑 密钥池管理系统</h1>
-                    <p class="subtitle">droid2api 统一密钥管理平台 - 支持大规模密钥池轮询使用 · 自动封禁 · 可视化管理</p>
+                    <h1>🔑 Key Pool Manager</h1>
+                    <p class="subtitle">droid2api key management - large key pools, automatic rotation, proxy-level blocking, and a web dashboard</p>
                 </div>
                 <button id="logoutBtn" onclick="logout()" class="btn btn-danger" style="display: none;">
-                    🚪 退出登录
+                    🚪 Sign out
                 </button>
             </div>
         </header>
@@ -28,10 +28,10 @@
         <!-- Authentication section -->
         <div id="authSection" class="auth-section">
             <div class="auth-card">
-                <h2>🔐 管理员认证</h2>
+                <h2>🔐 Administrator sign-in</h2>
                 <input type="password" id="adminKeyInput" placeholder="Enter your admin access key" onkeypress="if(event.key==='Enter') authenticate()" />
-                <button onclick="authenticate()" class="btn btn-primary">登录</button>
-                <p class="hint">💡 管理员密钥配置在 .env 文件的 ADMIN_ACCESS_KEY<br>登录后会自动记住1小时，过期后需重新登录</p>
+                <button onclick="authenticate()" class="btn btn-primary">Sign in</button>
+                <p class="hint">💡 The admin access key is set as ADMIN_ACCESS_KEY in the .env file.<br>Your sign-in is remembered for one hour. Sign in again when it expires.</p>
             </div>
         </div>
 
@@ -40,19 +40,19 @@
             <!-- Tab navigation -->
             <div class="tab-navigation">
                 <button class="tab-button active" onclick="switchTab('dashboard')">
-                    📊 仪表盘
+                    📊 Dashboard
                 </button>
                 <button class="tab-button" onclick="switchTab('keys')">
-                    🔑 密钥管理
+                    🔑 Keys
                 </button>
                 <button class="tab-button" onclick="switchTab('logs')">
-                    📝 实时日志
+                    📝 Live logs
                 </button>
                 <button class="tab-button" onclick="switchTab('keywordFilter')">
-                    🛡️ 关键词过滤
+                    🛡️ Keyword filtering
                 </button>
                 <button class="tab-button" onclick="switchTab('config')">
-                    ⚙️ 系统配置
+                    ⚙️ Settings
                 </button>
             </div>
 
@@ -65,36 +65,36 @@
                     <div class="stat-icon">🔑</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statTotal">0</div>
-                        <div class="stat-label">总密钥数</div>
+                        <div class="stat-label">Total keys</div>
                     </div>
                 </div>
                 <div class="stat-card stat-success">
                     <div class="stat-icon">✅</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statActive">0</div>
-                        <div class="stat-label">可用密钥</div>
+                        <div class="stat-label">Active keys</div>
                     </div>
                 </div>
                 <div class="stat-card stat-warning">
                     <div class="stat-icon">⏸️</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statDisabled">0</div>
-                        <div class="stat-label">已禁用</div>
+                        <div class="stat-label">Disabled</div>
                     </div>
                 </div>
                 <div class="stat-card stat-danger">
                     <div class="stat-icon">🚫</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statBanned">0</div>
-                        <div class="stat-label">已封禁</div>
+                        <div class="stat-label">Blocked in proxy</div>
                     </div>
                 </div>
                 <!-- BaSui: Show the current key selection algorithm -->
                 <div class="stat-card stat-info">
                     <div class="stat-icon">🎯</div>
                     <div class="stat-content">
-                        <div class="stat-value" id="statAlgorithm">轮询</div>
-                        <div class="stat-label">轮询算法</div>
+                        <div class="stat-value" id="statAlgorithm">Round-robin</div>
+                        <div class="stat-label">Key selection algorithm</div>
                     </div>
                 </div>
             </div>
@@ -105,28 +105,28 @@
                     <div class="stat-icon">📊</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statTokenUsed">0</div>
-                        <div class="stat-label">总Token使用</div>
+                        <div class="stat-label">Total tokens used</div>
                     </div>
                 </div>
                 <div class="stat-card stat-token-today">
                     <div class="stat-icon">🕐</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statTokenToday">0</div>
-                        <div class="stat-label">今日Token</div>
+                        <div class="stat-label">Tokens today</div>
                     </div>
                 </div>
                 <div class="stat-card stat-requests">
                     <div class="stat-icon">💬</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statTotalRequests">0</div>
-                        <div class="stat-label">总请求数</div>
+                        <div class="stat-label">Total requests</div>
                     </div>
                 </div>
                 <div class="stat-card stat-requests-today">
                     <div class="stat-icon">⚡</div>
                     <div class="stat-content">
                         <div class="stat-value" id="statTodayRequests">0</div>
-                        <div class="stat-label">今日请求</div>
+                        <div class="stat-label">Requests today</div>
                     </div>
                 </div>
             </div>
@@ -136,88 +136,55 @@
                 <div class="filter-group">
                     <label class="filter-label">
                         <span class="filter-icon">🎯</span>
-                        密钥池筛选
+                        Pool filter
                     </label>
                     <select id="dashboardPoolFilter" class="filter-select" onchange="dashboardPoolFilterChanged()">
-                        <option value="all">全部池子</option>
+                        <option value="all">All pools</option>
                     </select>
                 </div>
                 <div class="dashboard-filter-summary">
                     <span class="stats-badge">
                         <span class="stats-icon">🔁</span>
-                        当前池：<strong id="dashboardPoolLabel">全部池子</strong>
+                        Current pool: <strong id="dashboardPoolLabel">All pools</strong>
                     </span>
                 </div>
             </div>
 
             <!-- 🚀 BaSui: Multi-tier key pool statistics cards -->
             <div class="pool-groups-container" id="poolGroupsContainer" style="display: none;">
-                <h2 class="section-title">🎯 多级密钥池</h2>
+                <h2 class="section-title">🎯 Multi-tier key pools</h2>
                 <div class="pool-groups-grid" id="poolGroupsGrid">
                     <!-- Pool cards are generated dynamically -->
                 </div>
                 <div class="pool-groups-actions">
-                    <button onclick="showCreatePoolModal()" class="btn btn-primary">➕ 创建密钥池</button>
-                    <button onclick="refreshPoolGroups()" class="btn btn-secondary">🔄 刷新</button>
+                    <button onclick="showCreatePoolModal()" class="btn btn-primary">➕ Create pool</button>
+                    <button onclick="refreshPoolGroups()" class="btn btn-secondary">🔄 Refresh</button>
                 </div>
             </div>
 
-            <!-- Token余额概览 (Factory API) -->
             <div class="balance-overview-container" id="balanceOverview" style="display: none;">
-                <h2 class="section-title">💰 Token余额概览</h2>
-                <div class="balance-stats-grid">
-                    <div class="balance-stat-card balance-total">
-                        <div class="balance-stat-icon">🎯</div>
-                        <div class="balance-stat-content">
-                            <div class="balance-stat-value" id="totalRemainingBalance">-</div>
-                            <div class="balance-stat-label">总剩余Token</div>
-                            <div class="balance-stat-hint">全部密钥汇总</div>
-                        </div>
-                    </div>
-                    <div class="balance-stat-card balance-used">
-                        <div class="balance-stat-icon">📊</div>
-                        <div class="balance-stat-content">
-                            <div class="balance-stat-value" id="totalUsedBalance">-</div>
-                            <div class="balance-stat-label">总已使用</div>
-                            <div class="balance-stat-hint">累计消耗</div>
-                        </div>
-                    </div>
-                    <div class="balance-stat-card balance-limit">
-                        <div class="balance-stat-icon">💎</div>
-                        <div class="balance-stat-content">
-                            <div class="balance-stat-value" id="totalAllowanceBalance">-</div>
-                            <div class="balance-stat-label">总额度</div>
-                            <div class="balance-stat-hint">全部密钥总额</div>
-                        </div>
-                    </div>
-                    <div class="balance-stat-card balance-expiry" id="expiryCard">
-                        <div class="balance-stat-icon">⏰</div>
-                        <div class="balance-stat-content">
-                            <div class="balance-stat-value countdown-value" id="expiryCountdown">-</div>
-                            <div class="balance-stat-label">最早过期</div>
-                            <div class="balance-stat-hint" id="expiryHint">试用期结束</div>
-                        </div>
-                    </div>
-                </div>
-                <!-- 过期提醒警告条 -->
-                <div class="expiry-warning" id="expiryWarning" style="display: none;">
-                    <span class="warning-icon">⚠️</span>
-                    <span class="warning-text" id="expiryWarningText"></span>
-                    <button onclick="refreshBalanceData(true)" class="btn btn-warning btn-sm">立即刷新</button>
+                <h2 class="section-title">Factory usage limits</h2>
+                <p>Used percentages by account. Standard usage needs headroom in every window.
+                Droid Core has separate limits. Account selection preserves the requested model.</p>
+                <button onclick="refreshBalanceData(true)" class="btn btn-secondary">Refresh limits</button>
+                <p id="limitsSummary" role="status"></p>
+                <div style="overflow-x:auto">
+                    <table class="factory-limits-table"><thead><tr><th>Key</th><th>Usage pool</th><th>5 hours used</th><th>7 days used</th><th>30 days used</th><th>Availability</th><th>Updated</th></tr></thead>
+                    <tbody id="limitsRows"></tbody></table>
                 </div>
             </div>
 
             <!-- Performance statistics charts -->
             <div class="charts-container">
                 <div class="chart-card">
-                    <h3>📊 密钥状态分布</h3>
+                    <h3>📊 Key status distribution</h3>
                     <div class="chart-placeholder" id="statusChart">
                         <canvas id="statusPieChart" width="300" height="200"></canvas>
                     </div>
                 </div>
                 <div class="chart-card">
                     <h3>
-                        🎯 成功率排行
+                        🎯 Success rate ranking
                         <span class="chart-subtitle">Top 10</span>
                     </h3>
                     <div class="chart-placeholder" id="successRateChart">
@@ -228,7 +195,7 @@
                 </div>
                 <div class="chart-card">
                     <h3>
-                        ⚡ 使用热力图
+                        ⚡ Usage heatmap
                         <span class="chart-subtitle">Top 10</span>
                     </h3>
                     <div class="chart-placeholder" id="usageHeatmap">
@@ -239,13 +206,13 @@
                 </div>
                 <div class="chart-card chart-card-wide">
                     <h3>
-                        📈 Token使用趋势
-                        <span class="chart-subtitle">Top 10 密钥使用量分析</span>
+                        📈 Token usage trend
+                        <span class="chart-subtitle">Usage analysis for the top 10 keys</span>
                     </h3>
                     <div class="chart-content-flex">
                         <!-- Left: bar chart and ranking -->
                         <div class="chart-section">
-                            <h4>📊 使用量排行榜</h4>
+                            <h4>📊 Usage ranking</h4>
                             <div class="chart-placeholder" id="tokenTrendChart">
                                 <div class="token-trend-stats" id="tokenTrendStats">
                                     <!-- Token usage ranking is generated dynamically -->
@@ -254,7 +221,7 @@
                         </div>
                         <!-- Right: line chart -->
                         <div class="chart-section">
-                            <h4>📉 7天使用趋势</h4>
+                            <h4>📉 7-day usage trend</h4>
                             <div class="chart-placeholder" id="tokenLineChart">
                                 <canvas id="tokenTrendCanvas" width="400" height="250"></canvas>
                             </div>
@@ -269,29 +236,29 @@
             <div id="tabKeys" class="tab-content">
             <!-- Action buttons -->
             <div class="actions-container">
-                <button onclick="showAddKeyModal()" class="btn btn-primary">➕ 添加密钥</button>
-                <button onclick="showBatchImportModal()" class="btn btn-secondary">📥 批量导入</button>
-                <button onclick="showExportKeysModal()" class="btn btn-secondary">📤 导出密钥</button>
-                <button onclick="showBatchTestModal()" class="btn btn-info">🧪 批量测试</button>
-                <button onclick="deleteDisabledKeys()" class="btn btn-warning">🗑️ 删除禁用密钥</button>
-                <button onclick="deleteBannedKeys()" class="btn btn-danger">🗑️ 删除封禁密钥</button>
-                <button onclick="refreshData(true)" class="btn btn-success">🔄 刷新</button>
+                <button onclick="showAddKeyModal()" class="btn btn-primary">➕ Add key</button>
+                <button onclick="showBatchImportModal()" class="btn btn-secondary">📥 Bulk import</button>
+                <button onclick="showExportKeysModal()" class="btn btn-secondary">📤 Export keys</button>
+                <button onclick="showBatchTestModal()" class="btn btn-info">🧪 Bulk test</button>
+                <button onclick="deleteDisabledKeys()" class="btn btn-warning">🗑️ Delete disabled keys</button>
+                <button onclick="deleteBannedKeys()" class="btn btn-danger">🗑️ Delete blocked keys</button>
+                <button onclick="refreshData(true)" class="btn btn-success">🔄 Refresh</button>
             </div>
 
             <!-- BaSui: Bulk action buttons (updated design) -->
             <div class="actions-container" style="margin-top: 10px; border-top: 2px solid #e5e7eb; padding-top: 10px;">
-                <span style="font-weight: 600; color: #6b7280; margin-right: 10px;">📦 批量操作:</span>
+                <span style="font-weight: 600; color: #6b7280; margin-right: 10px;">📦 Bulk actions:</span>
                 <button onclick="openBatchActionModal('changePool')" class="btn btn-warning">
-                    🔄 批量改池
+                    🔄 Move keys
                 </button>
                 <button onclick="openBatchActionModal('enable')" class="btn btn-success">
-                    ✅ 批量启用
+                    ✅ Enable keys
                 </button>
                 <button onclick="openBatchActionModal('disable')" class="btn btn-warning">
-                    ⏸️ 批量禁用
+                    ⏸️ Disable keys
                 </button>
                 <button onclick="openBatchActionModal('delete')" class="btn btn-danger">
-                    🗑️ 批量删除
+                    🗑️ Delete keys
                 </button>
             </div>
 
@@ -300,23 +267,23 @@
                 <div class="filter-group">
                     <label class="filter-label">
                         <span class="filter-icon">🔍</span>
-                        状态筛选
+                        Status filter
                     </label>
                     <select id="statusFilter" onchange="filterChanged()" class="filter-select">
-                        <option value="all">全部状态</option>
-                        <option value="active">✅ 可用</option>
-                        <option value="disabled">⏸️ 已禁用</option>
-                        <option value="banned">🚫 已封禁</option>
+                        <option value="all">All statuses</option>
+                        <option value="active">✅ Active</option>
+                        <option value="disabled">⏸️ Disabled</option>
+                        <option value="banned">🚫 Blocked in proxy</option>
                     </select>
                 </div>
 
                 <div class="filter-group">
                     <label class="filter-label">
                         <span class="filter-icon">🎯</span>
-                        密钥池筛选
+                        Pool filter
                     </label>
                     <select id="poolGroupFilter" onchange="filterChanged()" class="filter-select">
-                        <option value="all">全部池子</option>
+                        <option value="all">All pools</option>
                         <!-- Pool options are loaded dynamically -->
                     </select>
                 </div>
@@ -324,21 +291,21 @@
                 <div class="filter-group">
                     <label class="filter-label">
                         <span class="filter-icon">📊</span>
-                        每页显示
+                        Rows per page
                     </label>
                     <select id="pageSizeSelect" onchange="pageSizeChanged()" class="filter-select">
-                        <option value="5">5 行</option>
-                        <option value="10" selected>10 行</option>
-                        <option value="20">20 行</option>
-                        <option value="50">50 行</option>
-                        <option value="100">100 行</option>
+                        <option value="5">5 rows</option>
+                        <option value="10" selected>10 rows</option>
+                        <option value="20">20 rows</option>
+                        <option value="50">50 rows</option>
+                        <option value="100">100 rows</option>
                     </select>
                 </div>
 
                 <div class="filter-stats">
                     <span class="stats-badge">
                         <span class="stats-icon">📋</span>
-                        共 <strong id="totalKeysCount">0</strong> 个密钥
+                        Total: <strong id="totalKeysCount">0</strong> keys
                     </span>
                 </div>
             </div>
@@ -348,27 +315,27 @@
                 <table class="keys-table-modern">
                     <thead>
                         <tr>
-                            <th>密钥ID</th>
-                            <th>密钥</th>
-                            <th>密钥池</th>
-                            <th>状态</th>
-                            <th>使用次数</th>
-                            <th>成功次数</th>
-                            <th>错误次数</th>
-                            <th>成功率</th>
-                            <th>Token使用</th>
-                            <th>评分</th>
-                            <th>最后使用</th>
-                            <th>测试结果</th>
-                            <th>备注</th>
-                            <th>操作</th>
+                            <th>Key ID</th>
+                            <th>Key</th>
+                            <th>Key pool</th>
+                            <th>Status</th>
+                            <th>Usage count</th>
+                            <th>Successes</th>
+                            <th>Errors</th>
+                            <th>Success rate</th>
+                            <th>Factory limits (Standard)</th>
+                            <th>Score</th>
+                            <th>Last used</th>
+                            <th>Test results</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="keysTableBody">
                         <tr>
                             <td colspan="14" class="loading-modern">
                                 <div class="loading-spinner"></div>
-                                <span>加载中...</span>
+                                <span>Loading...</span>
                             </td>
                         </tr>
                     </tbody>
@@ -382,7 +349,7 @@
 
             <!-- Live logs tab -->
             <div id="tabLogs" class="tab-content">
-                <h2 class="section-title">📝 实时日志</h2>
+                <h2 class="section-title">📝 Live logs</h2>
 
                 <!-- Log statistics cards -->
                 <div class="log-stats-container">
@@ -390,28 +357,28 @@
                         <div class="log-stat-icon">📊</div>
                         <div class="log-stat-content">
                             <div class="log-stat-value" id="logStatTotal">0</div>
-                            <div class="log-stat-label">总日志数</div>
+                            <div class="log-stat-label">Total log entries</div>
                         </div>
                     </div>
                     <div class="log-stat-card log-stat-info">
                         <div class="log-stat-icon">ℹ️</div>
                         <div class="log-stat-content">
                             <div class="log-stat-value" id="logStatInfo">0</div>
-                            <div class="log-stat-label">信息</div>
+                            <div class="log-stat-label">Info</div>
                         </div>
                     </div>
                     <div class="log-stat-card log-stat-warn">
                         <div class="log-stat-icon">⚠️</div>
                         <div class="log-stat-content">
                             <div class="log-stat-value" id="logStatWarn">0</div>
-                            <div class="log-stat-label">警告</div>
+                            <div class="log-stat-label">Warnings</div>
                         </div>
                     </div>
                     <div class="log-stat-card log-stat-error">
                         <div class="log-stat-icon">❌</div>
                         <div class="log-stat-content">
                             <div class="log-stat-value" id="logStatError">0</div>
-                            <div class="log-stat-label">错误</div>
+                            <div class="log-stat-label">Errors</div>
                         </div>
                     </div>
                 </div>
@@ -420,50 +387,50 @@
                 <div class="log-controls">
                     <div class="log-controls-left">
                         <button onclick="toggleLogStream()" class="btn btn-primary" id="logStreamToggle">
-                            ▶️ 启动实时日志
+                            ▶️ Start live logs
                         </button>
                         <button onclick="clearLogDisplay()" class="btn btn-warning">
-                            🗑️ 清空显示
+                            🗑️ Clear display
                         </button>
                         <button onclick="exportLogs()" class="btn btn-secondary">
-                            📥 导出日志
+                            📥 Export logs
                         </button>
                     </div>
                     <div class="log-controls-right">
-                        <span class="log-status-badge" id="logStreamStatus">已断开</span>
+                        <span class="log-status-badge" id="logStreamStatus">Disconnected</span>
                     </div>
                 </div>
 
                 <!-- Log filters -->
                 <div class="log-filters">
                     <div class="filter-group">
-                        <label>级别筛选：</label>
+                        <label>Log level filter: </label>
                         <label class="filter-checkbox">
                             <input type="checkbox" id="filterInfo" checked onchange="applyLogFilters()">
-                            ℹ️ 信息
+                            ℹ️ Info
                         </label>
                         <label class="filter-checkbox">
                             <input type="checkbox" id="filterWarn" checked onchange="applyLogFilters()">
-                            ⚠️ 警告
+                            ⚠️ Warnings
                         </label>
                         <label class="filter-checkbox">
                             <input type="checkbox" id="filterError" checked onchange="applyLogFilters()">
-                            ❌ 错误
+                            ❌ Errors
                         </label>
                         <label class="filter-checkbox">
                             <input type="checkbox" id="filterDebug" onchange="applyLogFilters()">
-                            🐛 调试
+                            🐛 Debug
                         </label>
                     </div>
                     <div class="filter-group">
-                        <label>关键词搜索：</label>
+                        <label>Keyword search: </label>
                         <input type="text" id="logSearchKeyword" placeholder="Enter a keyword..." onkeyup="applyLogFilters()" class="filter-input">
                     </div>
                     <div class="filter-group">
-                        <label>自动滚动：</label>
+                        <label>Auto-scroll: </label>
                         <label class="filter-checkbox">
                             <input type="checkbox" id="logAutoScroll" checked>
-                            开启
+                            On
                         </label>
                     </div>
                 </div>
@@ -471,7 +438,7 @@
                 <!-- Log display area -->
                 <div class="log-display-container">
                     <div class="log-list" id="logList">
-                        <div class="log-empty">暂无日志，点击"启动实时日志"开始监控</div>
+                        <div class="log-empty">No logs yet. Click "Start live logs" to begin monitoring.</div>
                     </div>
                 </div>
             </div>
@@ -481,12 +448,12 @@
             <div id="tabKeywordFilter" class="tab-content">
                 <div class="keyword-section-header">
                     <div class="keyword-title-wrap">
-                        <h2 class="section-title">🛡️ 关键词过滤管理</h2>
-                        <p class="keyword-subtitle">智能过滤敏感词，保障对话安全与合规</p>
+                        <h2 class="section-title">🛡️ Keyword filter management</h2>
+                        <p class="keyword-subtitle">Filter sensitive terms to support safe, compliant conversations.</p>
                     </div>
                     <div class="keyword-status-pill">
-                        <span class="pill-label">全局状态</span>
-                        <span class="pill-value" id="filterStatStatus">关闭</span>
+                        <span class="pill-label">Global status</span>
+                        <span class="pill-value" id="filterStatStatus">Off</span>
                     </div>
                 </div>
 
@@ -494,7 +461,7 @@
                     <div class="keyword-stat-card keyword-stat-total">
                         <div class="keyword-stat-icon">🎯</div>
                         <div class="keyword-stat-content">
-                            <span class="keyword-stat-label">总规则数</span>
+                            <span class="keyword-stat-label">Total rules</span>
                             <span class="keyword-stat-value" id="filterStatTotal">0</span>
                         </div>
                         <span class="keyword-stat-badge">RULES</span>
@@ -502,7 +469,7 @@
                     <div class="keyword-stat-card keyword-stat-enabled">
                         <div class="keyword-stat-icon">✅</div>
                         <div class="keyword-stat-content">
-                            <span class="keyword-stat-label">启用规则</span>
+                            <span class="keyword-stat-label">Enabled rules</span>
                             <span class="keyword-stat-value" id="filterStatEnabled">0</span>
                         </div>
                         <span class="keyword-stat-badge">ACTIVE</span>
@@ -510,7 +477,7 @@
                     <div class="keyword-stat-card keyword-stat-coverage">
                         <div class="keyword-stat-icon">📈</div>
                         <div class="keyword-stat-content">
-                            <span class="keyword-stat-label">启用覆盖率</span>
+                            <span class="keyword-stat-label">Rules enabled (%)</span>
                             <span class="keyword-stat-value" id="filterCoverageValue">0%</span>
                         </div>
                         <span class="keyword-stat-badge">INSIGHTS</span>
@@ -519,21 +486,21 @@
 
                 <div class="keyword-action-bar">
                     <div class="keyword-action-info">
-                        <h3>规则控制台</h3>
-                        <p>快速启用、测试与重载关键词过滤配置</p>
+                        <h3>Rule controls</h3>
+                        <p>Enable, test, and reload keyword filter settings.</p>
                     </div>
                     <div class="keyword-action-buttons">
                         <button onclick="toggleGlobalFilter()" class="btn keyword-action-btn keyword-toggle" id="toggleGlobalBtn">
-                            🔄 切换全局过滤
+                            🔄 Toggle filtering
                         </button>
                         <button onclick="showAddRuleModal()" class="btn keyword-action-btn keyword-primary">
-                            ➕ 添加规则
+                            ➕ Add rule
                         </button>
                         <button onclick="reloadFilterConfig()" class="btn keyword-action-btn">
-                            🔄 重新加载配置
+                            🔄 Reload configuration
                         </button>
                         <button onclick="showTestRuleModal()" class="btn keyword-action-btn keyword-secondary">
-                            🧪 测试规则
+                            🧪 Test rules
                         </button>
                     </div>
                 </div>
@@ -541,26 +508,26 @@
                 <div class="keyword-table-card">
                     <div class="keyword-table-header">
                         <div>
-                            <h3>过滤规则列表</h3>
-                            <span class="keyword-table-hint">在此启用、调整或删除过滤策略</span>
+                            <h3>Filter rules</h3>
+                            <span class="keyword-table-hint">Enable, edit, or delete filter rules here.</span>
                         </div>
                         <div class="keyword-table-count">
-                            共 <strong id="keywordTableCount">0</strong> 条记录
+                            Total: <strong id="keywordTableCount">0</strong> records
                         </div>
                     </div>
                     <table class="keyword-rules-table">
                         <thead>
                             <tr>
-                                <th>状态</th>
-                                <th>规则</th>
-                                <th>匹配条件</th>
-                                <th>处理动作</th>
-                                <th class="column-actions">操作</th>
+                                <th>Status</th>
+                                <th>Rule</th>
+                                <th>Match conditions</th>
+                                <th>Action</th>
+                                <th class="column-actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="filterRulesTable">
                             <tr>
-                                <td colspan="5" class="empty-state">加载中...</td>
+                                <td colspan="5" class="empty-state">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -570,8 +537,8 @@
 
             <!-- Settings tab -->
             <div id="tabConfig" class="tab-content">
-                <h2 class="section-title">⚙️ 系统配置</h2>
-                <p class="hint">💡 修改后点击"保存配置"按钮生效，部分配置需重启服务器</p>
+                <h2 class="section-title">⚙️ Settings</h2>
+                <p class="hint">💡 Click "Save configuration" to apply changes. Some settings require a server restart.</p>
 
                 <!-- Configuration card grid - row 1 -->
                 <div class="config-grid">
@@ -579,24 +546,24 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🎛️</div>
-                            <h3 class="config-card-title">基础配置</h3>
+                            <h3 class="config-card-title">General settings</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configPort">服务端口：</label>
+                            <label for="configPort">Server port: </label>
                             <input type="number" id="configPort" min="1" max="65535" class="modal-input" />
-                            <p class="hint">💡 范围：1-65535，默认 3000（需重启服务器）</p>
+                            <p class="hint">💡 Range: 1-65535. Default: 3000. Requires a server restart.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configUserAgent">User-Agent：</label>
+                            <label for="configUserAgent">User-Agent: </label>
                             <input type="text" id="configUserAgent" placeholder="factory-cli/0.19.3" class="modal-input" />
-                            <p class="hint">💡 请求上游 API 时使用的 User-Agent</p>
+                            <p class="hint">💡 User-Agent sent with upstream API requests</p>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configDevMode" />
-                                开发模式 (dev_mode)
+                                Development mode (dev_mode)
                             </label>
-                            <p class="hint">💡 开启后输出详细日志（建议生产环境关闭）</p>
+                            <p class="hint">💡 Enable detailed logging. Recommended off in production.</p>
                         </div>
                     </div>
 
@@ -604,29 +571,29 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔄</div>
-                            <h3 class="config-card-title">轮询算法</h3>
+                            <h3 class="config-card-title">Key selection algorithm</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configAlgorithm">算法类型：</label>
+                            <label for="configAlgorithm">Algorithm: </label>
                             <select id="configAlgorithm" class="modal-input">
                                 <optgroup label="📋 Basic algorithms">
-                                    <option value="round-robin">轮询 (Round-Robin) - 按顺序分配</option>
-                                    <option value="random">随机 (Random) - 随机选择</option>
-                                    <option value="least-used">最少使用 (Least-Used) - 选择使用次数最少的</option>
-                                    <option value="weighted-score">加权评分 (Weighted-Score) - 基于成功率和使用情况智能选择</option>
+                                    <option value="round-robin">Round-robin - use keys in sequence</option>
+                                    <option value="random">Random - select a key at random</option>
+                                    <option value="least-used">Least-used - select the key used the fewest times</option>
+                                    <option value="weighted-score">Weighted-score - select using success rate and usage</option>
                                 </optgroup>
                                 <optgroup label="🆕 Token usage algorithms">
-                                    <option value="least-token-used">💰 最少Token用量 - 选择已使用Token最少的密钥(均衡用量)</option>
-                                    <option value="max-remaining">🔋 最大剩余配额 - 选择剩余Token最多的密钥(避免耗尽)</option>
+                                    <option value="least-token-used">💰 Least-token-used - choose the key with the fewest tokens used to balance usage</option>
+                                    <option value="max-remaining">Max-remaining - most headroom across Factory usage windows</option>
                                 </optgroup>
                                 <optgroup label="🚀 Advanced algorithms">
-                                    <option value="weighted-usage">🎯 加权综合评分 - 综合剩余Token/使用率/成功率(推荐⭐)</option>
-                                    <option value="quota-aware">📊 配额感知 - 自动跳过达到配额上限的密钥</option>
-                                    <option value="time-window">⏰ 时间窗口 - 基于最近N小时使用量选择</option>
+                                    <option value="weighted-usage">Weighted-usage - uses Factory window headroom (legacy name)</option>
+                                    <option value="quota-aware">Quota-aware - most headroom across Factory usage windows</option>
+                                    <option value="time-window">⏰ Time-window - select based on usage over the last N hours</option>
                                 </optgroup>
                             </select>
-                            <p class="hint">💡 轮询算法决定如何从密钥池中选择下一个密钥<br/>
-                            🔥 推荐：<strong>weighted-usage</strong> (最智能) 或 least-token-used (均衡用量)</p>
+                            <p class="hint">💡 The selection algorithm determines which key is used next.<br/>
+                            All algorithms skip accounts with exhausted Factory usage windows. Round-robin rotates eligible accounts.</p>
                         </div>
                     </div>
                 </div>
@@ -635,11 +602,11 @@
                 <div class="config-card config-card-full">
                     <div class="config-card-header">
                         <div class="config-card-icon">💬</div>
-                        <h3 class="config-card-title">系统提示词 (System Prompt)</h3>
+                        <h3 class="config-card-title">System prompt</h3>
                     </div>
                     <div class="form-group">
                         <textarea id="configSystemPrompt" class="modal-textarea large" placeholder="You are Droid, an AI software engineering agent built by Factory." rows="4"></textarea>
-                        <p class="hint">💡 全局系统提示词，会注入到所有请求中</p>
+                        <p class="hint">💡 Global system prompt injected into all requests</p>
                     </div>
                 </div>
 
@@ -649,17 +616,17 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">⚖️</div>
-                            <h3 class="config-card-title">限制配置</h3>
+                            <h3 class="config-card-title">Size limits</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configNotesMaxLength">备注最大长度：</label>
+                            <label for="configNotesMaxLength">Maximum note length: </label>
                             <input type="number" id="configNotesMaxLength" min="100" max="10000" class="modal-input" />
-                            <p class="hint">💡 密钥备注字段的最大字符数，范围：100-10000</p>
+                            <p class="hint">💡 Maximum characters in key notes. Range: 100-10000.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configMaxJsonLogSize">JSON日志最大长度：</label>
+                            <label for="configMaxJsonLogSize">Maximum JSON log length: </label>
                             <input type="number" id="configMaxJsonLogSize" min="1000" max="50000" class="modal-input" />
-                            <p class="hint">💡 日志中 JSON 数据的最大字符数，范围：1000-50000</p>
+                            <p class="hint">💡 Maximum characters of JSON data included in logs. Range: 1000-50000.</p>
                         </div>
                     </div>
 
@@ -667,17 +634,17 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔄</div>
-                            <h3 class="config-card-title">余额同步</h3>
+                            <h3 class="config-card-title">Balance synchronization</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configSyncInterval">同步间隔（分钟）：</label>
+                            <label for="configSyncInterval">Sync interval (minutes): </label>
                             <input type="number" id="configSyncInterval" min="5" max="1440" class="modal-input" />
-                            <p class="hint">💡 自动同步密钥余额的间隔，范围：5-1440分钟，默认 30</p>
+                            <p class="hint">💡 Interval between automatic key balance updates. Range: 5-1440 minutes. Default: 30.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configSaveInterval">保存间隔（分钟）：</label>
+                            <label for="configSaveInterval">Save interval (minutes): </label>
                             <input type="number" id="configSaveInterval" min="1" max="60" class="modal-input" />
-                            <p class="hint">💡 保存余额数据到文件的间隔，范围：1-60分钟，默认 5</p>
+                            <p class="hint">💡 Interval between saving balance data to disk. Range: 1-60 minutes. Default: 5.</p>
                         </div>
                     </div>
                 </div>
@@ -688,22 +655,22 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🧠</div>
-                            <h3 class="config-card-title">推理Token配置</h3>
+                            <h3 class="config-card-title">Reasoning token budgets</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configReasoningLow">低级推理：</label>
+                            <label for="configReasoningLow">Low reasoning: </label>
                             <input type="number" id="configReasoningLow" min="1024" max="32768" step="1024" class="modal-input" />
-                            <p class="hint">💡 低级推理模式的 Token 预算，默认 4096</p>
+                            <p class="hint">💡 Token budget for low reasoning. Default: 4096.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configReasoningMedium">中级推理：</label>
+                            <label for="configReasoningMedium">Medium reasoning: </label>
                             <input type="number" id="configReasoningMedium" min="1024" max="32768" step="1024" class="modal-input" />
-                            <p class="hint">💡 中级推理模式的 Token 预算，默认 12288</p>
+                            <p class="hint">💡 Token budget for medium reasoning. Default: 12288.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configReasoningHigh">高级推理：</label>
+                            <label for="configReasoningHigh">High reasoning: </label>
                             <input type="number" id="configReasoningHigh" min="1024" max="65536" step="1024" class="modal-input" />
-                            <p class="hint">💡 高级推理模式的 Token 预算，默认 24576</p>
+                            <p class="hint">💡 Token budget for high reasoning. Default: 24576.</p>
                         </div>
                     </div>
 
@@ -711,17 +678,17 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">⚡</div>
-                            <h3 class="config-card-title">性能配置</h3>
+                            <h3 class="config-card-title">Performance settings</h3>
                         </div>
                         <div class="form-group">
-                            <label for="configConcurrentLimit">并发限制：</label>
+                            <label for="configConcurrentLimit">Concurrency limit: </label>
                             <input type="number" id="configConcurrentLimit" min="1" max="1000" class="modal-input" />
-                            <p class="hint">💡 范围：1-1000，同时处理的最大请求数</p>
+                            <p class="hint">💡 Maximum simultaneous requests. Range: 1-1000.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configRequestTimeout">请求超时 (ms)：</label>
+                            <label for="configRequestTimeout">Request timeout (ms): </label>
                             <input type="number" id="configRequestTimeout" min="1000" max="60000" step="1000" class="modal-input" />
-                            <p class="hint">💡 范围：1000-60000ms，单个请求的超时时间</p>
+                            <p class="hint">💡 Timeout for an individual request. Range: 1000-60000 ms.</p>
                         </div>
                     </div>
                 </div>
@@ -732,23 +699,23 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🔁</div>
-                            <h3 class="config-card-title">重试机制</h3>
+                            <h3 class="config-card-title">Retry settings</h3>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configRetryEnabled" />
-                                启用重试机制
+                                Enable retries
                             </label>
                         </div>
                         <div class="form-group">
-                            <label for="configRetryMaxRetries">最大重试次数：</label>
+                            <label for="configRetryMaxRetries">Maximum retries: </label>
                             <input type="number" id="configRetryMaxRetries" min="0" max="10" class="modal-input" />
-                            <p class="hint">💡 范围：0-10，建议 2-3 次</p>
+                            <p class="hint">💡 Range: 0-10. Recommended: 2-3 retries.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configRetryDelay">重试延迟 (ms)：</label>
+                            <label for="configRetryDelay">Retry delay (ms): </label>
                             <input type="number" id="configRetryDelay" min="0" max="10000" step="100" class="modal-input" />
-                            <p class="hint">💡 范围：0-10000ms，建议 1000ms (1秒)</p>
+                            <p class="hint">💡 Range: 0-10000 ms. Recommended: 1000 ms (1 second).</p>
                         </div>
                     </div>
 
@@ -756,29 +723,29 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🚫</div>
-                            <h3 class="config-card-title">自动封禁</h3>
+                            <h3 class="config-card-title">Automatic proxy blocking</h3>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configAutoBanEnabled" />
-                                启用自动封禁
+                                Enable automatic blocking in proxy
                             </label>
                         </div>
                         <div class="form-group">
-                            <label for="configAutoBanThreshold">错误阈值：</label>
+                            <label for="configAutoBanThreshold">Error threshold: </label>
                             <input type="number" id="configAutoBanThreshold" min="1" max="100" class="modal-input" />
-                            <p class="hint">💡 范围：1-100，连续错误达到此值将封禁密钥</p>
+                            <p class="hint">💡 Block the key in this proxy after this many consecutive errors. Range: 1-100.</p>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configAutoBan402" />
-                                自动封禁 402 (余额不足)
+                                Block on HTTP 402 (no remaining credit)
                             </label>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configAutoBan401" />
-                                自动封禁 401 (认证失败)
+                                Block on HTTP 401 (authentication failed)
                             </label>
                         </div>
                     </div>
@@ -786,28 +753,28 @@
 
                 <!-- 🚀 BaSui: Multi-tier pool settings -->
                 <div class="config-section">
-                    <h3>🎯 多级密钥池 (Multi-Tier Pool)</h3>
+                    <h3>🎯 Multi-tier key pools</h3>
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="configMultiTierEnabled" />
-                            启用多级密钥池功能
+                            Enable multi-tier key pools
                         </label>
-                        <p class="hint">💡 启用后，系统会按优先级使用不同池子的密钥（如：白嫖池 → 主力池）</p>
+                        <p class="hint">💡 Use keys from pools in priority order, for example: free-tier pool, then primary pool.</p>
                     </div>
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="configMultiTierAutoFallback" />
-                            自动降级 (Auto Fallback)
+                            Automatic fallback
                         </label>
-                        <p class="hint">💡 高优先级池子密钥用完后，自动切换到低优先级池子</p>
+                        <p class="hint">💡 Switch to a lower-priority pool when the higher-priority pool has no usable keys left.</p>
                     </div>
                     <div class="form-group">
                         <p class="hint">
-                            🔥 <strong>如何使用多级密钥池？</strong><br/>
-                            1️⃣ 在"仪表盘"Tab中点击"创建密钥池"，设置不同优先级的池子<br/>
-                            2️⃣ 在"密钥管理"Tab中，将密钥分配到不同的池子<br/>
-                            3️⃣ 启用本功能后，系统会优先使用高优先级池子的密钥<br/>
-                            📖 详细文档：<a href="/docs/MULTI_TIER_POOL.md" target="_blank" style="color: #667eea;">docs/MULTI_TIER_POOL.md</a>
+                            🔥 <strong>How do multi-tier pools work?</strong><br/>
+                            1️⃣ On the Dashboard tab, click "Create pool" and create pools with different priorities.<br/>
+                            2️⃣ On the Keys tab, assign keys to the pools.<br/>
+                            3️⃣ Enable this feature to prefer keys from higher-priority pools.<br/>
+                            📖 Documentation: <a href="/docs/MULTI_TIER_POOL.md" target="_blank" style="color: #667eea;">docs/MULTI_TIER_POOL.md</a>
                         </p>
                     </div>
                 </div>
@@ -818,37 +785,37 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🗄️</div>
-                            <h3 class="config-card-title">Redis 缓存</h3>
+                            <h3 class="config-card-title">Redis cache</h3>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configRedisEnabled" />
-                                启用 Redis 缓存
+                                Enable Redis caching
                             </label>
-                            <p class="hint">💡 可提升性能 30-50%，适合高并发场景（需重启）</p>
+                            <p class="hint">💡 Can improve performance by 30-50% in high-concurrency workloads. Requires a restart.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configRedisHost">Redis 服务器：</label>
+                            <label for="configRedisHost">Redis server: </label>
                             <input type="text" id="configRedisHost" placeholder="127.0.0.1" class="modal-input" />
                         </div>
                         <div class="form-group">
-                            <label for="configRedisPort">Redis 端口：</label>
+                            <label for="configRedisPort">Redis port: </label>
                             <input type="number" id="configRedisPort" min="1" max="65535" class="modal-input" />
-                            <p class="hint">💡 默认 6379</p>
+                            <p class="hint">💡 Default: 6379</p>
                         </div>
                         <div class="form-group">
-                            <label for="configRedisPassword">Redis 密码：</label>
+                            <label for="configRedisPassword">Redis password: </label>
                             <input type="password" id="configRedisPassword" placeholder="Leave blank if no password is required" class="modal-input" />
                         </div>
                         <div class="form-group">
-                            <label for="configRedisDb">数据库编号：</label>
+                            <label for="configRedisDb">Database index: </label>
                             <input type="number" id="configRedisDb" min="0" max="15" class="modal-input" />
-                            <p class="hint">💡 范围：0-15，默认 0</p>
+                            <p class="hint">💡 Range: 0-15. Default: 0.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configRedisKeyPrefix">键前缀：</label>
+                            <label for="configRedisKeyPrefix">Key prefix: </label>
                             <input type="text" id="configRedisKeyPrefix" placeholder="droid2api:" class="modal-input" />
-                            <p class="hint">💡 避免键冲突</p>
+                            <p class="hint">💡 Avoid key name collisions</p>
                         </div>
                     </div>
 
@@ -856,26 +823,26 @@
                     <div class="config-card">
                         <div class="config-card-header">
                             <div class="config-card-icon">🖥️</div>
-                            <h3 class="config-card-title">集群模式</h3>
+                            <h3 class="config-card-title">Cluster mode</h3>
                         </div>
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="configClusterEnabled" />
-                                启用集群模式
+                                Enable cluster mode
                             </label>
-                            <p class="hint">💡 利用多核CPU，适合超高并发（需重启）</p>
+                            <p class="hint">💡 Use multiple CPU cores for very high concurrency. Requires a restart.</p>
                         </div>
                         <div class="form-group">
-                            <label for="configClusterWorkers">Worker 进程数：</label>
+                            <label for="configClusterWorkers">Worker processes: </label>
                             <input type="number" id="configClusterWorkers" min="0" max="32" class="modal-input" />
-                            <p class="hint">💡 0=自动检测CPU核心数，推荐保持0</p>
+                            <p class="hint">💡 0 = detect CPU core count automatically. Recommended: 0.</p>
                         </div>
                         <div class="form-group">
                             <p class="hint" style="margin-top: 20px;">
-                                ⚠️ <strong>注意事项：</strong><br/>
-                                • Redis 和集群模式配置修改后需要重启服务器<br/>
-                                • 集群模式下每个 Worker 独立运行<br/>
-                                • 建议先在开发环境测试再部署到生产
+                                ⚠️ <strong>Notes: </strong><br/>
+                                • Changes to Redis and cluster mode settings require a server restart.<br/>
+                                • Each worker runs independently in cluster mode.<br/>
+                                • Test in development before deploying to production.
                             </p>
                         </div>
                     </div>
@@ -883,9 +850,9 @@
 
                 <!-- Configuration action buttons -->
                 <div class="config-actions">
-                    <button onclick="saveConfig()" class="btn btn-primary">💾 保存配置</button>
-                    <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 重置为默认值</button>
-                    <button onclick="loadConfigData()" class="btn btn-secondary">🔄 重新加载</button>
+                    <button onclick="saveConfig()" class="btn btn-primary">💾 Save configuration</button>
+                    <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 Reset to defaults</button>
+                    <button onclick="loadConfigData()" class="btn btn-secondary">🔄 Reload</button>
                 </div>
             </div>
             <!-- End of settings tab -->
@@ -897,24 +864,24 @@
     <div id="addKeyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('addKeyModal')">&times;</span>
-            <h2>➕ 添加密钥</h2>
+            <h2>➕ Add key</h2>
             <div class="form-group">
-                <label for="newKeyInput">密钥：</label>
+                <label for="newKeyInput">Key: </label>
                 <input type="text" id="newKeyInput" placeholder="fk-xxxxxxxx" class="modal-input" />
             </div>
             <div class="form-group">
-                <label for="newKeyPoolGroup">🎯 所属密钥池：</label>
+                <label for="newKeyPoolGroup">🎯 Pool: </label>
                 <select id="newKeyPoolGroup" class="modal-input">
-                    <option value="">默认池 (default)</option>
+                    <option value="">Default pool (default)</option>
                     <!-- Pool options are loaded dynamically -->
                 </select>
-                <p class="hint">💡 选择密钥所属的池子，支持多级密钥池优先级管理</p>
+                <p class="hint">💡 Choose the pool for this key. Pool priorities support multi-tier selection.</p>
             </div>
             <div class="form-group">
-                <label for="newKeyNotes">备注：</label>
+                <label for="newKeyNotes">Notes: </label>
                 <textarea id="newKeyNotes" placeholder="Notes (optional)" class="modal-textarea"></textarea>
             </div>
-            <button onclick="addKey()" class="btn btn-primary">添加</button>
+            <button onclick="addKey()" class="btn btn-primary">Add</button>
         </div>
     </div>
 
@@ -922,27 +889,27 @@
     <div id="batchImportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchImportModal')">&times;</span>
-            <h2>📤 批量导入密钥</h2>
+            <h2>📤 Bulk import keys</h2>
             <div class="form-group">
-                <label for="batchImportPoolGroup">🎯 导入到哪个池：</label>
+                <label for="batchImportPoolGroup">🎯 Destination pool: </label>
                 <select id="batchImportPoolGroup" class="modal-input">
-                    <option value="">默认池 (default)</option>
+                    <option value="">Default pool (default)</option>
                     <!-- Pool options are loaded dynamically -->
                 </select>
-                <p class="hint">💡 所有导入的密钥将添加到选中的池子</p>
+                <p class="hint">💡 All imported keys will be added to the selected pool.</p>
             </div>
             <div class="form-group">
-                <label for="batchKeysInput">密钥列表 (每行一个)：</label>
+                <label for="batchKeysInput">Key list (one per line): </label>
                 <textarea id="batchKeysInput" placeholder="One key per line&#10;fk-xxxxxxxx&#10;fk-yyyyyyyy&#10;fk-zzzzzzzz" class="modal-textarea large"></textarea>
             </div>
             <div class="form-group" style="margin-top: 10px;">
                 <label style="display: flex; align-items: center; cursor: pointer;">
                     <input type="checkbox" id="autoTestKeys" style="margin-right: 8px;" checked />
-                    <span>🧪 自动测试新导入的密钥（推荐）</span>
+                    <span>🧪 Automatically test newly imported keys (recommended)</span>
                 </label>
-                <p class="hint">💡 自动测试可检测密钥有效性，402错误会自动拉黑</p>
+                <p class="hint">💡 Test key validity automatically. HTTP 402 blocks the key in this proxy.</p>
             </div>
-            <button onclick="batchImport()" class="btn btn-primary">📥 开始导入</button>
+            <button onclick="batchImport()" class="btn btn-primary">📥 Start import</button>
             <div id="importResult" class="import-result"></div>
         </div>
     </div>
@@ -951,9 +918,9 @@
     <div id="editNotesModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editNotesModal')">&times;</span>
-            <h2>编辑备注</h2>
+            <h2>Edit notes</h2>
             <textarea id="editNotesInput" class="modal-textarea"></textarea>
-            <button onclick="saveNotes()" class="btn btn-primary">保存</button>
+            <button onclick="saveNotes()" class="btn btn-primary">Save</button>
         </div>
     </div>
 
@@ -961,27 +928,27 @@
     <div id="editKeyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('editKeyModal')">&times;</span>
-            <h2>✏️ 编辑密钥</h2>
+            <h2>✏️ Edit key</h2>
             <div class="form-group">
-                <label for="editKeyInput">密钥：</label>
+                <label for="editKeyInput">Key: </label>
                 <input type="text" id="editKeyInput" placeholder="fk-xxxxxxxx" class="modal-input" />
-                <p class="hint">⚠️ 修改密钥本身是危险操作，请确保新密钥有效</p>
+                <p class="hint">⚠️ Changing the key value can interrupt access. Make sure the replacement key is valid.</p>
             </div>
             <div class="form-group">
-                <label for="editKeyPoolGroup">🎯 所属密钥池：</label>
+                <label for="editKeyPoolGroup">🎯 Pool: </label>
                 <select id="editKeyPoolGroup" class="modal-input">
-                    <option value="default">默认池 (default)</option>
+                    <option value="default">Default pool (default)</option>
                     <!-- Pool options are loaded dynamically -->
                 </select>
-                <p class="hint">💡 选择密钥所属的池子，支持多级密钥池优先级管理</p>
+                <p class="hint">💡 Choose the pool for this key. Pool priorities support multi-tier selection.</p>
             </div>
             <div class="form-group">
-                <label for="editKeyNotesInput">备注：</label>
+                <label for="editKeyNotesInput">Notes: </label>
                 <textarea id="editKeyNotesInput" placeholder="Notes (optional)" class="modal-textarea"></textarea>
             </div>
             <div class="modal-actions">
-                <button onclick="saveEditedKey()" class="btn btn-primary">💾 保存</button>
-                <button onclick="closeModal('editKeyModal')" class="btn btn-secondary">❌ 取消</button>
+                <button onclick="saveEditedKey()" class="btn btn-primary">💾 Save</button>
+                <button onclick="closeModal('editKeyModal')" class="btn btn-secondary">❌ Cancel</button>
             </div>
         </div>
     </div>
@@ -990,104 +957,104 @@
     <div id="configModal" class="modal">
         <div class="modal-content modal-content-large">
             <span class="close" onclick="closeModal('configModal')">&times;</span>
-            <h2>⚙️ 轮询配置</h2>
+            <h2>⚙️ Key selection settings</h2>
 
             <!-- Key selection algorithm -->
             <div class="config-section">
-                <h3>🔄 轮询算法</h3>
+                <h3>🔄 Key selection algorithm</h3>
                 <div class="form-group">
-                    <label for="configAlgorithm">算法类型：</label>
+                    <label for="configAlgorithm">Algorithm: </label>
                     <select id="configAlgorithm" class="modal-input">
                         <optgroup label="📋 Basic algorithms">
-                                <option value="round-robin">轮询 (Round-Robin) - 按顺序分配</option>
-                                <option value="random">随机 (Random) - 随机选择</option>
-                                <option value="least-used">最少使用 (Least-Used) - 选择使用次数最少的</option>
-                                <option value="weighted-score">加权评分 (Weighted-Score) - 基于成功率和使用情况智能选择</option>
+                                <option value="round-robin">Round-robin - use keys in sequence</option>
+                                <option value="random">Random - select a key at random</option>
+                                <option value="least-used">Least-used - select the key used the fewest times</option>
+                                <option value="weighted-score">Weighted-score - select using success rate and usage</option>
                             </optgroup>
                             <optgroup label="🆕 Token usage algorithms">
-                                <option value="least-token-used">💰 最少Token用量 - 选择已使用Token最少的密钥(均衡用量)</option>
-                                <option value="max-remaining">🔋 最大剩余配额 - 选择剩余Token最多的密钥(避免耗尽)</option>
+                                <option value="least-token-used">💰 Least-token-used - choose the key with the fewest tokens used to balance usage</option>
+                                <option value="max-remaining">Max-remaining - most headroom across Factory usage windows</option>
                             </optgroup>
                             <optgroup label="🚀 Advanced algorithms">
-                                <option value="weighted-usage">🎯 加权综合评分 - 综合剩余Token/使用率/成功率(推荐⭐)</option>
-                                <option value="quota-aware">📊 配额感知 - 自动跳过达到配额上限的密钥</option>
-                                <option value="time-window">⏰ 时间窗口 - 基于最近N小时使用量选择</option>
+                                <option value="weighted-usage">Weighted-usage - uses Factory window headroom (legacy name)</option>
+                                <option value="quota-aware">Quota-aware - most headroom across Factory usage windows</option>
+                                <option value="time-window">⏰ Time-window - select based on usage over the last N hours</option>
                             </optgroup>
                     </select>
-                    <p class="hint">💡 轮询算法决定如何从密钥池中选择下一个密钥<br/>
-                    🔥 推荐：<strong>weighted-usage</strong> (最智能全面) 或 least-token-used (均衡用量)</p>
+                    <p class="hint">💡 The selection algorithm determines which key is used next.<br/>
+                    All algorithms skip accounts with exhausted Factory usage windows. Round-robin rotates eligible accounts.</p>
                 </div>
             </div>
 
             <!-- Retry settings -->
             <div class="config-section">
-                <h3>🔁 重试机制</h3>
+                <h3>🔁 Retry settings</h3>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="configRetryEnabled" />
-                        启用重试机制
+                        Enable retries
                     </label>
                 </div>
                 <div class="form-group">
-                    <label for="configRetryMaxRetries">最大重试次数：</label>
+                    <label for="configRetryMaxRetries">Maximum retries: </label>
                     <input type="number" id="configRetryMaxRetries" min="0" max="10" class="modal-input" />
-                    <p class="hint">💡 范围：0-10，建议 2-3 次</p>
+                    <p class="hint">💡 Range: 0-10. Recommended: 2-3 retries.</p>
                 </div>
                 <div class="form-group">
-                    <label for="configRetryDelay">重试延迟 (ms)：</label>
+                    <label for="configRetryDelay">Retry delay (ms): </label>
                     <input type="number" id="configRetryDelay" min="0" max="10000" step="100" class="modal-input" />
-                    <p class="hint">💡 范围：0-10000ms，建议 1000ms (1秒)</p>
+                    <p class="hint">💡 Range: 0-10000 ms. Recommended: 1000 ms (1 second).</p>
                 </div>
             </div>
 
             <!-- Automatic proxy blocking -->
             <div class="config-section">
-                <h3>🚫 自动封禁</h3>
+                <h3>🚫 Automatic proxy blocking</h3>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="configAutoBanEnabled" />
-                        启用自动封禁
+                        Enable automatic blocking in proxy
                     </label>
                 </div>
                 <div class="form-group">
-                    <label for="configAutoBanThreshold">错误阈值：</label>
+                    <label for="configAutoBanThreshold">Error threshold: </label>
                     <input type="number" id="configAutoBanThreshold" min="1" max="100" class="modal-input" />
-                    <p class="hint">💡 范围：1-100，连续错误达到此值将封禁密钥</p>
+                    <p class="hint">💡 Block the key in this proxy after this many consecutive errors. Range: 1-100.</p>
                 </div>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="configAutoBan402" />
-                        自动封禁 402 (余额不足)
+                        Block on HTTP 402 (no remaining credit)
                     </label>
                 </div>
                 <div class="form-group">
                     <label>
                         <input type="checkbox" id="configAutoBan401" />
-                        自动封禁 401 (认证失败)
+                        Block on HTTP 401 (authentication failed)
                     </label>
                 </div>
             </div>
 
             <!-- Performance settings -->
             <div class="config-section">
-                <h3>⚡ 性能配置</h3>
+                <h3>⚡ Performance settings</h3>
                 <div class="form-group">
-                    <label for="configConcurrentLimit">并发限制：</label>
+                    <label for="configConcurrentLimit">Concurrency limit: </label>
                     <input type="number" id="configConcurrentLimit" min="1" max="1000" class="modal-input" />
-                    <p class="hint">💡 范围：1-1000，同时处理的最大请求数</p>
+                    <p class="hint">💡 Maximum simultaneous requests. Range: 1-1000.</p>
                 </div>
                 <div class="form-group">
-                    <label for="configRequestTimeout">请求超时 (ms)：</label>
+                    <label for="configRequestTimeout">Request timeout (ms): </label>
                     <input type="number" id="configRequestTimeout" min="1000" max="60000" step="1000" class="modal-input" />
-                    <p class="hint">💡 范围：1000-60000ms，单个请求的超时时间</p>
+                    <p class="hint">💡 Timeout for an individual request. Range: 1000-60000 ms.</p>
                 </div>
             </div>
 
             <!-- Action buttons -->
             <div class="modal-actions">
-                <button onclick="saveConfig()" class="btn btn-primary">💾 保存配置</button>
-                <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 重置为默认值</button>
-                <button onclick="closeModal('configModal')" class="btn btn-secondary">❌ 取消</button>
+                <button onclick="saveConfig()" class="btn btn-primary">💾 Save configuration</button>
+                <button onclick="resetConfigToDefault()" class="btn btn-warning">🔄 Reset to defaults</button>
+                <button onclick="closeModal('configModal')" class="btn btn-secondary">❌ Cancel</button>
             </div>
         </div>
     </div>
@@ -1096,26 +1063,26 @@
     <div id="createPoolModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('createPoolModal')">&times;</span>
-            <h2>🎯 创建密钥池</h2>
+            <h2>🎯 Create pool</h2>
             <div class="form-group">
-                <label for="newPoolId">池子ID (英文)：</label>
+                <label for="newPoolId">Pool ID (ASCII): </label>
                 <input type="text" id="newPoolId" placeholder="freebies" class="modal-input" />
-                <p class="hint">💡 只能包含英文字母、数字、短横线</p>
+                <p class="hint">💡 Use only ASCII letters, digits, and hyphens.</p>
             </div>
             <div class="form-group">
-                <label for="newPoolName">池子名称 (中文)：</label>
+                <label for="newPoolName">Pool display name: </label>
                 <input type="text" id="newPoolName" placeholder="Free-tier pool" class="modal-input" />
             </div>
             <div class="form-group">
-                <label for="newPoolPriority">优先级：</label>
+                <label for="newPoolPriority">Priority: </label>
                 <input type="number" id="newPoolPriority" placeholder="1" min="1" max="100" class="modal-input" />
-                <p class="hint">💡 数字越小优先级越高 (1 = 最高优先级)</p>
+                <p class="hint">💡 Lower numbers have higher priority (1 is highest).</p>
             </div>
             <div class="form-group">
-                <label for="newPoolDescription">描述：</label>
+                <label for="newPoolDescription">Description: </label>
                 <textarea id="newPoolDescription" placeholder="Description (optional)" class="modal-textarea"></textarea>
             </div>
-            <button onclick="createPool()" class="btn btn-primary">创建</button>
+            <button onclick="createPool()" class="btn btn-primary">Create</button>
         </div>
     </div>
 
@@ -1123,16 +1090,16 @@
     <div id="changePoolModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('changePoolModal')">&times;</span>
-            <h2>🔄 修改密钥池</h2>
-            <p>将密钥 <strong id="changePoolKeyId"></strong> 移动到：</p>
+            <h2>🔄 Change pool</h2>
+            <p>Move key <strong id="changePoolKeyId"></strong> to:</p>
             <div class="form-group">
-                <label for="changePoolSelect">目标密钥池：</label>
+                <label for="changePoolSelect">Destination pool: </label>
                 <select id="changePoolSelect" class="modal-input">
-                    <option value="default">默认池 (default)</option>
+                    <option value="default">Default pool (default)</option>
                     <!-- Pool options are loaded dynamically -->
                 </select>
             </div>
-            <button onclick="changeKeyPool()" class="btn btn-primary">确认移动</button>
+            <button onclick="changeKeyPool()" class="btn btn-primary">Confirm move</button>
         </div>
     </div>
 
@@ -1140,39 +1107,39 @@
     <div id="batchActionModal" class="modal">
         <div class="modal-content modal-content-large">
             <span class="close" onclick="closeModal('batchActionModal')">&times;</span>
-            <h2 id="batchActionModalTitle">批量操作</h2>
+            <h2 id="batchActionModalTitle">Bulk actions</h2>
             
             <!-- Hidden action type field -->
             <input type="hidden" id="batchActionModalType" value="">
             
             <!-- Destination pool selector (shown only when moving keys)-->
             <div id="batchActionPoolSelector" class="form-group" style="display: none;">
-                <label for="batchActionPoolSelect">目标密钥池：</label>
+                <label for="batchActionPoolSelect">Destination pool: </label>
                 <select id="batchActionPoolSelect" class="modal-input">
-                    <option value="">-- 请选择目标池 --</option>
-                    <option value="default">默认池 (default)</option>
+                    <option value="">-- Select a destination pool --</option>
+                    <option value="default">Default pool (default)</option>
                     <!-- Pool options are loaded dynamically -->
                 </select>
             </div>
             
             <!-- Filters -->
             <div class="form-group">
-                <label>筛选条件：</label>
+                <label>Filters: </label>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
                     <div>
-                        <label for="batchModalStatusFilter" style="font-size: 0.9em; color: #6b7280;">状态：</label>
+                        <label for="batchModalStatusFilter" style="font-size: 0.9em; color: #6b7280;">Status: </label>
                         <select id="batchModalStatusFilter" class="modal-input" onchange="batchModalFilterChanged()" style="width: auto;">
-                            <option value="all">全部</option>
-                            <option value="active">可用</option>
-                            <option value="disabled">已禁用</option>
-                            <option value="banned">已封禁</option>
+                            <option value="all">All</option>
+                            <option value="active">Active</option>
+                            <option value="disabled">Disabled</option>
+                            <option value="banned">Blocked in proxy</option>
                         </select>
                     </div>
                     <div>
-                        <label for="batchModalPoolFilter" style="font-size: 0.9em; color: #6b7280;">密钥池：</label>
+                        <label for="batchModalPoolFilter" style="font-size: 0.9em; color: #6b7280;">Key pool: </label>
                         <select id="batchModalPoolFilter" class="modal-input" onchange="batchModalFilterChanged()" style="width: auto;">
-                            <option value="all">全部池</option>
-                            <option value="default">默认池</option>
+                            <option value="all">All pools</option>
+                            <option value="default">Default pool</option>
                             <!-- Pool options are loaded dynamically -->
                         </select>
                     </div>
@@ -1184,24 +1151,24 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <label>
                         <input type="checkbox" id="batchModalSelectAll" onchange="toggleBatchModalSelectAll(this.checked)">
-                        全选/取消全选
+                        Select / deselect all
                     </label>
-                    <span style="color: #6b7280; font-size: 0.9em;">已选中：<strong id="batchModalSelectedCount">0</strong> 个密钥</span>
+                    <span style="color: #6b7280; font-size: 0.9em;">Selected: <strong id="batchModalSelectedCount">0</strong> keys</span>
                 </div>
                 <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 4px;">
                     <table class="keys-table" style="margin: 0;">
                         <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 1;">
                             <tr>
-                                <th style="width: 40px;">选择</th>
-                                <th>密钥ID</th>
-                                <th>密钥</th>
-                                <th>密钥池</th>
-                                <th>状态</th>
+                                <th style="width: 40px;">Select</th>
+                                <th>Key ID</th>
+                                <th>Key</th>
+                                <th>Key pool</th>
+                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody id="batchModalKeysTableBody">
                             <tr>
-                                <td colspan="5" style="text-align: center; color: #999;">加载中...</td>
+                                <td colspan="5" style="text-align: center; color: #999;">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1210,8 +1177,8 @@
             
             <!-- Action buttons -->
             <div class="modal-actions">
-                <button id="batchActionConfirmBtn" onclick="confirmBatchAction()" class="btn btn-primary" disabled>确认执行</button>
-                <button onclick="closeModal('batchActionModal')" class="btn btn-secondary">取消</button>
+                <button id="batchActionConfirmBtn" onclick="confirmBatchAction()" class="btn btn-primary" disabled>Confirm action</button>
+                <button onclick="closeModal('batchActionModal')" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
@@ -1220,50 +1187,50 @@
     <div id="exportKeysModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('exportKeysModal')">&times;</span>
-            <h2>📥 导出密钥</h2>
+            <h2>📥 Export keys</h2>
             <div class="form-group">
-                <label>🎯 导出哪个池：</label>
+                <label>🎯 Pools to export: </label>
                 <div class="checkbox-group">
                     <label class="filter-checkbox">
                         <input type="checkbox" id="exportAllPools" checked onchange="toggleExportAllPools()">
-                        全部池 (导出所有密钥)
+                        All pools (export all keys)
                     </label>
                 </div>
                 <div id="exportPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="exportPoolGroup" class="modal-input" multiple size="5">
-                        <option value="default">默认池 (default)</option>
+                        <option value="default">Default pool (default)</option>
                         <!-- Pool options are loaded dynamically -->
                     </select>
-                    <p class="hint">💡 按住 Ctrl/Cmd 可多选池子</p>
+                    <p class="hint">💡 Hold Ctrl/Cmd to select multiple pools.</p>
                 </div>
             </div>
             <div class="form-group">
-                <label>导出格式：</label>
+                <label>Export format: </label>
                 <div class="radio-group">
                     <label>
                         <input type="radio" name="exportFormat" value="json" checked>
-                        JSON (完整数据)
+                        JSON (full records)
                     </label>
                     <label>
                         <input type="radio" name="exportFormat" value="text">
-                        纯文本 (仅密钥)
+                        Plain text (keys only)
                     </label>
                     <label>
                         <input type="radio" name="exportFormat" value="csv">
-                        CSV (表格)
+                        CSV (table)
                     </label>
                 </div>
             </div>
             <div class="form-group">
-                <label>状态筛选：</label>
+                <label>Status filter: </label>
                 <select id="exportStatusFilter" class="modal-input">
-                    <option value="all">全部状态</option>
-                    <option value="active">仅可用</option>
-                    <option value="disabled">仅禁用</option>
-                    <option value="banned">仅封禁</option>
+                    <option value="all">All statuses</option>
+                    <option value="active">Active only</option>
+                    <option value="disabled">Disabled only</option>
+                    <option value="banned">Blocked only</option>
                 </select>
             </div>
-            <button onclick="confirmExportKeys()" class="btn btn-primary">📥 导出文件</button>
+            <button onclick="confirmExportKeys()" class="btn btn-primary">📥 Export file</button>
         </div>
     </div>
 
@@ -1271,38 +1238,38 @@
     <div id="batchTestModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('batchTestModal')">&times;</span>
-            <h2>🧪 批量测试密钥</h2>
+            <h2>🧪 Bulk test keys</h2>
             <div class="form-group">
-                <label>🎯 测试哪个池：</label>
+                <label>🎯 Pools to test: </label>
                 <div class="radio-group">
                     <label>
                         <input type="radio" name="testPool" value="all" checked>
-                        全部池 (测试所有密钥)
+                        All pools (test all keys)
                     </label>
                     <label>
                         <input type="radio" name="testPool" value="specific">
-                        指定池
+                        Selected pool
                     </label>
                 </div>
                 <div id="testPoolOptions" style="margin-top: 10px; display: none;">
                     <select id="testPoolGroup" class="modal-input">
-                        <option value="default">默认池 (default)</option>
+                        <option value="default">Default pool (default)</option>
                         <!-- Pool options are loaded dynamically -->
                     </select>
                 </div>
             </div>
             <div class="form-group">
-                <label for="testConcurrency">测试并发数：</label>
+                <label for="testConcurrency">Concurrent key tests: </label>
                 <input type="number" id="testConcurrency" min="1" max="10" value="5" class="modal-input" />
-                <p class="hint">💡 同时测试几个密钥，建议 3-5 个/批次</p>
+                <p class="hint">💡 Number of keys to test at once. Recommended: 3-5 per batch.</p>
             </div>
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="testAutoRefresh" checked>
-                    测试完成后自动刷新列表
+                    Refresh the list automatically after testing
                 </label>
             </div>
-            <button onclick="confirmBatchTest()" class="btn btn-primary">🧪 开始测试</button>
+            <button onclick="confirmBatchTest()" class="btn btn-primary">🧪 Start test</button>
             <div id="testResult" class="import-result" style="margin-top: 15px;"></div>
         </div>
     </div>
@@ -1311,99 +1278,99 @@
     <div id="ruleModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('ruleModal')">&times;</span>
-            <h2 id="ruleModalTitle">➕ 添加过滤规则</h2>
+            <h2 id="ruleModalTitle">➕ Add filter rule</h2>
             
             <div class="form-group">
-                <label for="ruleName">规则名称：</label>
+                <label for="ruleName">Rule name: </label>
                 <input type="text" id="ruleName" class="modal-input" placeholder="Example: sensitive term filter" />
             </div>
 
             <div class="form-group">
-                <label for="rulePattern">匹配类型：</label>
+                <label for="rulePattern">Match type: </label>
                 <select id="rulePatternType" class="modal-input" onchange="updatePatternHint()">
-                    <option value="contains">包含匹配 (contains)</option>
-                    <option value="exact">精确匹配 (exact)</option>
-                    <option value="startsWith">开头匹配 (startsWith)</option>
-                    <option value="endsWith">结尾匹配 (endsWith)</option>
-                    <option value="regex">正则表达式 (regex)</option>
+                    <option value="contains">Contains (contains)</option>
+                    <option value="exact">Exact match (exact)</option>
+                    <option value="startsWith">Starts with (startsWith)</option>
+                    <option value="endsWith">Ends with (endsWith)</option>
+                    <option value="regex">Regular expression (regex)</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="rulePatternValue">匹配值：</label>
+                <label for="rulePatternValue">Match value: </label>
                 <input type="text" id="rulePatternValue" class="modal-input" placeholder="Example: sensitive term" />
-                <p class="hint" id="patternHint">💡 包含匹配：只要文本中出现该关键词就会匹配</p>
+                <p class="hint" id="patternHint">💡 Contains: matches if the keyword appears anywhere in the text.</p>
             </div>
 
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="ruleCaseSensitive">
-                    区分大小写
+                    Case-sensitive
                 </label>
             </div>
 
             <div class="form-group">
-                <label for="ruleAction">处理动作：</label>
+                <label for="ruleAction">Action: </label>
                 <select id="ruleActionType" class="modal-input" onchange="updateActionFields()">
-                    <option value="replace">替换 (replace)</option>
-                    <option value="delete_keyword">删除关键词 (delete_keyword)</option>
-                    <option value="block">阻止 (block)</option>
+                    <option value="replace">Replace (replace)</option>
+                    <option value="delete_keyword">Delete keywords (delete_keyword)</option>
+                    <option value="block">Block (block)</option>
                 </select>
             </div>
 
             <div class="form-group" id="replacementField">
-                <label for="ruleReplacement">替换文本：</label>
+                <label for="ruleReplacement">Replacement text: </label>
                 <input type="text" id="ruleReplacement" class="modal-input" placeholder="Example: ***" />
-                <p class="hint">💡 留空则删除匹配内容</p>
+                <p class="hint">💡 Leave blank to remove the matched text.</p>
             </div>
 
             <div class="form-group" id="deleteModeField" style="display: none;">
-                <label for="ruleDeleteMode">删除模式：</label>
+                <label for="ruleDeleteMode">Deletion mode: </label>
                 <select id="ruleDeleteMode" class="modal-input" onchange="updateActionFields()">
-                    <option value="inline">逐字删除匹配文本</option>
-                    <option value="targets">删除指定词语</option>
-                    <option value="segment">删除整段匹配内容</option>
+                    <option value="inline">Remove matched text inline</option>
+                    <option value="targets">Remove specified terms</option>
+                    <option value="segment">Remove matching segments</option>
                 </select>
-                <p class="hint">💡 inline=直接删匹配片段；targets=额外删指定词；segment=按分隔符整段删除</p>
+                <p class="hint">💡 inline: remove the match; targets: also remove specified terms; segment: remove entire delimiter-separated segments.</p>
             </div>
 
             <div class="form-group" id="deleteTargetsField" style="display: none;">
-                <label for="ruleDeleteTargets">指定删除词：</label>
+                <label for="ruleDeleteTargets">Terms to remove: </label>
                 <input type="text" id="ruleDeleteTargets" class="modal-input" placeholder="Example: password,token,secret" />
-                <p class="hint">💡 仅在“删除指定词语”模式下生效，使用逗号或换行分隔多个词</p>
+                <p class="hint">💡 Applies only to Remove specified terms mode. Separate terms with commas or newlines.</p>
             </div>
 
             <div class="form-group" id="deleteDelimiterField" style="display: none;">
-                <label for="ruleDeleteDelimiter">段落分隔符：</label>
+                <label for="ruleDeleteDelimiter">Segment delimiter: </label>
                 <input type="text" id="ruleDeleteDelimiter" class="modal-input" placeholder="Default: two newlines (\\n\\n)" />
-                <p class="hint">💡 仅在“删除整段匹配内容”模式下生效，用于拆分段落</p>
+                <p class="hint">💡 Used to split text into segments in Remove matching segments mode only.</p>
             </div>
 
             <div class="form-group" id="deleteMinLengthField" style="display: none;">
-                <label for="ruleDeleteMinLength">最小段落长度：</label>
+                <label for="ruleDeleteMinLength">Minimum segment length: </label>
                 <input type="number" id="ruleDeleteMinLength" class="modal-input" min="0" placeholder="Default: 0 (no minimum)" />
-                <p class="hint">💡 仅在“删除整段”模式下生效，长度不足不会删除，避免误杀短提示</p>
+                <p class="hint">💡 Applies only to segment deletion. Shorter segments are kept to avoid removing brief notices.</p>
             </div>
 
             <div class="form-group" id="deletePreserveKeywordsField" style="display: none;">
-                <label for="ruleDeletePreserveKeywords">保留关键词：</label>
+                <label for="ruleDeletePreserveKeywords">Preserve keywords: </label>
                 <textarea id="ruleDeletePreserveKeywords" class="modal-input" rows="2" placeholder="Example: RCA,important notes"></textarea>
-                <p class="hint">💡 分隔符：逗号或换行；命中任意关键词的段落将保留不删除</p>
+                <p class="hint">💡 Separate keywords with commas or newlines. Keep any segment containing at least one of them.</p>
             </div>
 
             <div class="form-group">
-                <label for="ruleDescription">规则描述：</label>
+                <label for="ruleDescription">Rule description: </label>
                 <textarea id="ruleDescription" class="modal-input" rows="3" placeholder="Describe what this rule does..."></textarea>
             </div>
 
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="ruleEnabled" checked>
-                    启用此规则
+                    Enable this rule
                 </label>
             </div>
 
-            <button onclick="saveRule()" class="btn btn-primary" id="saveRuleBtn">💾 保存规则</button>
+            <button onclick="saveRule()" class="btn btn-primary" id="saveRuleBtn">💾 Save rule</button>
         </div>
     </div>
 
@@ -1411,35 +1378,35 @@
     <div id="testRuleModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('testRuleModal')">&times;</span>
-            <h2>🧪 测试过滤规则</h2>
+            <h2>🧪 Test filter rules</h2>
             
             <div class="form-group">
-                <label for="testRuleSelect">选择规则：</label>
+                <label for="testRuleSelect">Select a rule: </label>
                 <select id="testRuleSelect" class="modal-input">
-                    <option value="">测试所有规则</option>
+                    <option value="">Test all rules</option>
                 </select>
-                <p class="hint">💡 不选择则测试所有启用的规则</p>
+                <p class="hint">💡 Leave unselected to test all enabled rules.</p>
             </div>
 
             <div class="form-group">
-                <label for="testText">测试文本：</label>
+                <label for="testText">Test text: </label>
                 <textarea id="testText" class="modal-input" rows="5" placeholder="Enter text to test..."></textarea>
             </div>
 
-            <button onclick="runTestRule()" class="btn btn-primary">🧪 开始测试</button>
+            <button onclick="runTestRule()" class="btn btn-primary">🧪 Start test</button>
 
             <div id="testRuleResult" style="margin-top: 20px; display: none;">
-                <h3>测试结果：</h3>
+                <h3>Test results: </h3>
                 <div class="form-group">
-                    <label>原始文本：</label>
+                    <label>Original text: </label>
                     <pre id="testOriginalText" style="background: #f5f5f5; padding: 10px; border-radius: 5px;"></pre>
                 </div>
                 <div class="form-group">
-                    <label>过滤后文本：</label>
+                    <label>Filtered text: </label>
                     <pre id="testFilteredText" style="background: #e8f5e9; padding: 10px; border-radius: 5px;"></pre>
                 </div>
                 <div class="form-group">
-                    <label>匹配信息：</label>
+                    <label>Match details: </label>
                     <div id="testMatchInfo"></div>
                 </div>
             </div>
