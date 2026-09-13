@@ -50,11 +50,13 @@ export async function* checkedSSE(body, outcome = {}) {
 export async function requestWithFailover(req, res, makeRequest, manager = keyPoolManager) {
   const requestId = randomUUID(), started = Date.now();
   res.setHeader('x-proxy-request-id', requestId);
+  (res.locals ||= {}).factoryRequest = { model: req.body.model };
   logInfo(`Factory request ${requestId}: received`, { model: req.body.model, streaming: req.body.stream === true });
   let phase = 'account_selection', failureReason, diagnosticWritten = false;
   const diagnose = (reason, error) => {
     if (diagnosticWritten) return;
     diagnosticWritten = true;
+    res.locals.factoryRequest.error = reason;
     logWarn(`Factory request ${requestId}: ${reason}`, {
       requestId, phase, elapsedMs: Date.now() - started, code: error?.code || null,
       closeCode: error?.closeCode || null
@@ -109,6 +111,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       return null;
     }
     const keyId = key?.keyId || null;
+    res.locals.factoryRequest.keyId = keyId;
     if (keyId) attempted.add(keyId);
     if (manager.keys.some(item => item.excluded && (item.id === keyId || fixedAuth === `Bearer ${item.key}`))) {
       if (!fixedAuth) continue;
@@ -135,6 +138,10 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       const cacheCreationTokens = anthropic ? usage?.cache_creation_input_tokens ?? 0 : usage?.input_tokens_details?.cache_write_tokens ?? 0;
       const inputTokens = (usage?.input_tokens ?? 0) + (anthropic ? cacheReadTokens + cacheCreationTokens : 0);
       const accounting = { ...report, keyId, task: session?.id || null, model: body.model };
+      Object.assign(res.locals.factoryRequest, { model: body.model, success: report.success,
+        usage: usage ? { input: Number.isFinite(usage.input_tokens) ? inputTokens : null, output: usage.output_tokens ?? null,
+          cacheRead: (anthropic ? usage.cache_read_input_tokens : usage.input_tokens_details?.cached_tokens) ?? null,
+          cacheWrite: (anthropic ? usage.cache_creation_input_tokens : usage.input_tokens_details?.cache_write_tokens) ?? null } : null });
       logInfo('Factory transport usage', accounting);
       recordRequest({ inputTokens, outputTokens: usage?.output_tokens ?? 0, cacheReadTokens,
         cacheCreationTokens,

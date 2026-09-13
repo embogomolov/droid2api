@@ -28,6 +28,9 @@ try {
  assert.equal((await call('PUT', '/window-sync', { ...cfg, keyIds: ['unknown'] })).status, 400);
  assert.equal((await call('PUT', '/window-sync', cfg)).status, 200);
  assert.deepEqual(JSON.parse(fs.readFileSync(new URL('../data/config.json', import.meta.url))).window_sync, cfg);
+ const routing = (await call('GET', '/keys')).body.data.keys[0].routing;
+ assert.ok(routing.standard.blocked, 'UI status uses the scheduler routing barrier');
+ assert.equal(routing.core.blocked, null, 'Standard synchronization does not block Core');
  assert.equal((await pool.testKey('a')).skipped, true, 'Manual tests cannot bypass barrier');
  await assert.rejects(pool.getNextKey({ model: cfg.modelId }), error => error.status === 503 && error.retryAfter === 5);
  assert.equal((await call('PATCH', '/keys/a/exclusion', { excluded: true })).status, 200);

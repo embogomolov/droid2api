@@ -892,10 +892,10 @@ MIT
 
 ## Excluding an account from the proxy
 
-In Keys, use **Exclude key** to persist an exclusion independently of the key's
+In Accounts, use **Disable usage** to persist an exclusion independently of the key's
 active/disabled status. Excluded keys remain visible for monitoring, but do not
 participate in routing, manual/automatic generation tests or available-pool usage
-summaries. **Include key** removes the exclusion without changing enabled status.
+summaries. **Enable usage** removes the exclusion without changing enabled status.
 Already-dispatched requests can still finish. Historical request statistics are
 retained. The admin API is `PATCH /admin/keys/:id/exclusion` with a boolean
 `excluded` field. Run the isolated regression with:
@@ -906,7 +906,7 @@ node tests/run-network-checks.mjs test-key-exclusion.mjs
 
 ## Automatic synchronized five-hour starts
 
-On the dashboard, open **Synchronized five-hour windows**, select the account
+Open **Five-hour windows**, select the account
 IDs, keep **Haiku 4.5** as the cheap Standard-pool probe for Fable, enable the
 feature, and save. Both the feature and its optional working-hours restriction
 are off by default. New accounts are not silently added to the selection.
@@ -956,3 +956,32 @@ The synchronization tests cover repeated cycles, exclusions, group reservation,
 restart recovery, Retry-After, more than three failed attempts, ambiguous accepted
 requests, persistent verification failures, failed journal writes, competing
 scheduler instances, shutdown, schedule boundaries, quota guards and admin APIs.
+
+
+## Compact admin panel (2026-09-11)
+
+The panel has four pages: **Accounts**, **Five-hour windows**, **Requests**,
+and **Settings**. Accounts combines routing status and Factory 5h/7d/30d
+limits; switch Standard / Droid Core above the table. On narrow windows the
+tables become labelled cards so controls and quota windows remain visible.
+Imports do not run inference tests. Each account has Test, a single usage on/off control, and Details actions.
+The legacy technical enable/disable control is no longer shown. Window synchronization uses its existing API.
+
+Settings contains the balancing selector, client base URLs and collapsed
+per-section JSON editors for models and less frequently used options. Groups
+and prompt-filter configuration are also collapsed. Object settings are merged
+by the existing API; arrays are replaced. Admin credentials are kept in the
+current browser tab session, migrated from the previous remembered login.
+
+Request summaries show completion/disconnection, selected account, duration
+and upstream-reported input/output/cache tokens where available. The in-memory
+log retains up to 500 events per server process; it is not a durable request
+history. Admin polling and key submissions are not added to this buffer.
+Restart the proxy once after installing this UI revision to load the status
+and request-summary backend additions, then refresh the browser.
+
+Browser regression: run `tests/admin-ui.cjs` with Playwright available. When
+using the installed Playwright skill, copy it to a temporary
+`playwright-test-*.js`, set `DROID_UI_ROOT` to this checkout's `public` directory,
+and invoke the skill's `run.js`. The test starts its own temporary static
+server and intercepts every admin request; it never contacts Factory.
