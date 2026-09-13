@@ -20,6 +20,13 @@ const router = express.Router();
 // Apply authentication middleware to all admin routes
 router.use(adminAuth);
 
+router.patch('/keys/:id/exclusion', wrapAsync(async (req, res) => {
+  if (typeof req.body.excluded !== 'boolean') return sendBadRequest(res, 'excluded must be a boolean');
+  if (!keyPoolManager.keys.some(key => key.id === req.params.id)) return sendBadRequest(res, 'Key not found');
+  await keyPoolManager.setKeyExclusion(req.params.id, req.body.excluded);
+  sendSuccessResponse(res, { id: req.params.id, excluded: req.body.excluded });
+}, 'change key exclusion'));
+
 /**
  * GET /admin/stats
  * Get key pool statistics

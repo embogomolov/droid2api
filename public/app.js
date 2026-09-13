@@ -268,7 +268,7 @@ function renderKeysTable(keys) {
             <td><code class="key-id-short" title="${key.id}">${key.id.substring(0, 16)}...</code></td>
             <td><code>${maskKey(key.key)}</code></td>
             <td>${poolGroupBadge}</td>
-            <td><span class="status-badge status-${key.status}">${getStatusText(key.status)}</span></td>
+            <td><span class="status-badge status-${key.status}">${getStatusText(key.status)}</span>${key.excluded ? '<br><strong>Excluded</strong>' : ''}</td>
             <td>${key.usage_count || 0}</td>
             <td>${successRequests}</td>
             <td>${errorCount}</td>
@@ -279,7 +279,8 @@ function renderKeysTable(keys) {
             <td>${testResultHtml}</td>
             <td>${key.notes || '-'}</td>
             <td>
-                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm">Test</button>
+                <button onclick="testKey('${key.id}')" class="btn btn-info btn-sm" ${key.excluded ? 'disabled' : ''}>Test</button>
+                <button onclick="toggleKeyExclusion('${key.id}', ${!key.excluded})" class="btn btn-warning btn-sm">${key.excluded ? 'Include key' : 'Exclude key'}</button>
                 <button onclick="toggleKeyStatus('${key.id}', '${key.status}')" class="btn ${getToggleButtonClass(key.status)} btn-sm">
                     ${getToggleButtonText(key.status)}
                 </button>
@@ -1086,6 +1087,12 @@ async function deleteDisabledKeys() {
         console.error('Failed to delete disabled keys:', err);
         alert('Failed to delete disabled keys: ' + err.message);
     }
+}
+
+async function toggleKeyExclusion(keyId, excluded) {
+    if (!confirm(excluded ? 'Exclude this key from routing, tests and available-pool calculations? Already sent requests can finish.' : 'Include this key again? Its existing enabled/disabled status is preserved.')) return;
+    try { await apiRequest(`/keys/${encodeURIComponent(keyId)}/exclusion`, 'PATCH', { excluded }); await refreshData(true); }
+    catch (error) { alert(error.message); }
 }
 
 async function toggleKeyStatus(keyId, currentStatus) {
@@ -2095,7 +2102,7 @@ function updateBalanceDisplay() {
     document.getElementById('limitsRows').innerHTML = entries.flatMap(([id, key]) =>
         ['standard', 'core'].map(group => {
             const state = key[group];
-            let status = key.status !== 'active' ? key.status : !key.tested ? 'Not tested'
+            let status = key.excluded ? 'Excluded from routing and group calculations' : key.status !== 'active' ? key.status : !key.tested ? 'Not tested'
                 : !state.available ? 'Waiting until ' + new Date(state.retryAt).toLocaleString()
                 : !state.known || state.stale ? 'Unknown; next request can check' : 'Available';
             if (state.extraUsage) status += ' — prepaid Extra Usage enabled';

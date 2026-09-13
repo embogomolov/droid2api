@@ -77,7 +77,7 @@ class KeyPoolManager {
 
   async saveKeyPool() {
     this.stats.total = this.keys.length;
-    this.stats.active = this.keys.filter(k => k.status === 'active').length;
+    this.stats.active = this.keys.filter(k => k.status === 'active' && !k.excluded).length;
     this.stats.disabled = this.keys.filter(k => k.status === 'disabled').length;
     this.stats.banned = this.keys.filter(k => k.status === 'banned').length;
 
@@ -95,7 +95,7 @@ class KeyPoolManager {
    */
   async saveKeyPoolImmediately() {
     this.stats.total = this.keys.length;
-    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
+    this.stats.active = (this.keys || []).filter(k => k.status === 'active' && !k.excluded).length;
     this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
     this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
 
@@ -165,13 +165,13 @@ class KeyPoolManager {
   async getNextKey({ excluded = new Set(), model = '', signal } = {}) {
     // BaSui: Select only successfully tested keys; fail immediately if none exist!
     let activeKeys = (this.keys || []).filter(k =>
-      k.status === 'active' && k.last_test_result === 'success' && !excluded.has(k.id)
+      k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id)
     );
 
     if (activeKeys.length === 0) {
       // No successfully tested keys are available; fail immediately!
       const totalKeys = this.keys.length;
-      const activeButUntestedKeys = (this.keys || []).filter(k => k.status === 'active' && k.last_test_result !== 'success').length;
+      const activeButUntestedKeys = (this.keys || []).filter(k => k.status === 'active' && !k.excluded && k.last_test_result !== 'success').length;
 
       throw new Error(
         `No available keys in the pool have passed testing. ` +
@@ -183,7 +183,7 @@ class KeyPoolManager {
     await Promise.all(activeKeys.map(key => this.refreshBillingLimits(key)));
     if (signal?.aborted) throw signal.reason;
     const states = activeKeys.map(key => ({ key, state: getLimitState(key, limitGroup(model)) }));
-    activeKeys = states.filter(({ state }) => state.available).map(({ key }) => key);
+    activeKeys = states.filter(({ key, state }) => !key.excluded && key.status === 'active' && state.available).map(({ key }) => key);
     if (!activeKeys.length) {
       const retryAt = Math.min(...states.map(({ state }) => state.retryAt));
       const error = new Error('All eligible accounts are waiting for a usage reset or Retry-After');
@@ -278,6 +278,9 @@ class KeyPoolManager {
       this.saveKeyPool();
     }
 
+    if (keyObj.excluded || keyObj.status !== 'active') {
+      return this.getNextKey({ excluded: new Set([...excluded, keyObj.id]), model, signal });
+    }
     this.currentKeyId = keyObj.id;
 
     return {
@@ -641,12 +644,12 @@ class KeyPoolManager {
       keysToTest = (this.keys || []).filter(k => 
         keyIds.includes(k.id) && 
         !k.last_test_at && 
-        k.status !== 'banned'
+        k.status !== 'banned' && !k.excluded
       );
     } else {
       keysToTest = (this.keys || []).filter(k => 
         !k.last_test_at && 
-        k.status !== 'banned'
+        k.status !== 'banned' && !k.excluded
       );
     }
 
@@ -724,6 +727,16 @@ class KeyPoolManager {
     return key;
   }
 
+  async setKeyExclusion(keyId, excluded) {
+    if (typeof excluded !== 'boolean') throw new Error('excluded must be a boolean');
+    const key = this.getKey(keyId);
+    const previous = key.excluded;
+    key.excluded = excluded;
+    try { await this.saveKeyPoolImmediately(); }
+    catch (error) { key.excluded = previous; throw error; }
+    return key;
+  }
+
   toggleKeyStatus(keyId, newStatus) {
     const key = (this.keys || []).find(k => k.id === keyId);
     if (!key) {
@@ -761,6 +774,7 @@ class KeyPoolManager {
       throw new Error('Key not found');
     }
 
+    if (key.excluded) return { success: false, skipped: true, status: 409, message: 'Key is excluded; include it before testing' };
     logInfo(`Testing key: ${keyId}`);
 
     const modelId = getConfig().key_test_model || 'claude-sonnet-4-5-20250929';
@@ -780,6 +794,7 @@ class KeyPoolManager {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
+        if (key.excluded) return { success: false, skipped: true, status: 409, message: 'Key was excluded before dispatch' };
         const testUrl = getEndpointByType(model.type).base_url;
         const openaiRequest = {
           model: modelId,
@@ -967,7 +982,7 @@ class KeyPoolManager {
     } = options;
 
     // BaSui: Support testing by pool: if poolGroup is specified, test only keys in that pool
-    let keysToTest = (this.keys || []).filter(k => k.status !== 'banned');
+    let keysToTest = (this.keys || []).filter(k => k.status !== 'banned' && !k.excluded);
 
     if (!includeDisabled) {
       keysToTest = keysToTest.filter(k => k.status !== 'disabled');
@@ -1035,7 +1050,7 @@ class KeyPoolManager {
    */
   getActiveKeyCount() {
     return (this.keys || []).filter(k => 
-      k.status === 'active' && k.last_test_result === 'success'
+      k.status === 'active' && !k.excluded && k.last_test_result === 'success'
     ).length;
   }
   
@@ -1079,10 +1094,11 @@ class KeyPoolManager {
 
   getStats() {
     this.stats.total = this.keys.length;
-    this.stats.active = (this.keys || []).filter(k => k.status === 'active').length;
+    this.stats.active = (this.keys || []).filter(k => k.status === 'active' && !k.excluded).length;
     this.stats.disabled = (this.keys || []).filter(k => k.status === 'disabled').length;
     this.stats.banned = (this.keys || []).filter(k => k.status === 'banned').length;
 
+    this.stats.excluded = this.keys.filter(k => k.excluded).length;
     return this.stats;
   }
 
@@ -1275,7 +1291,7 @@ class KeyPoolManager {
       // Filter keys belonging to this pool
       const poolKeys = (this.keys || []).filter(k => k.poolGroup === group.id);
       const total = poolKeys.length;
-      const active = poolKeys.filter(k => k.status === 'active').length;
+      const active = poolKeys.filter(k => k.status === 'active' && !k.excluded).length;
       const disabled = poolKeys.filter(k => k.status === 'disabled').length;
       const banned = poolKeys.filter(k => k.status === 'banned').length;
 
@@ -1564,7 +1580,7 @@ class KeyPoolManager {
 
   async selectKeyByWeight(activeKeys = null) {
     // BaSui: Prefer supplied activeKeys; otherwise filter internally
-    const availableKeys = activeKeys || (this.keys || []).filter(k => k.status === 'active' && k.last_test_result === 'success');
+    const availableKeys = activeKeys || (this.keys || []).filter(k => k.status === 'active' && !k.excluded && k.last_test_result === 'success');
 
     if (availableKeys.length === 0) {
       throw new Error('No keys are available in the pool. Total keys: ' + this.keys.length + '. Test your keys in the admin panel first.');
