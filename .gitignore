@@ -91,6 +91,10 @@ __pycache__/
 !/work/*.py
 !/work/*.md
 
+# Persistent synchronized-window attempts and cross-process ownership
+data/window_sync.json
+data/window_sync.lock
+
 # Local publication exclusions
 /work/
 repair_codex_history_index.py

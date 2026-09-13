@@ -4058,3 +4058,12 @@ select[multiple] option:checked {
 .limit-meter small { display: block; font-size: .75rem; line-height: 1.45; }
 [data-key-limits] { min-width: 190px; }
 [data-key-limits] > div + div { margin-top: 12px; }
+
+.window-sync-panel { margin: 24px 0; padding: 24px; border: 1px solid #718d93; border-radius: 16px; background: #f4fafb; color: #182f38; }
+.window-sync-panel h2 { color: #125b72; margin-top: 0; }
+.window-sync-panel fieldset { margin: 16px 0; padding: 12px; border: 1px solid #718d93; border-radius: 8px; }
+.window-sync-panel label { display: inline-block; margin: 6px 14px 6px 0; }
+.window-sync-panel input[type="checkbox"] { width: auto; margin-right: 6px; }
+.window-sync-panel select { max-width: 100%; padding: 8px; }
+.window-sync-panel .window-sync-key { display: block; }
+.window-sync-panel .factory-limits-table td, .window-sync-panel .factory-limits-table th { color: #182f38; }

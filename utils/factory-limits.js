@@ -54,7 +54,7 @@ export async function fetchBillingLimits(apiKey, { signal, fetchImpl = fetch } =
     headers: { authorization: `Bearer ${apiKey}`, 'user-agent': 'factory-cli/0.213.0', 'x-factory-client': 'cli' },
     signal, fetchImpl
   });
-  if (!response.ok) throw new Error(`Limits API returned HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(`Limits API returned HTTP ${response.status}`), { status: response.status, retryAt: retryAfterTime(response.headers.get('retry-after')) });
   const limits = {};
   for (const group of ['standard', 'core']) {
     limits[group] = {};
