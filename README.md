@@ -993,3 +993,8 @@ to Anthropic/OpenAI error events, final HTTP errors, and observed failed JSON
 responses. It does not classify by a fixed list of error codes. Factory key
 and Bearer-token strings are redacted; entire request/response payloads are
 not copied into diagnostic metadata. SSE forwarding and retry policy are unchanged.
+
+The automatic-window panel separates the current window end from the next
+quota-only check (including seconds), names the actual readiness blocker, and
+works with a single selected account. Previous groups' timing spread is not
+shown as current state. Working hours and per-account attempts are collapsed.
