@@ -273,11 +273,17 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       });
     }
 
+    // This credential authenticates the local proxy, not Factory.
+    delete req.headers.authorization;
+    delete req.headers['x-api-key'];
     next();
   }
 
   // BaSui: Register static file serving before API authentication to prevent authentication from blocking assets
   app.use(express.default.static('public'));
+
+  // Claude Code's unauthenticated connection-warming probe carries no model request.
+  app.head('/api/hello', (req, res) => res.status(204).end());
 
   // Apply API access control
   app.use(apiKeyAuth);

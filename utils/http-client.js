@@ -1,6 +1,7 @@
 import http from 'http';
 import https from 'https';
 import fetch from 'node-fetch';
+import { setTimeout as wait } from 'node:timers/promises';
 import { logWarn, logError } from '../logger.js';
 
 /**
@@ -45,17 +46,7 @@ export class FetchRetryError extends Error {
 }
 
 function defaultShouldRetry(response) {
-  if (response.ok) {
-    return false;
-  }
-
-  // BaSui：402余额不足直接拉黑别废话，403违规提醒用户；都别重试
-  if (response.status === 402 || response.status === 403) {
-    return false;
-  }
-
-  // 其他错误继续轮询，靠算法顶住风控风暴
-  return true;
+  return response.status >= 500;
 }
 
 function shouldStopRetry(error, signal) {
@@ -70,6 +61,24 @@ function shouldStopRetry(error, signal) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Only retry generation when transport evidence proves no model request was sent.
+export async function retryUnsentRequest(send, { signal, onRetry = () => {}, retryDelay = 500 } = {}) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    signal?.throwIfAborted();
+    try { return await send(); }
+    catch (error) {
+      const syscall = error.erroredSysCall || error.syscall;
+      const beforeConnect = ['connect', 'getaddrinfo'].includes(syscall) &&
+        ['ECONNREFUSED', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'ETIMEDOUT'].includes(error.code);
+      const beforeFrame = error.factoryRequestNotSent === true &&
+        (['ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'ETIMEDOUT'].includes(error.code) || error.message === 'Opening handshake has timed out');
+      if (signal?.aborted || attempt === 3 || !(beforeConnect || beforeFrame)) throw error;
+      onRetry({ attempt, code: error.code || 'handshake_timeout', reason: 'request_not_sent' });
+      await wait(retryDelay * attempt, undefined, { signal });
+    }
+  }
 }
 
 export async function fetchWithPool(url, options = {}) {
@@ -108,20 +117,12 @@ export async function fetchWithPool(url, options = {}) {
         return response;
       }
 
-      if (!shouldRetry(response, attempt)) {
+      if (!shouldRetry(response, attempt) || attempt === attempts) {
         return response;
       }
 
       lastStatus = response.status;
-      // BaSui：失败的响应要赶紧掐掉，不然Agent憋着会闷坏
-      if (response.body && typeof response.body.cancel === 'function') {
-        try {
-          // 安全地取消流，捕获可能的错误
-          response.body.cancel();
-        } catch (cancelError) {
-          // 忽略取消流时的错误（通常是流已经关闭）
-        }
-      }
+      response.body?.destroy();
 
       if (attempt < attempts) {
         if (onRetry) {

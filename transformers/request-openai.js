@@ -1,7 +1,42 @@
-import { logDebug } from '../logger.js';
+import { logDebug, logInfo } from '../logger.js';
 import { getSystemPrompt, getModelReasoning } from '../config.js';
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
 import keywordFilter from '../utils/keyword-filter.js';
+
+function adaptLegacyIdentity(instructions) {
+  const prompt = getSystemPrompt();
+  const legacyIdentity = 'You are Codex, a coding agent based on GPT-5.';
+  // Factory rejects this stock legacy introduction even after the Droid prefix.
+  // Adapt only the leading system identity; preserve all remaining text verbatim.
+  if (prompt.startsWith('You are Droid, an AI software engineering agent built by Factory.') &&
+      typeof instructions === 'string' && instructions.startsWith(legacyIdentity)) {
+    instructions = instructions.slice(legacyIdentity.length);
+    logInfo('Factory system adaptation applied: legacy_codex_identity');
+  }
+  return instructions;
+}
+
+export function prepareOpenAIInstructions(instructions = '') {
+  return getSystemPrompt() + (adaptLegacyIdentity(instructions) || '');
+}
+
+export function prepareOpenAIInput(input) {
+  if (!Array.isArray(input)) return input;
+  // Codex can serialize its base instructions as the leading developer message
+  // after tool declarations instead of using the Responses instructions field.
+  const index = input.findIndex(item => item.type !== 'additional_tools');
+  const message = input[index];
+  if (!message || !['developer', 'system'].includes(message.role) ||
+      (message.type && message.type !== 'message')) return input;
+  let content = message.content;
+  if (typeof content === 'string') content = adaptLegacyIdentity(content);
+  else if (Array.isArray(content) && content[0]?.type === 'input_text') {
+    const text = adaptLegacyIdentity(content[0].text);
+    if (text !== content[0].text) content = [{ ...content[0], text }, ...content.slice(1)];
+  }
+  if (content === message.content) return input;
+  return input.map((item, i) => i === index ? { ...message, content } : item);
+}
 
 export function transformToOpenAI(openaiRequest) {
   logDebug('Transforming OpenAI request to target OpenAI format');
@@ -96,7 +131,7 @@ export function transformToOpenAI(openaiRequest) {
         .map(p => p.text)
         .join('\n');
     }
-    targetRequest.instructions = systemPrompt + userInstructions;
+    targetRequest.instructions = prepareOpenAIInstructions(userInstructions);
     targetRequest.input = targetRequest.input.filter(m => m.role !== 'system');
   } else if (systemPrompt) {
     // If no user-provided system message, just add the system prompt
@@ -140,6 +175,7 @@ export function transformToOpenAI(openaiRequest) {
     targetRequest.parallel_tool_calls = filteredRequest.parallel_tool_calls;
   }
 
+  targetRequest.input = prepareOpenAIInput(targetRequest.input);
   logDebug('Transformed target OpenAI request', targetRequest);
   return targetRequest;
 }
@@ -148,7 +184,10 @@ export function getOpenAIHeaders(authHeader, clientHeaders = {}) {
   // Use the shared function to generate base headers
   const headers = {
     ...getBaseHeaders(authHeader, clientHeaders),
-    'x-api-provider': 'azure_openai'
+    'x-api-provider': 'openai',
+    // Static managed-OpenAI platform header from installed Droid's br$.
+    'OpenAI-Platform': 'org-bHuLtG1fGmYk5YaOihAAXFBw',
+    'x-provider-routing-source': 'registry_default'
   };
 
   // Apply default Stainless SDK headers

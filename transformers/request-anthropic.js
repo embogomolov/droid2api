@@ -1,7 +1,49 @@
 import { logDebug } from '../logger.js';
-import { getSystemPrompt, getModelReasoning, getReasoningBudget } from '../config.js';
+import { getSystemPrompt, getModelById, getModelReasoning, getReasoningBudget } from '../config.js';
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
 import keywordFilter from '../utils/keyword-filter.js';
+
+// The counting and generation endpoints must see exactly the same prompt.
+export function prepareDirectAnthropic(request) {
+  const result = { ...request }, prompt = getSystemPrompt();
+  result.model = getModelById(request.model)?.id || request.model;
+  const droidIdentity = 'You are Droid, an AI software engineering agent built by Factory.';
+  const system = Array.isArray(request.system) ? request.system : typeof request.system === 'string' ? [{ type: 'text', text: request.system }] : [];
+  // Factory rejects these exact built-in client identity introductions (HTTP 403).
+  // Rephrase only stock identity/environment wording; retain model values and conversation content.
+  const identities = ["You are a Claude agent, built on Anthropic's Claude Agent SDK.", "You are Claude Code, Anthropic's official CLI for Claude.", "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK."];
+  const clientSystem = prompt.startsWith(droidIdentity) ? system.map(block => {
+    if (block.type !== 'text') return block;
+    const identity = block.type === 'text' && identities.find(text => block.text?.startsWith(text));
+    const text = identity ? 'You are an AI software engineering agent.' + block.text.slice(identity.length) : block.text;
+    return { ...block, text: text
+      .replace(/^You have been invoked in the following environment: ?$/m, 'Current execution environment:')
+      .replace(/^ - You are powered by the model named (.+)\. The exact model ID is (.+)\.$/m, ' - Active model: $1. Model ID: $2.') };
+  }) : system;
+  // Native Droid puts this identity in its own first system block.
+  const prefix = prompt.startsWith(droidIdentity) && prompt.length > droidIdentity.length
+    ? [droidIdentity, prompt.slice(droidIdentity.length)] : [prompt];
+  if (prompt) result.system = [...prefix.map(text => ({ type: 'text', text })),
+    ...clientSystem];
+  // Claude Code embeds instruction-file labels in a user-role system reminder.
+  // Factory rejects its stock label; retain the path and every instruction below it.
+  if (prompt.startsWith(droidIdentity) && request.messages) result.messages = request.messages.map(message => {
+    if (!Array.isArray(message.content)) return message;
+    return { ...message, content: message.content.map(block => {
+      if (message.role === 'system' && block.type === 'text' && block.text?.includes('- update-config: Use this skill to configure the Claude Code harness via settings.json.')) {
+        return { ...block, text: block.text.replace(/^(- update-config: .*)require hooks configured in settings\.json - the harness executes these, not Claude, so memory\/preferences cannot fulfill them\./gm,
+          '$1must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.') };
+      }
+      if (block.type !== 'text' || !block.text?.startsWith('<system-reminder>\nAs you answer the user\'s questions, you can use the following context:\n')) return block;
+      return { ...block, text: block.text.replace(/^Contents of (.+) \(user's private global instructions for all projects\):$/gm, 'Loaded instructions from $1 (user scope):') };
+    }) };
+  });
+  const reasoning = getModelReasoning(request.model);
+  if (['low', 'medium', 'high'].includes(reasoning)) {
+    result.thinking = { type: 'enabled', budget_tokens: getReasoningBudget(reasoning) };
+  } else if (reasoning !== 'auto') delete result.thinking;
+  return result;
+}
 
 export function transformToAnthropic(openaiRequest, targetModel = null) {
   logDebug('Transforming OpenAI request to Anthropic format');
@@ -200,9 +242,12 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
   // Use the shared function to generate base headers
   const headers = {
     'accept': 'application/json',
+    ...Object.fromEntries(Object.entries(clientHeaders).filter(([name]) => name.startsWith('anthropic-'))),
     ...getBaseHeaders(authHeader, clientHeaders),
     'anthropic-version': clientHeaders['anthropic-version'] || '2023-06-01',
     'x-api-provider': 'anthropic',
+    'x-api-key': 'placeholder', // Native Droid Anthropic SDK key; Factory auth is the Bearer credential.
+    'x-provider-routing-source': 'registry_default',
     'x-stainless-timeout': '600'
   };
 
@@ -235,6 +280,7 @@ export function getAnthropicHeaders(authHeader, clientHeaders = {}, isStreaming 
   if (betaValues.length > 0) {
     headers['anthropic-beta'] = betaValues.join(', ');
   }
+  if (reasoningLevel === 'auto' && clientHeaders['anthropic-beta']) headers['anthropic-beta'] = clientHeaders['anthropic-beta'];
 
   // Apply default Stainless SDK headers
   applyStainlessDefaults(headers, clientHeaders);

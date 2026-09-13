@@ -7,7 +7,7 @@ import { generateUUID } from '../utils/uuid.js';
  */
 export function generateSessionHeaders(clientHeaders = {}) {
   return {
-    'x-session-id': clientHeaders['x-session-id'] || generateUUID(),
+    'x-session-id': clientHeaders['x-session-id'] || clientHeaders['x-claude-code-session-id'] || generateUUID(),
     'x-assistant-message-id': clientHeaders['x-assistant-message-id'] || generateUUID()
   };
 }
@@ -45,13 +45,15 @@ export function applyStainlessDefaults(headers, clientHeaders = {}) {
  */
 export function getBaseHeaders(authHeader, clientHeaders = {}) {
   const sessionHeaders = generateSessionHeaders(clientHeaders);
+  const userAgent = getUserAgent();
 
   return {
     'content-type': 'application/json',
     'authorization': authHeader || '',
     'x-factory-client': 'cli',
     ...sessionHeaders,
-    'user-agent': getUserAgent(),
+    'user-agent': userAgent,
+    'X-Client-Version': userAgent.match(/factory-cli\/([^\s]+)/)?.[1] || '0.213.0',
     'connection': 'keep-alive'
   };
 }

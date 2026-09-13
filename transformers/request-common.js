@@ -48,12 +48,12 @@ export function transformToCommon(openaiRequest) {
   return commonRequest;
 }
 
-export function getCommonHeaders(authHeader, clientHeaders = {}) {
+export function getCommonHeaders(authHeader, clientHeaders = {}, apiProvider = 'baseten') {
   // Use the shared function to generate base headers
   const headers = {
     'accept': 'application/json',
     ...getBaseHeaders(authHeader, clientHeaders),
-    'x-api-provider': 'baseten'
+    'x-api-provider': apiProvider
   };
 
   // Apply default Stainless SDK headers
