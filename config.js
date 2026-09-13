@@ -288,8 +288,8 @@ export function getKeyPoolConfig() {
     // Retry settings
     retry: {
       enabled: parseBool(process.env.KEY_POOL_RETRY_ENABLED, keyPoolCfg.retry?.enabled ?? true),
-      maxRetries: parseInt(process.env.KEY_POOL_RETRY_MAX) || keyPoolCfg.retry?.maxRetries || 3,
-      retryDelay: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || keyPoolCfg.retry?.retryDelay || 1000
+      maxRetries: process.env.KEY_POOL_RETRY_MAX !== undefined ? parseInt(process.env.KEY_POOL_RETRY_MAX) : keyPoolCfg.retry?.maxRetries ?? 3,
+      retryDelay: process.env.KEY_POOL_RETRY_DELAY_MS !== undefined ? parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) : keyPoolCfg.retry?.retryDelay ?? 1000
     },
 
     // Automatic ban settings
@@ -317,7 +317,8 @@ export function getKeyPoolConfig() {
     retry_delay_ms: parseInt(process.env.KEY_POOL_RETRY_DELAY_MS) || keyPoolCfg.retry_delay_ms || 1000,
     request_timeout_ms: parseInt(process.env.KEY_POOL_REQUEST_TIMEOUT_MS) || keyPoolCfg.request_timeout_ms || 10000,
     batch_test_interval_ms: parseInt(process.env.KEY_POOL_BATCH_TEST_INTERVAL_MS) || keyPoolCfg.batch_test_interval_ms || 500,
-    cache_ttl_ms: parseInt(process.env.KEY_POOL_CACHE_TTL_MS) || keyPoolCfg.cache_ttl_ms || 300000
+    cache_ttl_ms: parseInt(process.env.KEY_POOL_CACHE_TTL_MS) || keyPoolCfg.cache_ttl_ms || 300000,
+    ...(keyPoolCfg.weights ? { weights: keyPoolCfg.weights } : {})
   };
 }
 
@@ -364,13 +365,17 @@ export function getTokenSyncConfig() {
 
 // Save configuration to config.json
 export function saveConfig(newConfig) {
+  const configPath = path.join(__dirname, 'data', 'config.json');
+  const temporaryPath = `${configPath}.${process.pid}.tmp`;
   try {
-    const configPath = path.join(__dirname, 'data', 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+    fs.writeFileSync(temporaryPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+    fs.renameSync(temporaryPath, configPath);
     config = newConfig; // Update the in-memory configuration
     return config;
   } catch (error) {
     throw new Error(`Failed to save data/config.json: ${error.message}`);
+  } finally {
+    try { fs.unlinkSync(temporaryPath); } catch {}
   }
 }
 

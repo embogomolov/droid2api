@@ -78,7 +78,10 @@ class AsyncFileWriter {
       this.writeTimer = null;
     }
 
-    return this._flushWrite();
+    return new Promise((resolve, reject) => {
+      this.writeQueue.push({ resolve, reject });
+      void this._flushWrite();
+    });
   }
 
   /**
@@ -98,6 +101,8 @@ class AsyncFileWriter {
     }
 
     this.isWriting = true;
+    let finishWrite;
+    this.activeWrite = new Promise(resolve => { finishWrite = resolve; });
     const dataToWrite = this.pendingData;
     const queueToNotify = [...this.writeQueue];
     this.pendingData = null;
@@ -121,7 +126,10 @@ class AsyncFileWriter {
         queueToNotify.forEach(({ resolve }) => resolve());
 
         this.isWriting = false;
-        return;  // 写入成功
+        this.lastWriteError = null;
+        finishWrite();
+        if (this.pendingData) void this._flushWrite();
+        return;  // Write succeeded.
       } catch (error) {
         lastError = error;
         logError(`File write failed (attempt ${attempt + 1}/${this.maxRetries}): ${this.filePath}`, error);
@@ -130,11 +138,14 @@ class AsyncFileWriter {
 
     // BaSui: All write attempts failed.
     this.isWriting = false;
-    const errorMsg = `文件写入失败（尝试${this.maxRetries}次）: ${this.filePath} - ${lastError.message}`;
+    this.lastWriteError = lastError;
+    finishWrite();
+    const errorMsg = `File write failed after ${this.maxRetries} attempts: ${this.filePath} - ${lastError.message}`;
     logError(errorMsg, lastError);
 
     // BaSui: Reject all waiting promises.
     queueToNotify.forEach(({ reject }) => reject(new Error(errorMsg)));
+    if (this.pendingData) void this._flushWrite();
   }
 
   /**
@@ -183,10 +194,12 @@ class AsyncFileWriter {
       clearTimeout(this.writeTimer);
     }
 
-    // BaSui：立即写入剩余数据
-    if (this.pendingData) {
-      await this._flushWrite();
+    // Wait for the active write as well as any batch queued behind it.
+    while (this.isWriting || this.pendingData) {
+      if (this.isWriting) await this.activeWrite;
+      else await this._flushWrite();
     }
+    if (this.lastWriteError) throw this.lastWriteError;
   }
 }
 
@@ -238,9 +251,8 @@ async function flushAllWriters() {
   }
 }
 
-// 注册进程退出钩子
-process.on('SIGTERM', flushAllWriters);
-process.on('SIGINT', flushAllWriters);
+// Register process shutdown hooks.
+// The server owns signals and flushes after stopping connections and producers.
 process.on('beforeExit', flushAllWriters);
 
 export { AsyncFileWriter, fileWriterManager };
