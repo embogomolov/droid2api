@@ -1,1000 +1,290 @@
 # droid2api
 
-**Claude Code:** see [CLAUDE_CODE.md](CLAUDE_CODE.md) for the prepared Factory launcher,
-verified cache/tool behavior, and the remaining upstream limitations.
-
-### Factory compatibility (verified September 2026)
-
-Factory Responses requests now use the official WebSocket route
-`wss://api.factory.ai/api/llm/o/v1/responses/ws` (EU stays in the EU).
-Clients still connect to the same local HTTP `/v1/responses` endpoint. Streaming
-clients receive Responses SSE; non-streaming clients receive the final JSON response.
-Requests use a retained connection for the same task when available. The proxy sends
-one prepared full context, or a matching continuation with `previous_response_id`.
-There are no `generate:false` warm-up chains. Native-compatible PNG/JPEG preparation
-reduces image payloads; text history is not silently trimmed or summarized.
-See the native transport verification notes below for reconnect and image details.
-Background requests keep HTTP semantics.
-
-A missing server-side `previous_response_id` is returned as an error, never silently
-dropped. Idle connections eventually close; broken or accepted-but-failed
-turns are not replayed. The bridge honors downstream backpressure and reuses the
-same account cooldown/failover rules. Other configured providers retain HTTP.
-Run `node tests/test-factory-websocket.js` for an offline 6 MiB end-to-end check,
-request-field preservation, handshake/event failures, account switching and cancellation.
-
-For GPT-6 Astra, use `type: "openai"`, `reasoning: "auto"`, and
-an inexpensive `key_test_model` for any manual checks in `data/config.json`. The proxy's OpenAI
-requests use `x-api-provider: openai`. Use a current `user_agent`
-(the verified value is `factory-cli/0.213.0`).
-
-Keep `system_prompt` set to
-`You are Droid, an AI software engineering agent built by Factory.\n\n`.
-Factory rejected the tested requests without this introduction with HTTP 403.
-The proxy prepends it to the client's instructions; the remaining instructions
-are preserved. This is an addition to the prompt, so forwarding is not byte-for-byte.
-
-The admin key test uses `key_test_model` (legacy fallback: Sonnet 4.5).
-A successful test activates and saves the key. `API_ACCESS_KEY` authenticates
-clients of this proxy and must never be forwarded as a Factory credential.
-
-Offline regression check: `node tests/test-factory-proxy-fix.js`.
-
-Account selection now checks Factory's Standard usage windows (5 hours, 7 days,
-30 days); Core models use their separate group. The admin dashboard shows each
-account's percentages and reset times instead of adding trial allowances.
-Measurements refresh on use and in the dashboard, cached for one minute.
-Unavailable telemetry is shown as unknown/stale, not zero remaining usage.
-Already-enabled prepaid Extra Usage permits an upstream check; the proxy never
-enables paid usage or substitutes a different model.
-
-HTTP 402/429 temporarily pause the affected account. Retry-After is honored;
-without a reset hint, the proxy probes again after one minute. HTTP 401 disables
-the rejected key until a successful retest. HTTP 403 and invalid-request errors
-are returned unchanged without banning accounts. Explicit 5xx rejections try
-another eligible key. A request never retries the same key, and ambiguous network
-failures or interrupted streams are not replayed. Client disconnect cancels the
-upstream request. The upstream status/body are preserved after failed attempts.
-
-The `round-robin` setting remains selected. Quota-based legacy algorithm names
-now rank eligible accounts by their Factory usage-window headroom.
-Run `node tests/test-factory-limits.js` for isolated failure/recovery checks.
-Factory billing fields are observed internal API data; malformed or unavailable
-measurements fall back to direct requests, whose responses remain authoritative.
-
-
-An OpenAI-compatible API proxy that provides a unified interface to different LLMs.
-
-## Core features
-
-### 🔐 Five-level authentication (flexible and backward-compatible)
-
-droid2api v1.4+ supports five authentication sources in priority order, covering personal use through enterprise multi-user deployments:
-
-#### Authentication priority (highest to lowest)
-
-1. **🔑 FACTORY_API_KEY environment variable** (single-user mode, highest priority)
-   - Use cases: personal use / a single key / Docker deployments
-   - Advantages: simple environment-variable configuration, convenient for Docker
-   - Limitations: no key rotation, load balancing, or fallback when the quota runs out
-   - Configuration: `FACTORY_API_KEY=fk-your-key`
-
-2. **🎯 Key pool management** (multi-user mode, recommended for enterprise use)
-   - Use cases: multiple keys / load balancing / high concurrency / enterprise deployments
-   - Advantages: no fixed key limit, automatic rotation, load balancing, and automatic blocking of unusable keys in the proxy
-   - Supported algorithms: round-robin, random, least-used, weighted-score, least-token-used, max-remaining
-   - Configuration: add keys through the admin API (`POST /admin/keys/add`)
-
-3. **🔄 DROID_REFRESH_KEY environment variable** (automatic OAuth refresh, compatible with the original droid2api)
-   - Use cases: automatic token refresh / compatibility with the original project
-   - Advantages: WorkOS OAuth integration, automatic refresh every 6 hours, and fallback to the old token if refresh fails
-   - Limitations: depends on the WorkOS API and requires a valid refresh_token
-   - Configuration: `DROID_REFRESH_KEY=rt-your-refresh-token` or create `data/auth.json`
-
-4. **📁 File-based authentication** (data/auth.json / ~/.factory/auth.json)
-   - Use cases: backward compatibility / sharing authentication across projects
-   - Priority: `data/auth.json` (project-level, convenient for Docker) > `~/.factory/auth.json` (user-level fallback)
-   - Supported format: `{ "refresh_token": "...", "api_key": "..." }`
-
-5. **🌐 Client Authorization header** (pass-through mode)
-   - Use cases: clients supply their own keys / no server-side configuration
-   - Handled by middleware; no server-side configuration required
-
-#### Choosing an authentication method
-
-| Use case | Recommended method | Setup complexity | Feature coverage |
-|------|---------|----------|----------|
-| Personal use / single key | FACTORY_API_KEY | ⭐ | ⭐⭐ |
-| Multiple keys / load balancing | Key pool management | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| Automatic refresh | DROID_REFRESH_KEY | ⭐⭐ | ⭐⭐⭐ |
-| Backward compatibility | File-based authentication | ⭐ | ⭐⭐ |
-| Client-controlled authentication | Authorization header | ⭐ | ⭐ |
-
-### 📊 Token usage tracking (Factory-specific)
-- **Automatic usage recording** - Records token consumption for each API call
-- **Persistent storage** - Saves usage data to `data/factory_usage.json`
-- **Live statistics** - The admin interface shows total usage, today's usage, and request statistics
-- **Time-based analysis** - Daily and hourly usage breakdowns
-- **Automatic cleanup** - Removes data older than the configured retention period (30 days by default)
-- **Environment-variable configuration** - Controls the sync interval, batch size, and retention period
-
-### 🎯 Key pool management (no fixed key limit)
-- **Large-scale key rotation** - Manages pools of FACTORY_API_KEY values without a fixed count limit
-- **Key selection algorithms** - Supports round-robin, random, least-used, and weighted-score
-- **🆕 Multi-tier key pools (v1.4.0+)** - Multiple pools with automatic priority-based fallback
-  - 🎯 **Priority control** - Priority 1 takes precedence over 2, then 3; lower numbers are used first
-  - 🔄 **Automatic fallback** - Switches to the next priority when the current pool has no available keys
-  - 🏷️ **Separate pools** - Manages keys from different sources independently (free keys, primary keys, etc.)
-  - 📊 **Visual management** - The dashboard shows a statistics card for each pool
-  - ⚙️ **Flexible configuration** - Manage pools through the web interface or configuration file
-  - 📖 **Further documentation** - See `docs/MULTI_TIER_POOL.md` and `data/key_pool.example.json`
-- **Automatic health checks** - Batch-tests key availability and marks unusable keys
-- **Automatic proxy blocking** - A test response of 200 marks success; 402 blocks the key in this proxy; other errors disable it
-- **Web admin interface** - Add, delete, test, and export keys visually
-- **Key states** - active (available), disabled (disabled), and banned (blocked by this proxy)
-- **Batch operations** - Bulk import, batch testing, and bulk deletion of disabled or proxy-blocked keys
-- **Persistent storage** - Automatically saves pool state to `data/key_pool.json`, with backups and atomic writes
-
-### 🧠 Reasoning level control
-- **Five levels** - auto/off/low/medium/high to control reasoning behavior
-- **auto mode** - Preserves the original client request without changing reasoning parameters
-- **Fixed levels** - off/low/medium/high override the client's reasoning settings
-- **OpenAI models** - Automatically adds the reasoning field; effort controls the reasoning level
-- **Anthropic models** - Automatically configures thinking and budget_tokens (4096/12288/24576)
-- **Header management** - Adds or removes relevant anthropic-beta flags based on the reasoning level
-
-### 🚀 Server and Docker deployment
-- **Local server** - Start quickly with npm start
-- **Docker containers** - Includes a complete Dockerfile and docker-compose.yml
-- **Cloud deployment** - Supports container deployment on various cloud platforms
-- **Environment isolation** - Docker keeps the dependency environment consistent
-- **Production features** - Includes health checks and log management
-
-### 💻 Direct use with Claude Code
-- **Transparent proxy mode** - /v1/responses and /v1/messages support direct forwarding
-- **CLI integration** - Integrates with the Claude Code CLI
-- **System prompt injection** - Automatically adds the Droid identity to keep context consistent
-- **Standardized headers** - Automatically adds Factory-specific authentication and session headers
-- **No additional setup** - Claude Code can use the proxy directly
-
-## Admin interface
-
-### Accessing the admin interface
-
-After starting the server, open `http://localhost:3000/` to access the web admin interface.
-
-**Main features**:
-- 📊 **Key pool statistics** - Counts of total, available, disabled, and proxy-blocked keys
-- 🎯 **Token usage monitoring** - Live total usage, today's usage, and request statistics
-- ➕ **Add keys** - Add individually or import in bulk (provider type is detected automatically)
-- 🧪 **Test keys** - Test availability individually or in batches
-- 📤 **Export keys** - Filter by status and export to a txt file
-- 🗑️ **Delete keys** - Delete individually or bulk-delete disabled/proxy-blocked keys
-- ⚙️ **Configuration** - Adjust key selection, retries, and performance settings
-- 📈 **Usage statistics** - Token usage heatmaps, success-rate rankings, and daily/hourly statistics
-
-### Admin API endpoints
-
-All admin endpoints require the `x-admin-key` authentication header:
-
-```bash
-curl -H "x-admin-key: your-admin-key" http://localhost:3000/admin/stats
-```
-
-**Core endpoints**:
-- `GET /admin/stats` - Key pool statistics
-- `GET /admin/keys` - List keys (supports pagination and status filtering)
-- `POST /admin/keys` - Add one key
-- `POST /admin/keys/batch` - Import keys in bulk
-- `DELETE /admin/keys/:id` - Delete a key
-- `PATCH /admin/keys/:id/toggle` - Toggle key status
-- `POST /admin/keys/:id/test` - Test one key
-- `POST /admin/keys/test-all` - Test all keys in a batch
-- `GET /admin/keys/export` - Export keys to a txt file
-- `GET /admin/config` - Get key selection settings
-- `PUT /admin/config` - Update key selection settings
-
-**Token usage endpoints**:
-- `GET /factory/balance/usage` - Get token usage statistics
-- `GET /factory/balance/summary` - Get a usage summary
-- `POST /factory/balance/sync` - Trigger synchronization manually
-- `POST /factory/balance/cleanup` - Clean up expired data
-
-**🆕 Multi-tier key pool endpoints (v1.4.0+)**:
-- `GET /admin/pool-groups` - Get all pools and their statistics
-- `POST /admin/pool-groups` - Create a pool
-- `DELETE /admin/pool-groups/:id` - Delete a pool (keys move to the default pool automatically)
-- `PATCH /admin/keys/:id/pool` - Change the pool a key belongs to
-
-## Other features
-
-- 🎯 **Standard OpenAI API interface** - Access all models using the familiar OpenAI API format
-- 🔄 **Automatic format conversion** - Handles differences between LLM providers
-- 🌊 **Streaming support** - Honors the client's stream parameter for streaming and non-streaming responses
-- ⚙️ **Flexible configuration** - Customize models and endpoints through the configuration file
-- 📝 **Logging** - Detailed console logs in development; daily rotated log files in production
-
-## 🚀 Performance optimization
-
-droid2api includes three stages of performance optimization for gradual scaling from personal projects to very large applications.
-
-### ⚡ Stage 1: basic optimizations (enabled by default, no configuration)
-
-**Built-in optimizations**:
-- ✅ **HTTP Keep-Alive connection pooling** - Reuses TCP connections, reducing handshake overhead by 70%
-- ✅ **Asynchronous batch file writes** - Avoids blocking the main thread, eliminating disk I/O wait there
-
-**Performance improvements**:
-- Lower latency: 250ms → 50ms (⬇️ 80%)
-- Higher throughput: 500 → 2000+ RPS (⬆️ 300%)
-- Lower CPU utilization: 60-80% → 40-60%
-
-**Works out of the box without configuration!**
-
----
-
-### 🔥 Stage 2: Redis caching (optional, for high concurrency)
-
-**Use case**: more than 500,000 requests per day on average
-
-**Quick setup**:
-```bash
-# 1. Install the Redis package
-npm install redis
-
-# 2. Start Redis (Docker is the simplest option)
-docker run -d -p 6379:6379 --name redis redis:alpine
-
-# 3. Start the server (Redis is detected and enabled automatically)
-npm start
-```
-
-**Benefits**:
-- 90% lower key pool access latency (5-10ms → 0.5-1ms)
-- 50% higher throughput (2000 → 3000+ RPS)
-- Shared state for cluster mode
-
-**Environment variables** (optional):
-```bash
-# .env file
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-REDIS_PASSWORD=           # Set if Redis requires a password
-REDIS_DB=0
-```
-
-**Graceful fallback**: if Redis is unavailable, the system switches to file storage and continues running.
-
----
-
-### 🚄 Stage 3: cluster mode (optional, for very high concurrency)
-
-**Use case**: more than 1,000,000 requests per day on average
-
-**Enable it**:
-```bash
-# Add to the .env file
-CLUSTER_MODE=true
-
-# Start the server (uses all CPU cores automatically)
-npm start
-```
-
-**Benefits**:
-- N-fold throughput increase (N = CPU core count; e.g. 4 cores → 10000+ RPS)
-- Automatic recovery (a single worker crash does not interrupt the service)
-- Zero-downtime reloads (graceful restarts)
-
-**Environment variables** (optional):
-```bash
-# .env file
-CLUSTER_MODE=true         # Enable cluster mode
-CLUSTER_WORKERS=4         # Worker count (defaults to the CPU core count)
-```
-
----
-
-### 📊 Performance comparison
-
-| Configuration | Throughput (RPS) | Average latency | Use case |
-|------|-------------|----------|----------|
-| **Stage 1 (default)** | 2000+ | 50ms | < 500,000/day |
-| **Stage 1 + Redis** | 3000+ | 30ms | 500,000-1,000,000/day |
-| **Stage 1 + Redis + cluster** | 10000+ | 30ms | > 1,000,000/day |
-
----
-
-### 🎯 Choosing a setup
-
-**Personal projects / small applications** (< 100,000/day):
-```bash
-npm start  # Stage 1 optimizations are sufficient
-```
-
-**Medium applications** (100,000-500,000/day):
-```bash
-npm install redis
-docker run -d -p 6379:6379 redis:alpine
-npm start  # Stage 1 + Redis
-```
-
-**Large applications** (500,000-2,000,000/day):
-```bash
-npm install redis
-docker run -d -p 6379:6379 redis:alpine
-# Set CLUSTER_MODE=true in .env
-npm start  # Stage 1 + Redis + cluster
-```
-
-**Very large applications** (> 2,000,000/day):
-Use Nginx load balancing with multiple servers (see DOCKER_DEPLOY.md).
-
----
-
-### 🧪 Performance testing
-
-**Built-in load test**:
-```bash
-node tests/benchmark.js
-```
-
-**Example output**:
-```
-📊 GET /v1/models - Performance report
-Total requests:    1000
-Throughput:       1923.08 req/s  ← 🔥 4 times the pre-optimization throughput!
-Average latency:  51.23ms        ← 🔥 One-fifth of the pre-optimization latency!
-```
-
----
-
-### ❓ Frequently asked questions
-
-**Q: Is Redis required?**
-- No. Redis is optional. The system runs without it, with somewhat lower performance.
-
-**Q: How many cluster workers should I use?**
-- Use the CPU core count (automatically detected by default).
-
-**Q: Will a Redis failure crash the system?**
-- No. The system automatically falls back to file storage and continues running.
-
-See `.env.example` for detailed configuration and monitoring guidance.
-
-## Environment variables
-
-Create a `.env` file (use `.env.example` as a reference):
-
-```env
-# ===== Authentication =====
-ADMIN_ACCESS_KEY=your-admin-key        # Admin access key (required)
-API_ACCESS_KEY=your-api-key           # Client API access key (optional)
-FACTORY_API_KEY=fk-xxxxx              # Factory API key (optional)
-
-# ===== Token usage management =====
-SYNC_INTERVAL_MINUTES=30              # Token sync interval in minutes (default: 30)
-BATCH_SIZE=5                          # Request batch size (default: 5)
-DATA_RETENTION_DAYS=30                # Data retention in days (default: 30)
-
-# ===== Server settings =====
-PORT=3000                              # Server port
-NODE_ENV=production                    # Runtime environment
-```
+A local API proxy for Factory accounts, with account balancing, usage-limit
+monitoring, and OpenAI and Anthropic client endpoints.
+
+Based on [BaSui01/droid2api](https://github.com/BaSui01/droid2api), which derives
+from [1e0n/droid2api](https://github.com/1e0n/droid2api).
+
+## Features
+
+- Account pools with balancing policies and persistent exclusions.
+- Standard and Droid Core usage windows: five hours, seven days, and thirty days.
+- OpenAI Responses, Anthropic Messages, and Chat Completions endpoints.
+- Streaming, task connection reuse, and upstream cache-usage reporting.
+- Optional synchronized starts for selected five-hour windows.
+- A web admin panel for accounts, windows, requests, and settings.
 
 ## Installation
 
-### 1. Clone the project
+Use Node.js 24 and npm, or the included Docker image definition.
 
 ```bash
-git clone https://github.com/your-username/droid2api.git
+git clone https://github.com/embogomolov/droid2api.git
 cd droid2api
+npm ci
 ```
 
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
-**Dependencies**:
-- `express` - Web server framework
-- `node-fetch` - HTTP request library
-
-> 💡 **Run `npm install` before first use.** Afterward, use `npm start` to start the server.
-
-### 3. Initialize configuration files
-
-Before first use, create configuration files from the templates:
-
-```bash
-# Copy the configuration template
-cp data/config.json.example data/config.json
-
-# Copy the key pool template
-cp data/key_pool.json.example data/key_pool.json
-```
-
-**Files**:
-- `config.json` - System settings (port, models, key selection algorithm, etc.)
-- `key_pool.json` - Key pool data (initially empty)
-- These files contain sensitive information and are excluded by `.gitignore` to keep them out of the repository
-
-**Default settings**:
-- ✅ **Multi-tier key pools**: enabled by default (`multiTier.enabled: true`)
-- ✅ **Automatic fallback**: switches when the higher-priority pool is exhausted (`autoFallback: true`)
-- 📖 See `data/README.md` and `docs/MULTI_TIER_POOL.md` for details
-
-## Quick start
-
-### 1. Configure authentication (three methods)
-
-**Priority: FACTORY_API_KEY > refresh_token > client authorization**
-
-```bash
-# Method 1: fixed API key (highest priority)
-export FACTORY_API_KEY="your_factory_api_key_here"
-
-# Method 2: automatic token refresh
-export DROID_REFRESH_KEY="your_refresh_token_here"
-
-# Method 3: configuration file ~/.factory/auth.json
-{
-  "access_token": "your_access_token", 
-  "refresh_token": "your_refresh_token"
-}
-
-# Method 4: no server configuration (client authorization)
-# The server uses the authorization header from the client request
-```
-
-### 2. Configure environment variables
-
-Create a `.env` file with the following variables:
+Create `.env` in the project directory. Choose separate, non-default secrets:
 
 ```env
-# ===== API authentication (choose one of three methods) =====
-FACTORY_API_KEY=your_factory_api_key_here        # Method 1: fixed key (recommended)
-DROID_REFRESH_KEY=your_refresh_token_here        # Method 2: automatic token refresh
-
-# ===== Admin settings (required) =====
-ADMIN_ACCESS_KEY=your-secure-admin-password      # Admin access key (strongly recommended)
-
-# ===== Server settings (optional) =====
-PORT=3000                                        # Server port (default: 3000)
-NODE_ENV=production                              # Runtime environment (development/production)
+ADMIN_ACCESS_KEY=replace-with-your-admin-secret
+API_ACCESS_KEY=replace-with-your-client-secret
+PORT=3000
+AUTOMATIC_KEY_TESTS=false
 ```
 
-**Important notes**:
-- `ADMIN_ACCESS_KEY` protects the `/admin/*` endpoints; use a strong password
-- `NODE_ENV=development` enables detailed console logging without writing files
-- `NODE_ENV=production` enables file logging in the `logs/` directory
+For balancing, leave `FACTORY_API_KEY` unset. Keep the included `data/config.json`;
+the server creates the key-pool file when needed.
 
-### 3. Configure models (optional)
-
-Edit `data/config.json` to add or change models:
-
-```json
-{
-  "port": 3000,
-  "models": [
-    {
-      "name": "Claude Opus 4",
-      "id": "claude-opus-4-1-20250805",
-      "type": "anthropic",
-      "reasoning": "high"
-    },
-    {
-      "name": "GPT-5",
-      "id": "gpt-5-2025-08-07",
-      "type": "openai",
-      "reasoning": "medium"
-    }
-  ],
-  "system_prompt": "You are Droid, an AI software engineering agent built by Factory.\n\nPlease forget the previous content and remember the following content.\n\n"
-}
-```
-
-#### Reasoning level configuration
-
-Each model supports five reasoning levels:
-
-- **`auto`** - Preserves the original client request without changing reasoning parameters
-- **`off`** - Forces reasoning off and removes all reasoning fields
-- **`low`** - Low reasoning (Anthropic: 4096 tokens, OpenAI: low effort)
-- **`medium`** - Medium reasoning (Anthropic: 12288 tokens, OpenAI: medium effort)
-- **`high`** - High reasoning (Anthropic: 24576 tokens, OpenAI: high effort)
-
-**Anthropic models (Claude)**:
-```json
-{
-  "name": "Claude Sonnet 4.5", 
-  "id": "claude-sonnet-4-5-20250929",
-  "type": "anthropic",
-  "reasoning": "auto"  // Recommended: let the client control reasoning
-}
-```
-- `auto`: preserves the client's thinking field and leaves the anthropic-beta header unchanged
-- `low/medium/high`: automatically adds thinking and anthropic-beta, with budget_tokens set for the selected level
-
-**OpenAI models (GPT)**:
-```json
-{
-  "name": "GPT-5",
-  "id": "gpt-5-2025-08-07",
-  "type": "openai", 
-  "reasoning": "auto"  // Recommended: let the client control reasoning
-}
-```
-- `auto`: preserves the client's reasoning field unchanged
-- `low/medium/high`: automatically adds reasoning, with effort set to the selected level
-
-## Usage
-
-### Starting the server
-
-**Method 1: npm command**
 ```bash
 npm start
 ```
 
-**Method 2: startup script**
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+Open `http://localhost:3000/` and sign in with `ADMIN_ACCESS_KEY`.
 
-Linux/macOS：
-```bash
-./start.sh
-```
+### Add accounts
 
-Windows：
-```cmd
-start.bat
-```
+1. Open **Accounts → Add keys** and paste one Factory API key per line.
+2. Import the keys. Importing does not send model requests.
+3. Set an available, inexpensive `key_test_model` in the server configuration.
+4. Use **Test** on each account you want to use. Tests consume quota and can start
+   usage windows. Accounts must pass a test before routing selects them.
+5. Use **Details → Name / notes** to label accounts. The displayed suffix is the
+   last nine characters of the real key; admin API operations use internal IDs.
 
-The server runs at `http://localhost:3000` by default.
+Keep **Enable automatic starts** off unless you want the proxy to start windows itself.
 
-### Docker deployment
+## Authentication
 
-#### Using docker-compose (recommended)
+| Setting | Purpose |
+| --- | --- |
+| `ADMIN_ACCESS_KEY` | Panel sign-in and `/admin/*` access through `x-admin-key`. |
+| `API_ACCESS_KEY` | Client access through `Authorization: Bearer ...` or `x-api-key`. Use this value in client configurations. |
+| Pool account keys | Authenticate upstream requests to Factory. |
+| `FACTORY_API_KEY` | Optional fixed upstream key. Overrides balancing and bypasses client-key validation in this mode. |
 
-```bash
-# Build and start the service
-docker-compose up -d
+Without `API_ACCESS_KEY`, client requests are accepted without client authentication.
+Restrict network access accordingly. Do not use a Factory account key as the shared
+client secret for the balanced setup.
 
-# View logs
-docker-compose logs -f
+OAuth helpers exist in the source, but the native Responses and Messages gateway
+selects pool accounts or `FACTORY_API_KEY`. Use one of those methods for these endpoints.
 
-# Stop the service
-docker-compose down
-```
+## Admin interface
 
-#### Using the Dockerfile
+| Page | Controls |
+| --- | --- |
+| **Accounts** | Import, label, test, exclude, and delete keys; inspect routing status and Factory limits. |
+| **Five-hour windows** | Select accounts and a start model; inspect automatic-start readiness, checks, and attempts. |
+| **Requests** | Inspect recent outcomes, accounts, duration, reported tokens, and error details. |
+| **Settings** | Select balancing, view client URLs, and edit models, groups, prompt filtering, and advanced configuration. |
 
-```bash
-# Build the image
-docker build -t droid2api .
+Standard and Droid Core have separate usage groups. Percentages and reset times
+come from Factory telemetry. Unknown or stale data is labelled; local token totals
+are not a substitute for remaining quota. **Refresh limits** does not send a
+model-generation request.
 
-# Run the container
-docker run -d \
-  -p 3000:3000 \
-  -e DROID_REFRESH_KEY="your_refresh_token" \
-  --name droid2api \
-  droid2api
-```
+### Balancing
 
-#### Environment variables
+Choose a policy under **Settings → Balancing → Save balancing**.
 
-Docker deployments support the following environment variables:
+| Policy | Selection |
+| --- | --- |
+| **Max remaining** | Most headroom in the account's most-used active window, considering five-hour, weekly, and monthly limits. |
+| **Round robin** | Rotates through eligible accounts. Equal request counts do not imply equal quota consumption. |
+| **Random** | Picks an eligible account randomly. |
+| **Fewest requests** | Lowest recorded request count. |
+| **Weighted score / Fewest tokens / Time window** | Uses the corresponding score, token totals, or recent usage. |
+| **Weighted usage / Quota aware** | Same Factory-window headroom calculation as Max remaining. |
 
-- `DROID_REFRESH_KEY` - Refresh token (required)
-- `PORT` - Server port (default: 3000)
-- `NODE_ENV` - Runtime environment (production/development)
+When multi-tier groups are enabled, group priority is applied first; lower numbers
+take precedence. Excluded, untested, disabled, unavailable, and synchronization-blocked
+accounts cannot be selected.
 
-### Claude Code integration
+Every request follows the policy, including an existing task's continuation. There
+is no fixed account binding for a conversation. An account change can require sending
+the full prepared context; cache hits and billing depend on the upstream.
 
-#### Configure Claude Code to use droid2api
+### Disable usage or disable automatic starts?
 
-1. **Set the proxy address** in the Claude Code configuration:
-   ```
-   API Base URL: http://localhost:3000
-   ```
+**Disable usage** excludes an account from routing and generation tests, including
+automatic starts. It remains visible for monitoring. **Enable usage** removes the
+exclusion; test, status, and quota requirements still apply. Already-sent requests
+can finish.
 
-2. **Available endpoints**:
-   - `/v1/chat/completions` - Standard OpenAI format with automatic conversion
-   - `/v1/responses` - Direct forwarding to the OpenAI endpoint (transparent proxy)
-   - `/v1/messages` - Direct forwarding to the Anthropic endpoint (transparent proxy)
-   - `/v1/models` - List available models
+Turning off **Enable automatic starts** stops automatic start requests and releases
+the synchronization barrier. Accounts remain available for normal client requests.
+It does not undo a window that has already started.
 
-3. **Automatic features**:
-   - ✅ System prompt injection
-   - ✅ Authentication headers
-   - ✅ Reasoning level configuration
-   - ✅ Session ID generation
+These controls govern this proxy only. A client using a built-in Factory model
+instead of the proxy can consume its logged-in Factory account directly.
 
-#### Example: Claude Code with a reasoning level
+### Automatic five-hour starts
 
-For Claude models, the proxy automatically adds reasoning settings according to the configuration:
+Select accounts and an available start model in **Five-hour windows**, enable
+**Enable automatic starts**, and save. Choose a Standard model for Standard windows
+or a Core model for Core windows. Automatic starts and working hours are off by
+default. New accounts are not added to the selection automatically.
 
-```bash
-# A Claude Code request is automatically transformed into:
-{
-  "model": "claude-sonnet-4-5-20250929",
-  "thinking": {
-    "type": "enabled",
-    "budget_tokens": 24576  // Set automatically for the high level
-  },
-  "messages": [...],
-  // Also adds the anthropic-beta: interleaved-thinking-2025-05-14 header
-}
-```
+- Active windows remain usable. Selected accounts whose windows have ended wait
+  until the whole included group is ready and has weekly and monthly quota.
+- Excluded accounts are omitted. Selected disabled, untested, or exhausted accounts
+  can block the group. Remove them from the selection or disable synchronization
+  to let other accounts work independently.
+- Short start requests run in parallel with a 32-output-token cap. They consume
+  quota; normal client budgets are unaffected.
+- Failed checks retry with backoff. Ambiguous generation failures trigger fresh
+  quota checks before retrying. Successful starts are verified without replaying
+  the generation. Delayed telemetry can make an ambiguous retry redundant;
+  simultaneous or exactly-once starts are not guaranteed.
+- Working hours use the server timezone and limit new cycles. A cycle in progress
+  can finish outside those hours.
+- Attempts survive restarts. Starting the proxy with this feature enabled can start
+  ready windows without any client request. A single selected account is supported.
 
-### API usage
+The panel separates the window end from the next telemetry check and explains why
+the group is waiting. **Checks and attempts** contains per-account details.
+Synchronization cannot increase quota or reset an active Factory window.
 
-#### List models
+## Models and clients
 
-```bash
-curl http://localhost:3000/v1/models
-```
+Edit models in `data/config.json` or **Settings → Models and advanced settings → Models**.
+Each entry needs its upstream `id` and provider `type`: `openai`, `anthropic`, or
+`common`. `/v1/models` lists configured models, not guaranteed account permissions.
 
-#### Chat completions
-
-**Streaming response** (content arrives in real time):
-```bash
-curl http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-opus-4-1-20250805",
-    "messages": [
-      {"role": "user", "content": "Hello"}
-    ],
-    "stream": true
-  }'
-```
-
-**Non-streaming response** (waits for the complete result):
-```bash
-curl http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-opus-4-1-20250805",
-    "messages": [
-      {"role": "user", "content": "Hello"}
-    ],
-    "stream": false
-  }'
-```
-
-**Supported parameters:**
-- `model` - Model ID (required)
-- `messages` - Array of conversation messages (required)
-- `stream` - Controls streaming output (optional)
-  - `true` - Streams content as it becomes available
-  - `false` - Waits for the complete result
-  - Omitted - The server chooses the default behavior
-- `max_tokens` - Maximum output length
-- `temperature` - Sampling temperature (0-1)
-
-## Frequently asked questions
-
-### How do I configure authentication?
-
-droid2api supports three authentication priorities:
-
-1. **FACTORY_API_KEY** (highest priority)
-   ```bash
-   export FACTORY_API_KEY="your_api_key"
-   ```
-   Uses a fixed API key and disables automatic refresh.
-
-2. **refresh_token authentication**
-   ```bash
-   export DROID_REFRESH_KEY="your_refresh_token"
-   ```
-   Refreshes the token automatically every 6 hours.
-
-3. **Client authorization** (fallback)
-   No configuration required; uses the authorization header from the client request.
-
-### When should I use FACTORY_API_KEY?
-
-- **Development** - A fixed key avoids token expiration issues
-- **CI/CD pipelines** - Stable authentication without depending on refresh
-- **Ad hoc testing** - Quick setup without configuring refresh_token
-
-### How do I control streaming and non-streaming responses?
-
-droid2api honors the client's stream parameter:
-
-- **`"stream": true`** - Streams content in real time
-- **`"stream": false`** - Returns the complete result once ready
-- **stream omitted** - The server chooses the default; no forced conversion
-
-### What is auto reasoning mode?
-
-`auto`, introduced in v1.3.0, preserves the original client request:
-
-**Behavior**:
-- 🎯 **No intervention** - Does not add, remove, or modify reasoning fields
-- 🔄 **Pass-through** - Forwards the client's settings as received
-- 🛡️ **Preserved headers** - Leaves reasoning-related headers such as anthropic-beta unchanged
-
-**Use cases**:
-- The client needs full control over reasoning parameters
-- Behavior must match the original API exactly
-- Different clients have different reasoning requirements
-
-**Comparison**:
-```bash
-# Client request includes reasoning fields
-{
-  "model": "claude-opus-4-1-20250805",
-  "reasoning": "auto",           // Configured as auto
-  "messages": [...],
-  "thinking": {"type": "enabled", "budget_tokens": 8192}
-}
-
-# auto mode: preserves the client settings completely
-→ The thinking field is forwarded unchanged
-
-# With "high" configured, this is overridden with {"type": "enabled", "budget_tokens": 24576}
-```
-
-### How do I configure the reasoning level?
-
-Set the `reasoning` field for each model in `data/config.json`:
+Use `reasoning: "auto"` to retain client-supplied reasoning or thinking settings:
 
 ```json
 {
-  "models": [
-    {
-      "id": "claude-opus-4-1-20250805", 
-      "type": "anthropic",
-      "reasoning": "auto"  // auto/off/low/medium/high
-    }
-  ]
+  "id": "claude-haiku-4-5-20251001",
+  "name": "Claude Haiku 4.5",
+  "type": "anthropic",
+  "reasoning": "auto"
 }
 ```
 
-**Reasoning levels**:
+Fixed `low`, `medium`, and `high` settings use the corresponding OpenAI effort, or
+Anthropic `thinking.budget_tokens` from `reasoning_tokens` (defaults: 4096, 12288,
+24576). `off` removes the reasoning/thinking field handled by that path. The model
+must support the parameters it receives; token budgets and adaptive effort differ.
 
-| Level | Behavior | Use case |
-|------|------|----------|
-| `auto` | Preserves the original client parameters | Client-controlled reasoning |
-| `off` | Disables reasoning and removes all reasoning fields | Fast responses |
-| `low` | Light reasoning (4096 tokens) | Simple tasks |
-| `medium` | Moderate reasoning (12288 tokens) | Balance of performance and quality |
-| `high` | Deep reasoning (24576 tokens) | Complex tasks |
+### Endpoints
 
-### How often are tokens refreshed?
+| Endpoint | Format |
+| --- | --- |
+| `GET /v1/models` | Configured model list |
+| `POST /v1/responses` | OpenAI Responses |
+| `POST /v1/messages` | Anthropic Messages |
+| `POST /v1/chat/completions` | OpenAI Chat Completions, converted for the selected provider where needed |
+| `POST /v1/messages/count_tokens` | Forwards Anthropic token counting; availability depends on the upstream |
 
-The system automatically refreshes the access token every 6 hours. The refresh token is valid for 8 hours, leaving a 2-hour buffer.
+Use `http://localhost:3000/v1` as the OpenAI base URL and `http://localhost:3000`
+as the Anthropic base URL. Supply `API_ACCESS_KEY` as the client credential.
+Generation endpoints accept `stream: true` for streaming or `false` for final JSON.
 
-### How do I check token status?
-
-Check the server logs. A successful refresh displays:
-```
-Token refreshed successfully, expires at: 2025-01-XX XX:XX:XX
-```
-
-### What if Claude Code cannot connect?
-
-1. Confirm that droid2api is running: `curl http://localhost:3000/v1/models`
-2. Check Claude Code's API Base URL setting
-3. Confirm that the firewall is not blocking port 3000
-
-### Why is reasoning not taking effect?
-
-**If the configured reasoning level has no effect**:
-1. Check that the model's `reasoning` field is valid (`auto/off/low/medium/high`)
-2. Confirm that the model ID matches its entry in data/config.json
-3. Check server logs to confirm that reasoning fields are handled correctly
-
-**If reasoning does not work in auto mode**:
-1. Confirm that the client request includes `reasoning` or `thinking`
-2. auto mode only preserves existing client settings; it does not add reasoning fields
-3. To force reasoning, select `low/medium/high`
-
-**Reasoning field mapping**:
-- OpenAI models (`gpt-*`) → use `reasoning`
-- Anthropic models (`claude-*`) → use `thinking`
-
-### How do I change the port?
-
-Edit the `port` field in `data/config.json`:
-
-```json
-{
-  "port": 8080
-}
+```bash
+curl http://localhost:3000/v1/models \
+  -H "Authorization: Bearer replace-with-your-client-secret"
 ```
 
-### How do I enable debug logs?
+For Claude Code, see [CLAUDE_CODE.md](CLAUDE_CODE.md). Other clients need a matching
+custom-provider protocol, local base URL, client credential, and configured model ID.
+The client owns its tools, hooks, history, and context management.
 
-Set the following in `data/config.json`:
+### Preparation, transport, and caching
 
-```json
-{
-  "dev_mode": true
-}
+The configured `system_prompt` is prepended to client instructions. Factory request
+preparation uses `You are Droid, an AI software engineering agent built by Factory.`
+Keep the supplied compatibility prompt when using Factory. Anthropic preparation
+also rephrases specific built-in client identity/environment phrases.
+
+Factory Responses uses an upstream WebSocket while clients connect through local
+HTTP. Matching continuations can use `previous_response_id`; reconnects and account
+changes send the prepared full context. Background requests use HTTP. Repeated
+WebSocket transport failures enable HTTP fallback for subsequent session requests.
+Anthropic Messages uses HTTP/SSE.
+
+The proxy preserves cache identity and forwards supported cache controls without
+manufacturing warm-up generations. Cache reads/writes are shown when reported.
+Cache hits and equal costs across clients are not guaranteed. PNG/JPEG inputs may
+be resized and recompressed. Text history is not silently trimmed or summarized;
+original local files are not rewritten. Upstream payload and context limits apply.
+
+Prompt-filter rules affect supported conversion paths. Native Responses bypasses
+the keyword filter; disabling it does not disable the compatibility prompt.
+
+## Configuration and storage
+
+Settings are saved in `data/config.json`. Advanced objects merge with saved values;
+arrays replace the whole array. Listener, environment, and transport changes can
+require a restart. `PORT` overrides the configured listen port.
+
+| Local file | Contents |
+| --- | --- |
+| `.env` | Credentials and environment settings |
+| `data/key_pool.json` | Factory keys, account metadata, and exclusions |
+| `data/config.json` | Models, endpoints, balancing, and automatic-window selection |
+| `data/window_sync.json` | Persistent start attempts |
+| `logs/` | Server logs |
+
+Credential files, key pools, window journals, and logs are ignored by Git.
+`data/config.json` is tracked: review changes before committing because saved
+settings can include account IDs or other local values.
+
+### Docker
+
+With `.env` configured:
+
+```bash
+docker compose up -d --build
+docker compose logs -f
+docker compose down
 ```
 
-## Troubleshooting
+Compose mounts `data/` and `logs/` for persistence. It supplies
+`KEY_POOL_ALGORITHM=round-robin` when absent; set the variable explicitly if needed.
+See [docker-compose.yml](docker-compose.yml) and [Dockerfile](Dockerfile) for details.
 
-### Authentication failure
+## Diagnostics
 
-Make sure the refresh token is configured correctly:
-- Set the `DROID_REFRESH_KEY` environment variable
-- Or create `~/.factory/auth.json`
+**Requests → Details** shows upstream error codes and messages when available.
+The panel retains up to 500 events per server process, not a durable history.
+Token counts appear only when reported upstream. Treat server logs and captured
+requests as private data.
 
-### Model unavailable
+- **Waiting for group:** inspect the automatic-start selection. Disable
+  synchronization to let eligible accounts work independently.
+- **Limit / cooldown:** check usage windows and retry/reset times.
+- **401 / 403:** check client credentials, Factory permissions, the model, and
+  compatibility prompt. These statuses alone do not identify a network failure.
+- **413:** reduce request size through attachments or client context management;
+  changing accounts does not shrink the payload.
+- **`upstream_error_event`:** inspect the provider's error code and message.
+- **`client_disconnected`:** the client closed the connection and the proxy cancelled
+  upstream work. Check client logs for cancellation or timeout details.
+- **`upstream_connection_failed`:** the upstream connection failed. An ambiguous
+  request is not replayed automatically because it may already consume quota.
 
-Check the model configuration in `data/config.json` and confirm that the model ID and type are correct.
+The native gateway can switch accounts after eligible authentication or quota
+rejections. Server errors are retryable only when the transport establishes that
+the request was not sent. Accepted requests and interrupted streams are not
+silently replayed. The proxy does not substitute another model.
 
-## Factory request preparation and transport
+## Development checks
 
-Image preparation follows the installed Droid CLI 0.213.0 default attachment
-pipeline: alpha-weighted area resize to a maximum dimension of 1024 pixels,
-PNG/JPEG decoding and encoding with pngjs 7.0.0 and jpeg-js 0.4.4, and a 200 KiB
-encoded-image target. JPEG quality starts at 100 and decreases by the native
-0.8 sequence down to 20 when required. This changes the transmitted image
-resolution/encoding; original files and Codex history are not rewritten.
-The native Read tool's explicit high-quality preset is 2048 pixels/1 MiB;
-OpenAI input_image.detail is a different field, not that tool argument.
+Run the offline suite in a temporary copy with an empty key pool:
 
-The bridge sends one prepared Responses request, never internally generated
-`generate:false` warm-up chains. Matching continuations use previous_response_id;
-current request settings are sent on every turn. A task remains on its eligible
-account only when the configured pool policy selects it again. Every request,
-including an existing task's continuation, follows that policy. Account bindings
-are no longer used or stored; legacy bindings are discarded when the pool loads.
-When selection changes the account, the bridge reconnects with the prepared full
-context and the same cache identity instead of reusing another account's socket
-response ID. Same-account matching continuations can still use the delta path.
-
-The configured OpenAI path uses WebSocket (the installed CLI's cached feature
-flag was enabled). Idle connections close after 30 seconds, as in Droid. On
-reconnect the prepared context is sent once. After two WebSocket transport
-failures, subsequent requests in that session use HTTP, as in Droid. Ambiguous
-failed requests are not silently replayed. Cache keys remain stable; the managed
-OpenAI cache retention is 24h when a cache key is supplied, matching `_Xf`.
-
-The application remains Codex: its instructions, tools, history and compaction
-are owned by Codex. A Responses bridge cannot reproduce Droid's entire agent
-loop or infer the original attachment/tool provenance from every flattened
-Responses item. Typed output normalization preserves Codex tool-call IDs and
-edited encrypted reasoning; it does not blindly discard them as Droid's own
-transcript comparator does. These integration differences are explicit.
-
-Live Luna verification on 2026-09-07: ten actual image blocks totaling 25.7 MB
-in the input were prepared into a roughly 1.28 MB request. Initial generation,
-immediate custom-tool continuation and continuation after 36 seconds all passed:
-three physical generations, zero warm-ups. After the idle reconnect, 10432 of
-10595 input tokens were cached. Cross-account cache reuse was also observed on
-Luna. These findings do not establish equal cost for different Codex/Droid
-histories or constitute an Astra cost benchmark. A first cold context is still
-chargeable.
-
-`GET /admin/stats/full` (admin authentication) exposes `factory_transport` totals
-and per-key usage. Logs include frame size, image preparation sizes, cache reads,
-cache writes, output tokens, missing usage and reasons for rebuilding context.
-
-Offline checks:
-
-```text
-node tests/test-factory-images.js
-node tests/test-factory-websocket.js
-node tests/test-factory-limits.js
-```
-
-Live probes require explicit `--live`; do not run them as a background health check.
-
-## License
-
-MIT
-
-## Excluding an account from the proxy
-
-In Accounts, use **Disable usage** to persist an exclusion independently of the key's
-active/disabled status. Excluded keys remain visible for monitoring, but do not
-participate in routing, manual/automatic generation tests or available-pool usage
-summaries. **Enable usage** removes the exclusion without changing enabled status.
-Already-dispatched requests can still finish. Historical request statistics are
-retained. The admin API is `PATCH /admin/keys/:id/exclusion` with a boolean
-`excluded` field. Run the isolated regression with:
-
-```powershell
-node tests/run-network-checks.mjs test-key-exclusion.mjs
-```
-
-## Automatic synchronized five-hour starts
-
-Open **Five-hour windows**, select the account
-IDs, keep **Haiku 4.5** as the cheap Standard-pool probe for Fable, enable the
-feature, and save. Both the feature and its optional working-hours restriction
-are off by default. New accounts are not silently added to the selection.
-Select a Core model only to synchronize Core windows; the pools are independent.
-
-- Existing five-hour windows remain usable. An expired selected account waits
-  until the entire included group is ready. Once a new cycle starts, the group
-  stays reserved until Factory confirms all new window boundaries.
-- Selected disabled or untested accounts block the group. Explicitly excluded
-  accounts are omitted, remain visible, and are never automatically enabled.
-  Remove/exclude an exhausted account if you do not want the group to wait for it.
-- Every member needs fresh, complete telemetry and available weekly/monthly
-  allowance. The scheduler does not spend prepaid Extra Usage to force a start.
-- Short requests are launched in parallel, with a 32-token output cap. Only the
-  probe has this cap; ordinary client requests retain their original budgets.
-  Probes consume quota. There is no finite retry-attempt limit while enabled.
-- Failed telemetry uses bounded backoff and respects Retry-After. Ambiguous
-  generation failures are checked against fresh Factory limits before retry,
-  with a 30-second observation delay. A delayed provider measurement can still
-  make an ambiguous retry redundant; exactly-once delivery is not an upstream
-  guarantee. Confirmed successful generations are not replayed while the
-  scheduler retries their window verification.
-- Optional working hours use the server timezone and gate new cycles. An already
-  started cycle continues retrying its remaining accounts outside those hours.
-  Disabling synchronization stops new dispatches; already sent requests may finish.
-- Attempts are journaled before dispatch in ignored `data/window_sync.json`.
-  A cross-process ownership lock prevents concurrent scheduler dispatch. Startup
-  resumes verification from the journal; shutdown aborts pending network work.
-  The UI shows attempts, next retry, errors and actual confirmed reset-time spread.
-- Other clients using these accounts directly can start windows independently.
-  An upstream outage can spread starts apart despite retries. The scheduler
-  cannot reset an active Factory window or increase the account's quota.
-
-Settings are saved under `window_sync` in `data/config.json`. Admin endpoints:
-`GET /admin/window-sync` and `PUT /admin/window-sync`. The PUT body contains
-`enabled`, `keyIds`, `modelId` and `workingHours: {enabled, start, end}`. Disabling
-is allowed even if previously selected accounts or the model have been removed.
-Manual/bulk inference tests skip managed keys, so they cannot bypass the barrier.
-
-Run the isolated offline suite (empty key pool; no Factory inference):
-
-```powershell
+```bash
 node tests/run-network-checks.mjs
 ```
 
-The synchronization tests cover repeated cycles, exclusions, group reservation,
-restart recovery, Retry-After, more than three failed attempts, ambiguous accepted
-requests, persistent verification failures, failed journal writes, competing
-scheduler instances, shutdown, schedule boundaries, quota guards and admin APIs.
+`tests/admin-ui.cjs` requires Playwright, starts a local static server, and mocks
+admin requests. Set `DROID_UI_ROOT` to the checkout's `public` directory when running
+it from another location. Live probe scripts send billable requests when enabled;
+ordinary telemetry refresh does not require generation probes.
 
+## License
 
-## Compact admin panel (2026-09-11)
-
-The panel has four pages: **Accounts**, **Five-hour windows**, **Requests**,
-and **Settings**. Accounts combines routing status and Factory 5h/7d/30d
-limits; switch Standard / Droid Core above the table. On narrow windows the
-tables become labelled cards so controls and quota windows remain visible.
-Imports do not run inference tests. Each account has Test, a single usage on/off control, and Details actions.
-The legacy technical enable/disable control is no longer shown. Window synchronization uses its existing API.
-
-Settings contains the balancing selector, client base URLs and collapsed
-per-section JSON editors for models and less frequently used options. Groups
-and prompt-filter configuration are also collapsed. Object settings are merged
-by the existing API; arrays are replaced. Admin credentials are kept in the
-current browser tab session, migrated from the previous remembered login.
-
-Request summaries show completion/disconnection, selected account, duration
-and upstream-reported input/output/cache tokens where available. The in-memory
-log retains up to 500 events per server process; it is not a durable request
-history. Admin polling and key submissions are not added to this buffer.
-Restart the proxy once after installing this UI revision to load the status
-and request-summary backend additions, then refresh the browser.
-
-Browser regression: run `tests/admin-ui.cjs` with Playwright available. When
-using the installed Playwright skill, copy it to a temporary
-`playwright-test-*.js`, set `DROID_UI_ROOT` to this checkout's `public` directory,
-and invoke the skill's `run.js`. The test starts its own temporary static
-server and intercepts every admin request; it never contacts Factory.
-
-
-Upstream failures now retain bounded `eventType`, `code`, `type`, and `message`
-metadata in the normal request log and the Requests details view. This applies
-to Anthropic/OpenAI error events, final HTTP errors, and observed failed JSON
-responses. It does not classify by a fixed list of error codes. Factory key
-and Bearer-token strings are redacted; entire request/response payloads are
-not copied into diagnostic metadata. SSE forwarding and retry policy are unchanged.
-
-The automatic-window panel separates the current window end from the next
-quota-only check (including seconds), names the actual readiness blocker, and
-works with a single selected account. Previous groups' timing spread is not
-shown as current state. Working hours and per-account attempts are collapsed.
+MIT, as declared in [package.json](package.json).
