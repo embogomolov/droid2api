@@ -54,6 +54,7 @@ function loadTokenUsageData() {
   // Check the in-memory cache
   if (memoryCache && (now - lastLoadTime) < 60000) {
     logDebug('Using cached token usage data from memory');
+    memoryCache.summary = { ...calculateSummary(memoryCache.keys || {}), last_full_sync: memoryCache.summary?.last_full_sync || null };
     return memoryCache;
   }
 
@@ -68,6 +69,7 @@ function loadTokenUsageData() {
       lastLoadTime = now;
 
       logDebug(`Loaded token usage data from file for ${Object.keys(parsed.keys || {}).length} keys`);
+      parsed.summary = { ...calculateSummary(parsed.keys || {}), last_full_sync: parsed.summary?.last_full_sync || null };
       return parsed;
     }
   } catch (error) {
@@ -175,7 +177,8 @@ function calculateSummary(keysData) {
   let total_remaining = 0;
   let successful_keys = 0;
 
-  Object.values(keysData).forEach(keyData => {
+  const included = Object.entries(keysData).filter(([id]) => !keyPoolManager.keys.find(key => key.id === id)?.excluded);
+  included.forEach(([, keyData]) => {
     if (keyData.success && keyData.standard) {
       // Use actual field names from the Factory API standard object
       total_limit += keyData.standard.totalAllowance || 0;
@@ -190,7 +193,7 @@ function calculateSummary(keysData) {
     total_used,
     total_remaining,
     successful_keys,
-    total_keys: Object.keys(keysData).length,
+    total_keys: included.length,
     last_full_sync: new Date().toISOString()
   };
 }
@@ -199,7 +202,7 @@ router.get('/limits', wrapAsync(async (req, res) => {
   const keys = keyPoolManager.keys;
   await Promise.all(keys.map(key => keyPoolManager.refreshBillingLimits(key, req.query.forceRefresh === 'true')));
   sendSuccessResponse(res, { keys: Object.fromEntries(keys.map(key => [key.id, {
-    status: key.status, tested: key.last_test_result === 'success',
+    status: key.status, excluded: key.excluded === true, tested: key.last_test_result === 'success',
     standard: getLimitState(key, 'standard'), core: getLimitState(key, 'core'),
     fetchedAt: key.billing_limits?.fetchedAt || null, error: key.limits_error || null
   }])) });
@@ -425,7 +428,7 @@ router.get('/trend', wrapSync((req, res) => {
   // Get all key information for pool filtering
   const allKeys = keyPoolManager.keys || [];
   const keyIdToPoolMap = {};
-  allKeys.forEach(key => {
+  allKeys.filter(key => !key.excluded).forEach(key => {
     keyIdToPoolMap[key.id] = key.pool_group || 'default';
   });
 
@@ -504,7 +507,7 @@ router.get('/by-pool', wrapSync((req, res) => {
   // Aggregate statistics by pool
   const poolStats = {};
   
-  allKeys.forEach(key => {
+  allKeys.filter(key => !key.excluded).forEach(key => {
     const poolGroup = key.poolGroup || 'default';
     
     // Initialize pool statistics

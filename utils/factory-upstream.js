@@ -110,6 +110,11 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     }
     const keyId = key?.keyId || null;
     if (keyId) attempted.add(keyId);
+    if (manager.keys.some(item => item.excluded && (item.id === keyId || fixedAuth === `Bearer ${item.key}`))) {
+      if (!fixedAuth) continue;
+      res.status(403).json({ error: { type: 'key_excluded', message: 'This Factory key is excluded from the pool' } });
+      return null;
+    }
     const { url, headers, body } = makeRequest(fixedAuth || `Bearer ${key.key}`);
     if (session) headers['x-session-id'] = session.identity;
     logRequest('POST', url, headers, body);

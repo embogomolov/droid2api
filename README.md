@@ -889,3 +889,17 @@ Live probes require explicit `--live`; do not run them as a background health ch
 ## License
 
 MIT
+
+## Excluding an account from the proxy
+
+In Keys, use **Exclude key** to persist an exclusion independently of the key's
+active/disabled status. Excluded keys remain visible for monitoring, but do not
+participate in routing, manual/automatic generation tests or available-pool usage
+summaries. **Include key** removes the exclusion without changing enabled status.
+Already-dispatched requests can still finish. Historical request statistics are
+retained. The admin API is `PATCH /admin/keys/:id/exclusion` with a boolean
+`excluded` field. Run the isolated regression with:
+
+```powershell
+node tests/run-network-checks.mjs test-key-exclusion.mjs
+```
