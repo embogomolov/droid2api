@@ -4,13 +4,13 @@ import { fileURLToPath } from 'url';
 import fetch from 'node-fetch';
 import { logDebug, logError, logInfo, logWarning } from './logger.js';
 import { transformToAnthropic, getAnthropicHeaders } from './transformers/request-anthropic.js';
-import { getKeyPoolConfig, updateConfig as updateFullConfig } from './config.js';
+import { getKeyPoolConfig, getConfig, getModelById, getEndpointByType, updateConfig as updateFullConfig } from './config.js';
+import { transformToOpenAI, getOpenAIHeaders } from './transformers/request-openai.js';
+import { fetchBillingLimits, getLimitState, limitGroup, retryAfterTime, LIMIT_CACHE_MS } from './utils/factory-limits.js';
 import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
 import {
-  selectKeyByWeightedUsage,
-  selectKeyByQuotaAware,
   selectKeyByTimeWindow
 } from './utils/advanced-algorithms.js';
 import { oauthAuthenticator } from './auth-oauth.js';
@@ -27,11 +27,7 @@ class KeyPoolManager {
   constructor() {
     this.keyPoolPath = path.join(__dirname, 'data', 'key_pool.json');
     this.keys = [];
-    this.poolGroups = [];  // 🚀 BaSui：多级密钥池配置
-    // 🔧 修复并发写入竞态条件 - 添加写锁机制
-    this.writeLock = false;
-    this.writeQueue = [];
-    this.pendingSaveData = null;
+    this.poolGroups = [];  // 🚀 BaSui: Multi-tier key pool configuration
     this.stats = {
       total: 0,
       active: 0,
@@ -56,6 +52,7 @@ class KeyPoolManager {
         const pool = JSON.parse(data);
         this.keys = pool.keys || [];
         this.stats = pool.stats || this.stats;
+        delete this.stats.task_affinity; // Retire old bindings; pool policy chooses every request.
 
         // 🚀 BaSui: Load multi-tier key pool configuration (poolGroups)
         this.poolGroups = pool.poolGroups || [];
@@ -93,46 +90,6 @@ class KeyPoolManager {
     }).catch(error => logError('Failed to save the key pool', error));
   }
 
-  async _performSave() {
-    if (!this.pendingSaveData) return;
-
-    this.writeLock = true;
-    const dataToSave = this.pendingSaveData;
-    this.pendingSaveData = null;
-
-    try {
-      // BaSui：获取全局异步写入器（单例模式）
-      const writer = fileWriterManager.getWriter(this.keyPoolPath, {
-        debounceTime: 1000,  // 1秒内的多次写入合并为一次
-        maxRetries: 3,       // 失败重试3次
-        retryDelay: 500      // 重试延迟500ms
-      });
-
-      // 异步写入
-      await writer.write(dataToSave);
-      logDebug('Key pool saved successfully');
-
-      // 处理队列中的请求
-      const queue = this.writeQueue;
-      this.writeQueue = [];
-      queue.forEach(({ resolve }) => resolve());
-    } catch (error) {
-      logError('密钥池保存失败', error);
-      
-      // 处理队列中的请求（通知失败）
-      const queue = this.writeQueue;
-      this.writeQueue = [];
-      queue.forEach(({ reject }) => reject(error));
-    } finally {
-      this.writeLock = false;
-
-      // 如果还有新的待保存数据，继续保存
-      if (this.pendingSaveData) {
-        this._performSave();
-      }
-    }
-  }
-
   /**
    * BaSui: Save immediately without debouncing (for critical operations such as testing or deleting keys)
    */
@@ -154,10 +111,61 @@ class KeyPoolManager {
     logDebug('Key pool saved immediately');
   }
 
-  async getNextKey() {
-    // BaSui：只选用测试通过成功的key，没有就直接报错，简单粗暴！
+  async refreshBillingLimits(key, force = false) {
+    this.limitRequests ||= new Map();
+    this.limitAttempts ||= new Map();
+    if (this.limitRequests.has(key.id)) return this.limitRequests.get(key.id);
+    const lastAttempt = this.limitAttempts.get(key.id) || key.billing_limits?.fetchedAt || 0;
+    const resetDue = Object.values(key.billing_limits?.limits || {}).some(group =>
+      Object.values(group).some(w => Date.parse(w.windowEnd) > lastAttempt && Date.parse(w.windowEnd) <= Date.now()));
+    if (!force && !resetDue && Date.now() - lastAttempt < LIMIT_CACHE_MS) return;
+    this.limitAttempts.set(key.id, Date.now());
+    const pending = (async () => {
+      try {
+        key.billing_limits = await fetchBillingLimits(key.key);
+        delete key.limits_error;
+        void this.saveKeyPool();
+      } catch (error) {
+        key.limits_error = error.message;
+        void this.saveKeyPool();
+        // Preserve the last valid measurement; inference can still succeed if telemetry is down.
+      } finally {
+        this.limitRequests.delete(key.id);
+      }
+    })();
+    this.limitRequests.set(key.id, pending);
+    return pending;
+  }
+
+  async recordUpstreamFailure(keyId, status, retryAfter, model) {
+    const key = this.keys.find(k => k.id === keyId);
+    if (!key) return;
+    const group = limitGroup(model);
+    if (status === 401) {
+      key.status = 'disabled';
+      key.last_test_result = 'failed';
+      key.last_error = '401: Factory rejected this credential; retest after replacing or restoring it';
+    } else if (status === 402 || status === 429) {
+      key.cooldowns ||= {};
+      // ponytail: no reset hint means one-minute probes, not a guessed permanent ban.
+      const retryAt = retryAfterTime(retryAfter);
+      key.cooldowns[group] = { status, until: Math.max(key.cooldowns[group]?.until || 0, retryAt || Date.now() + LIMIT_CACHE_MS) };
+      await this.refreshBillingLimits(key, true);
+      if (!retryAt && key.billing_limits?.limits?.[group]) {
+        const resets = Object.values(key.billing_limits.limits[group])
+          .filter(w => w.usedPercent >= 100 && Date.parse(w.windowEnd) > Date.now())
+          .map(w => Date.parse(w.windowEnd));
+        if (resets.length) key.cooldowns[group].until = Math.min(key.cooldowns[group].until, Math.max(...resets));
+      }
+    }
+    key.error_count = (key.error_count || 0) + 1;
+    await this.saveKeyPoolImmediately();
+  }
+
+  async getNextKey({ excluded = new Set(), model = '', signal } = {}) {
+    // BaSui: Select only successfully tested keys; fail immediately if none exist!
     let activeKeys = (this.keys || []).filter(k =>
-      k.status === 'active' && k.last_test_result === 'success'
+      k.status === 'active' && k.last_test_result === 'success' && !excluded.has(k.id)
     );
 
     if (activeKeys.length === 0) {
@@ -172,8 +180,20 @@ class KeyPoolManager {
       );
     }
 
-    // 🚀 BaSui：多级密钥池支持！白嫖池用完自动降级到主力池！
-    // 如果启用了多级池功能，先按优先级筛选密钥
+    await Promise.all(activeKeys.map(key => this.refreshBillingLimits(key)));
+    if (signal?.aborted) throw signal.reason;
+    const states = activeKeys.map(key => ({ key, state: getLimitState(key, limitGroup(model)) }));
+    activeKeys = states.filter(({ state }) => state.available).map(({ key }) => key);
+    if (!activeKeys.length) {
+      const retryAt = Math.min(...states.map(({ state }) => state.retryAt));
+      const error = new Error('All eligible accounts are waiting for a usage reset or Retry-After');
+      error.status = 429;
+      error.retryAfter = Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+      throw error;
+    }
+
+    // 🚀 BaSui: Multi-tier key pools: automatically fall back from the free-tier pool to the primary pool when exhausted!
+    // If multi-tier pools are enabled, filter keys by pool priority first
     if (this.config.multiTier?.enabled) {
       activeKeys = this._filterKeysByPoolPriority(activeKeys);
 
@@ -198,33 +218,16 @@ class KeyPoolManager {
         break;
 
       case 'max-remaining':
-        // 🎓 新算法：最大剩余配额算法
-        // 优先选择剩余Token最多的密钥，避免密钥耗尽
-        keyObj = await this.selectKeyByRemaining(activeKeys);
-        break;
-
       case 'weighted-usage':
-        // 🚀 高级算法：加权综合评分
-        // 综合考虑剩余Token(40%)、使用率(30%)、成功率(30%)
-        keyObj = await selectKeyByWeightedUsage(
-          activeKeys,
-          this.loadTokenUsageData.bind(this),
-          this.saveKeyPool.bind(this),
-          this.keys
-        );
+      case 'quota-aware': {
+        const headroom = key => {
+          const windows = getLimitState(key, limitGroup(model)).windows;
+          const valid = Object.values(windows || {}).filter(w => !w.windowEnd || Date.parse(w.windowEnd) > Date.now());
+          return valid.length ? 100 - Math.max(...valid.map(w => w.usedPercent)) : 0;
+        };
+        keyObj = activeKeys.reduce((best, key) => headroom(key) > headroom(best) ? key : best);
         break;
-
-      case 'quota-aware':
-        // 🚀 高级算法：配额感知
-        // 自动跳过达到配额上限的密钥
-        keyObj = await selectKeyByQuotaAware(
-          activeKeys,
-          this.loadTokenUsageData.bind(this),
-          this.saveKeyPool.bind(this),
-          this.keys,
-          this.config
-        );
-        break;
+      }
 
       case 'time-window':
         // 🚀 Advanced algorithm: time window
@@ -254,10 +257,11 @@ class KeyPoolManager {
 
       case 'round-robin':
       default:
-        // 轮询算法（默认）：按顺序轮流使用
-        const index = this.stats.last_rotation_index % activeKeys.length;
+        // Round-robin algorithm (default): use keys sequentially in rotation
+        const previousIndex = this.stats.last_rotation_index;
+        const index = (Number.isInteger(previousIndex) && previousIndex >= 0 ? previousIndex : 0) % activeKeys.length;
         keyObj = activeKeys[index];
-        this.stats.last_rotation_index = (this.stats.last_rotation_index + 1) % activeKeys.length;
+        this.stats.last_rotation_index = (index + 1) % activeKeys.length;
         logDebug(`Using round-robin key: ${keyObj.id} [${index + 1}/${activeKeys.length}]`);
         break;
     }
@@ -266,9 +270,6 @@ class KeyPoolManager {
     const algorithmsWithInternalStats = [
       'weighted-score',
       'least-token-used',
-      'max-remaining',
-      'weighted-usage',
-      'quota-aware',
       'time-window'
     ];
     if (!algorithmsWithInternalStats.includes(this.config.algorithm)) {
@@ -762,7 +763,10 @@ class KeyPoolManager {
 
     logInfo(`Testing key: ${keyId}`);
 
-    // BaSui：实现重试机制，网络问题别一次就放弃！
+    const modelId = getConfig().key_test_model || 'claude-sonnet-4-5-20250929';
+    const model = getModelById(modelId);
+    if (!model || !['openai', 'anthropic'].includes(model.type)) throw new Error(`Invalid key test model: ${modelId}`);
+    // BaSui: Retry network failures instead of giving up after one attempt!
     const retryConfig = this.config.retry;
     const configuredRetries = retryConfig.enabled ? (retryConfig.maxRetries || 0) : 0;
     const maxAttempts = Math.max(1, Math.min(configuredRetries + 1, 3));
@@ -776,31 +780,22 @@ class KeyPoolManager {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        const testUrl = 'https://app.factory.ai/api/llm/a/v1/messages';
-
-        // BaSui：复用转换层，别tm重复造轮子！这才是DRY原则
-        // 构建OpenAI格式的测试请求
+        const testUrl = getEndpointByType(model.type).base_url;
         const openaiRequest = {
-          model: 'claude-sonnet-4-5-20250929',
-          max_tokens: 10,
-          messages: [
-            { role: 'user', content: 'test' }
-          ],
-          stream: false
+          model: modelId,
+          max_tokens: 128,
+          messages: [{ role: 'user', content: 'Reply with exactly OK.' }],
+          stream: false,
+          ...(model.type === 'openai' ? { reasoning: { effort: 'low' } } : {})
         };
+        const transformedRequest = model.type === 'openai'
+          ? transformToOpenAI(openaiRequest)
+          : transformToAnthropic(openaiRequest);
+        const headers = model.type === 'openai'
+          ? getOpenAIHeaders(`Bearer ${key.key}`)
+          : getAnthropicHeaders(`Bearer ${key.key}`, {}, false, modelId);
 
-        // 使用转换层转换请求格式
-        const transformedRequest = transformToAnthropic(openaiRequest);
-
-        // 使用转换层生成完整的headers（包含所有必需的x-*字段）
-        const headers = getAnthropicHeaders(
-          `Bearer ${key.key}`,  // authHeader
-          {},                    // clientHeaders (空对象)
-          false,                 // isStreaming
-          'claude-sonnet-4-5-20250929'  // modelId
-        );
-
-        // BaSui：使用AbortController实现超时控制，node-fetch v3不支持timeout选项！
+        // BaSui: Use AbortController for timeouts; node-fetch v3 does not support the timeout option!
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -819,7 +814,6 @@ class KeyPoolManager {
           clearTimeout(timeoutId);
           // BaSui: Handle AbortError so page reloads or disconnected clients do not crash the process!
           if (fetchError.name === 'AbortError' || fetchError.type === 'aborted') {
-            key.last_test_result = 'aborted';
             key.last_error = 'Test aborted (connection reset or timeout)';
             this.saveKeyPool();
             
@@ -845,7 +839,6 @@ class KeyPoolManager {
         } catch (e) {
           // BaSui: Handle stream errors: a page reload may interrupt reading
           if (e.name === 'AbortError' || e.type === 'aborted') {
-            key.last_test_result = 'aborted';
             key.last_error = 'Response reading aborted';
             this.saveKeyPool();
             
@@ -861,31 +854,9 @@ class KeyPoolManager {
           responseBody = { raw: responseText };
         }
 
-        // BaSui：402错误是确定性错误，不需要重试，直接封禁并返回
-        if (response.status === 402) {
-          const errorMsg = responseBody?.error?.message || '余额不足 - 没有额度';
-          key.status = 'banned';
-          key.banned_at = new Date().toISOString();
-          key.banned_reason = errorMsg;
-          key.last_test_result = 'failed';
-          key.error_count = (key.error_count || 0) + 1;
-          key.last_error = `402: ${errorMsg}`;
-          this.saveKeyPool();
-
-          logError(`Key test failed (402): ${keyId}`, {
-            message: errorMsg,
-            fullResponse: responseBody,
-            statusCode: response.status,
-            statusText: response.statusText
-          });
-
-          return {
-            success: false,
-            status: 402,
-            message: `Key banned: ${errorMsg}`,
-            key_status: 'banned',
-            details: responseBody
-          };
+        if (response.status === 402 || response.status === 429) {
+          await this.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), modelId);
+          return { success: false, status: response.status, message: 'Account temporarily rate limited', key_status: key.status };
         }
 
         // BaSui: 401 authentication failed; disable the key, which may be invalid or revoked!
@@ -915,8 +886,13 @@ class KeyPoolManager {
 
         // BaSui: Test succeeded; no retry needed
         if (response.status === 200) {
+          key.status = 'active';
+          key.banned_at = null;
+          key.banned_reason = null;
+          key.last_error = null;
+          if (key.cooldowns) delete key.cooldowns[limitGroup(modelId)];
           key.last_test_result = 'success';
-          this.saveKeyPool();
+          await this.saveKeyPoolImmediately();
 
           logInfo(`Key test success: ${keyId} - Status ${response.status}`);
           return {
@@ -932,8 +908,7 @@ class KeyPoolManager {
 
         // 4xx errors (except 429) are deterministic; do not retry
         if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-          key.status = 'disabled';  // BaSui：非200状态自动禁用密钥！
-          key.last_test_result = 'failed';
+          // Request/model access errors do not invalidate the credential.
           key.error_count = (key.error_count || 0) + 1;
           key.last_error = `${response.status}: ${errorMsg}`;
           this.saveKeyPool();
@@ -971,11 +946,7 @@ class KeyPoolManager {
 
     const finalErrorMessage = lastError?.message || 'Key test failed';
 
-    // BaSui：测试疯狂撞墙 3 次还不醒，直接BAN！
-    key.status = 'banned';
-    key.banned_at = new Date().toISOString();
-    key.banned_reason = `Auto test failed after ${maxAttempts} attempts`;
-    key.last_test_result = 'failed';
+    // Transport/server failures do not prove the key invalid.
     key.error_count = (key.error_count || 0) + 1;
     key.last_error = finalErrorMessage;
     this.saveKeyPool();
@@ -984,7 +955,7 @@ class KeyPoolManager {
     return {
       success: false,
       status: 0,
-      message: `Key banned after ${maxAttempts} failed test attempts: ${finalErrorMessage}`,
+      message: `Test failed after ${maxAttempts} attempts: ${finalErrorMessage}`,
       key_status: key.status
     };
   }
@@ -1186,7 +1157,7 @@ class KeyPoolManager {
 
   resetConfig() {
     // BaSui: Reset to defaults
-    this.config = {
+    return this.updateConfig({
       algorithm: 'round-robin',
       retry: {
         enabled: true,
@@ -1208,10 +1179,7 @@ class KeyPoolManager {
         enabled: false,
         autoFallback: true
       }
-    };
-    this.saveKeyPool();
-    logInfo('Config reset to defaults');
-    return this.config;
+    });
   }
 
   // ========== 🚀 BaSui: Core multi-tier pool functionality (automatic fallback from the free-tier pool to the primary pool!) ==========
@@ -1606,7 +1574,7 @@ class KeyPoolManager {
       const key = availableKeys[0];
       // BaSui: Use score caching even for a single key
       key.weight_score = this.calculateKeyScore(key, true);
-      logInfo('唯一可用密钥 ' + key.id.substring(0, 15) + '...（评分：' + key.weight_score + '）');
+      logInfo('Only available key ' + key.id.substring(0, 15) + '... (score: ' + key.weight_score + ')');
       return key;
     }
 
@@ -1642,7 +1610,7 @@ class KeyPoolManager {
 
     this.saveKeyPool();
 
-    logInfo('选中密钥 ' + selectedKey.id.substring(0, 15) + '...（评分：' + selectedKey.weight_score + '，成功率：' + (selectedKey.success_rate * 100).toFixed(2) + '%）');
+    logInfo('Selected key ' + selectedKey.id.substring(0, 15) + '... (score: ' + selectedKey.weight_score + ', success rate: ' + (selectedKey.success_rate * 100).toFixed(2) + '%)');
 
     return selectedKey;
   }

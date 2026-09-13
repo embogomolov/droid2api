@@ -1,3 +1,4 @@
+import { getLimitState } from '../utils/factory-limits.js';
 import express from 'express';
 import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 import fs from 'fs';
@@ -6,6 +7,7 @@ import { fileURLToPath } from 'url';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError, logDebug } from '../logger.js';
 import { batchFetchTokenUsage, fetchTokenUsage } from '../utils/factory-api-client.js';
+import { preserveUsageOnFailure } from '../utils/factory-telemetry.js';
 import {
   sendSuccessResponse,
   sendErrorResponse,
@@ -136,7 +138,7 @@ function saveTokenUsageData(data) {
       // Rename atomically
       fs.renameSync(tempPath, TOKEN_USAGE_FILE);
 
-      logDebug(`Token使用量数据保存成功${attempt > 0 ? ` (尝试 ${attempt + 1}次)` : ''}`);
+      logDebug(`Token usage data saved successfully${attempt > 0 ? ` (attempt ${attempt + 1})` : ''}`);
       return;
 
     } catch (error) {
@@ -193,7 +195,17 @@ function calculateSummary(keysData) {
   };
 }
 
-// ========== API 路由 ==========
+router.get('/limits', wrapAsync(async (req, res) => {
+  const keys = keyPoolManager.keys;
+  await Promise.all(keys.map(key => keyPoolManager.refreshBillingLimits(key, req.query.forceRefresh === 'true')));
+  sendSuccessResponse(res, { keys: Object.fromEntries(keys.map(key => [key.id, {
+    status: key.status, tested: key.last_test_result === 'success',
+    standard: getLimitState(key, 'standard'), core: getLimitState(key, 'core'),
+    fetchedAt: key.billing_limits?.fetchedAt || null, error: key.limits_error || null
+  }])) });
+}, 'get Factory usage limits'));
+
+// ========== API routes ==========
 
 /**
  * GET /admin/token/stats
@@ -226,7 +238,7 @@ router.get('/usage', wrapAsync(async (req, res) => {
   const cacheExpired = isCacheExpired(data.summary.last_full_sync);
 
   if (forceRefresh || cacheExpired) {
-    logInfo(`Token使用量缓存${cacheExpired ? '已过期' : '强制刷新'},触发后台同步`);
+    logInfo(`Token usage cache ${cacheExpired ? 'expired' : 'refresh requested'}; starting background synchronization`);
 
     // Trigger synchronization asynchronously without blocking the current request
     syncTokenUsageInBackground().catch(err => {
@@ -296,8 +308,10 @@ router.get('/usage/:keyId', wrapAsync(async (req, res) => {
     const usage = await fetchTokenUsage(keyObj.key);
 
     if (!usage.success) {
-      logError(`查询密钥 ${keyId} Token使用量失败`, usage);
-      return sendErrorResponse(res, 500, usage.message || 'Factory API调用失败', usage);
+      data.keys[keyId] = preserveUsageOnFailure(cachedData, usage.message);
+      saveTokenUsageData(data);
+      logError(`Failed to query token usage for key ${keyId}`, usage);
+      return sendErrorResponse(res, 500, usage.message || 'Factory API call failed', usage);
     }
 
     // Update the cache
@@ -365,7 +379,7 @@ router.post('/sync', wrapAsync(async (req, res) => {
   let failCount = 0;
 
   results.forEach(result => {
-    data.keys[result.id] = result;
+    data.keys[result.id] = result.success ? { ...result, stale: false } : preserveUsageOnFailure(data.keys[result.id], result.message);
     if (result.success) {
       successCount++;
     } else {
@@ -398,7 +412,7 @@ router.post('/sync', wrapAsync(async (req, res) => {
  * GET /admin/token/trend
  * Get token usage trends over 7 days
  * Return usage trends for each key and overall trends
- * 
+ *
  * Query parameters:
  * - poolGroup: Pool filter (optional)
  * - limit: Result limit (default 10)
@@ -601,7 +615,7 @@ async function syncTokenUsageInBackground() {
 
     // Update data
     results.forEach(result => {
-      data.keys[result.id] = result;
+      data.keys[result.id] = result.success ? { ...result, stale: false } : preserveUsageOnFailure(data.keys[result.id], result.message);
     });
 
     // Recalculate the summary

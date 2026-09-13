@@ -71,7 +71,7 @@ function getDefaultConfigFromEnv() {
       }
     ],
     dev_mode: parseBool(process.env.NODE_ENV, false),
-    user_agent: process.env.USER_AGENT || "factory-cli/0.19.3",
+    user_agent: process.env.USER_AGENT || "factory-cli/0.213.0",
     system_prompt: process.env.SYSTEM_PROMPT || "You are Droid, an AI software engineering agent built by Factory.",
     limits: {
       notes_max_length: parseInt(process.env.NOTES_MAX_LENGTH) || 1000,
@@ -203,7 +203,8 @@ export function getConfig() {
 
 export function getModelById(modelId) {
   const cfg = getConfig();
-  return cfg.models.find(m => m.id === modelId);
+  return cfg.models.find(m => m.id === modelId)
+    || (modelId === 'claude-fable-5-1' ? cfg.models.find(m => m.id === 'claude-fable-5.1') : undefined);
 }
 
 export function getEndpointByType(type) {
@@ -239,7 +240,7 @@ export function getModelReasoning(modelId) {
 
 export function getUserAgent() {
   const cfg = getConfig();
-  return cfg.user_agent || 'factory-cli/0.19.3';
+  return cfg.user_agent || 'factory-cli/0.213.0';
 }
 
 // Get limit settings
