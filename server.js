@@ -185,6 +185,8 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   const fileWriterManager = (await import('./utils/async-file-writer.js')).default;
   const tokenUsageManager = (await import('./utils/token-usage-manager.js')).default;
   const { destroyPool } = await import('./utils/http-client.js');
+  const { getWindowSync } = await import('./utils/window-sync.js');
+  const windowSync = getWindowSync(keyPoolManager);
 
   const app = express.default();
   let server, shuttingDown = false;
@@ -201,6 +203,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       for (const timer of backgroundTimers) clearTimeout(timer);
       stopDailyResetScheduler();
       stopTokenSyncScheduler();
+      await windowSync.stop();
       if (server?.listening) {
         // SSE clients must not hold shutdown open indefinitely.
         await new Promise(resolve => {
@@ -447,6 +450,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
       // This won't throw error if no auth config is found - will use client auth
       await initializeAuth();
       if (shuttingDown) return;
+      windowSync.start();
 
       // BaSui: Start the daily reset scheduler to perform cleanup when the date changes
       startDailyResetScheduler(60000); // Check for date changes every minute

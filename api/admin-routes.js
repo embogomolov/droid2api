@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
-import { getNotesMaxLength, getConfig } from '../config.js';
+import { getWindowSync, validateWindowSync } from '../utils/window-sync.js';
+import { updateConfig as updateFullConfig, loadConfig, getNotesMaxLength, getConfig } from '../config.js';
 import {
   sendSuccessResponse,
   sendErrorResponse,
@@ -19,6 +20,19 @@ const router = express.Router();
 
 // Apply authentication middleware to all admin routes
 router.use(adminAuth);
+
+router.get('/window-sync', wrapSync((req, res) => {
+  sendSuccessResponse(res, getWindowSync(keyPoolManager).snapshot());
+}, 'get window synchronization'));
+
+router.put('/window-sync', wrapSync((req, res) => {
+  const cfg = loadConfig();
+  const settings = validateWindowSync(req.body, keyPoolManager.keys, cfg.models);
+  updateFullConfig({ window_sync: settings });
+  const scheduler = getWindowSync(keyPoolManager);
+  scheduler.wake();
+  sendSuccessResponse(res, { settings });
+}, 'save window synchronization'));
 
 router.patch('/keys/:id/exclusion', wrapAsync(async (req, res) => {
   if (typeof req.body.excluded !== 'boolean') return sendBadRequest(res, 'excluded must be a boolean');

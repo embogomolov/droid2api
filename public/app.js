@@ -2061,6 +2061,7 @@ async function refreshBalanceData(forceRefresh = false) {
                 summary: result.summary || result.data?.summary || {}
             };
             updateBalanceDisplay();
+            void refreshWindowSync();
             startCountdownTimer();
 
             // Show the balance overview section
@@ -2891,3 +2892,54 @@ console.log('✅ Live logs loaded - BaSui');
 // - function showChangePoolModal (implemented in pool-groups.js:273)
 // - async function changeKeyPool (implemented in pool-groups.js:283)
 
+
+// Keep polling status without replacing a user's unsaved form selections.
+let windowSyncFormLoaded = false, windowSyncPoll, windowSyncLoading = false;
+async function refreshWindowSync(reloadForm = false) {
+    if (!adminKey || !document.getElementById('windowSyncStatus') || windowSyncLoading) return;
+    windowSyncLoading = true;
+    try {
+        const { data } = await apiRequest('/window-sync');
+        const cfg = data.settings, state = data.state, now = Date.now();
+        if (!windowSyncFormLoaded || reloadForm) {
+            document.getElementById('windowSyncEnabled').checked = cfg.enabled;
+            document.getElementById('windowSyncKeys').innerHTML = data.keys.map(key => `<label class="window-sync-key"><input type="checkbox" data-sync-key="${escapeHtml(key.id)}" ${cfg.keyIds.includes(key.id) ? 'checked' : ''}> …${escapeHtml(key.id.slice(-9))}${key.excluded ? ' — EXCLUDED (omitted)' : key.status !== 'active' ? ' — ' + escapeHtml(key.status) : !key.tested ? ' — not tested' : ''}</label>`).join('') || 'No keys configured';
+            document.getElementById('windowSyncModel').innerHTML = data.models.map(model => `<option value="${escapeHtml(model.id)}">${escapeHtml(model.name)} — ${model.group === 'core' ? 'Droid Core' : 'Standard'}</option>`).join('');
+            document.getElementById('windowSyncModel').value = cfg.modelId;
+            document.getElementById('windowSyncHours').checked = cfg.workingHours.enabled;
+            document.getElementById('windowSyncStart').value = cfg.workingHours.start;
+            document.getElementById('windowSyncEnd').value = cfg.workingHours.end;
+            windowSyncFormLoaded = true;
+        }
+        document.getElementById('windowSyncTimezone').textContent = 'Server timezone: ' + data.timezone;
+        const date = time => time ? new Date(time).toLocaleString() : '—';
+        document.getElementById('windowSyncStatus').textContent = (cfg.enabled ? state.phase + ': ' + (state.message || 'Waiting for verification') : 'Disabled — normal routing')
+            + (state.spreadMs != null ? ` | Last confirmed spread: ${(state.spreadMs / 1000).toFixed(1)} seconds` : '')
+            + (data.error ? ' | Error (will retry): ' + data.error : '')
+            + (cfg.enabled ? ' | Next check: ' + date(state.nextCheckAt) : '');
+        document.getElementById('windowSyncRows').innerHTML = cfg.keyIds.map(id => {
+            const key = data.keys.find(k => k.id === id), m = state.members[id] || {};
+            const label = !key ? 'Removed — update selection' : key.excluded ? 'Excluded' : key.status !== 'active' ? key.status
+                : m.refreshError ? 'Retrying limits refresh' : m.confirmedEnd > now ? 'Confirmed' : m.acceptedAt ? 'Accepted; verifying window'
+                : m.submittedAt && state.phase === 'starting' ? 'Verifying before retry' : m.ready && m.quotaReady ? 'Ready; waiting for group' : 'Waiting for reset / quota';
+            const retry = Math.max(m.nextAttemptAt || 0, m.refreshAfter || 0);
+            return `<tr><td>…${escapeHtml(id.slice(-9))}</td><td>${escapeHtml(label)}</td><td>${Number(m.attempts || 0)}</td><td>${escapeHtml(date(retry > now ? retry : null))}</td><td>${escapeHtml(date(m.confirmedEnd))}</td><td>${escapeHtml(m.refreshError || m.error || date(m.observedAt))}</td></tr>`;
+        }).join('') || '<tr><td colspan="6">Choose accounts above. Nothing runs until enabled and saved.</td></tr>';
+    } catch (error) { document.getElementById('windowSyncStatus').textContent = 'Cannot refresh synchronization status: ' + error.message; }
+    finally {
+        windowSyncLoading = false;
+        clearTimeout(windowSyncPoll);
+        windowSyncPoll = setTimeout(() => refreshWindowSync(), 5000);
+    }
+}
+
+async function saveWindowSync() {
+    const cfg = { enabled: document.getElementById('windowSyncEnabled').checked,
+        keyIds: [...document.querySelectorAll('[data-sync-key]:checked')].map(el => el.dataset.syncKey),
+        modelId: document.getElementById('windowSyncModel').value,
+        workingHours: { enabled: document.getElementById('windowSyncHours').checked, start: document.getElementById('windowSyncStart').value, end: document.getElementById('windowSyncEnd').value } };
+    try {
+        await apiRequest('/window-sync', 'PUT', cfg);
+        await refreshWindowSync(true);
+    } catch (error) { document.getElementById('windowSyncStatus').textContent = 'Settings were not saved: ' + error.message; }
+}

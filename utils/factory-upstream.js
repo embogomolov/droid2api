@@ -115,6 +115,9 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       res.status(403).json({ error: { type: 'key_excluded', message: 'This Factory key is excluded from the pool' } });
       return null;
     }
+    const selectedAccount = manager.keys.find(item => item.id === keyId || fixedAuth === `Bearer ${item.key}`);
+    const hold = selectedAccount && manager.windowSync?.routingBlock(selectedAccount, req.body.model);
+    if (hold) { if (!fixedAuth) continue; res.setHeader('Retry-After', '5'); res.status(503).json({ error: { type: 'window_sync_wait', message: hold } }); return null; }
     const { url, headers, body } = makeRequest(fixedAuth || `Bearer ${key.key}`);
     if (session) headers['x-session-id'] = session.identity;
     logRequest('POST', url, headers, body);
@@ -177,13 +180,15 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
             images: prepared.images, reuseReason: 'native_http_fallback' });
         };
       }
-      response = await retryUnsentRequest(() => usingWebSocket
+      response = await retryUnsentRequest(() => {
+        if (selectedAccount && (selectedAccount.excluded || manager.windowSync?.routingBlock(selectedAccount, req.body.model))) throw new Error('Account held before dispatch');
+        return usingWebSocket
         ? fetchFactoryWebSocket(websocketUrl, { headers, body, signal: controller.signal, session,
           onUsage: accountUsage })
         : fetchWithPool(httpUrl, {
           method: 'POST', headers, body: JSON.stringify(httpBody), retry: false,
           signal: controller.signal, redirect: 'error'
-        }), { signal: controller.signal, onRetry: details => logWarn(`Factory request ${requestId}: retry before send`, details) });
+        }); }, { signal: controller.signal, onRetry: details => logWarn(`Factory request ${requestId}: retry before send`, details) });
     } catch (error) {
       clearTimeout(timer);
       observeHTTP?.(null);

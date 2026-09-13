@@ -903,3 +903,56 @@ retained. The admin API is `PATCH /admin/keys/:id/exclusion` with a boolean
 ```powershell
 node tests/run-network-checks.mjs test-key-exclusion.mjs
 ```
+
+## Automatic synchronized five-hour starts
+
+On the dashboard, open **Synchronized five-hour windows**, select the account
+IDs, keep **Haiku 4.5** as the cheap Standard-pool probe for Fable, enable the
+feature, and save. Both the feature and its optional working-hours restriction
+are off by default. New accounts are not silently added to the selection.
+Select a Core model only to synchronize Core windows; the pools are independent.
+
+- Existing five-hour windows remain usable. An expired selected account waits
+  until the entire included group is ready. Once a new cycle starts, the group
+  stays reserved until Factory confirms all new window boundaries.
+- Selected disabled or untested accounts block the group. Explicitly excluded
+  accounts are omitted, remain visible, and are never automatically enabled.
+  Remove/exclude an exhausted account if you do not want the group to wait for it.
+- Every member needs fresh, complete telemetry and available weekly/monthly
+  allowance. The scheduler does not spend prepaid Extra Usage to force a start.
+- Short requests are launched in parallel, with a 32-token output cap. Only the
+  probe has this cap; ordinary client requests retain their original budgets.
+  Probes consume quota. There is no finite retry-attempt limit while enabled.
+- Failed telemetry uses bounded backoff and respects Retry-After. Ambiguous
+  generation failures are checked against fresh Factory limits before retry,
+  with a 30-second observation delay. A delayed provider measurement can still
+  make an ambiguous retry redundant; exactly-once delivery is not an upstream
+  guarantee. Confirmed successful generations are not replayed while the
+  scheduler retries their window verification.
+- Optional working hours use the server timezone and gate new cycles. An already
+  started cycle continues retrying its remaining accounts outside those hours.
+  Disabling synchronization stops new dispatches; already sent requests may finish.
+- Attempts are journaled before dispatch in ignored `data/window_sync.json`.
+  A cross-process ownership lock prevents concurrent scheduler dispatch. Startup
+  resumes verification from the journal; shutdown aborts pending network work.
+  The UI shows attempts, next retry, errors and actual confirmed reset-time spread.
+- Other clients using these accounts directly can start windows independently.
+  An upstream outage can spread starts apart despite retries. The scheduler
+  cannot reset an active Factory window or increase the account's quota.
+
+Settings are saved under `window_sync` in `data/config.json`. Admin endpoints:
+`GET /admin/window-sync` and `PUT /admin/window-sync`. The PUT body contains
+`enabled`, `keyIds`, `modelId` and `workingHours: {enabled, start, end}`. Disabling
+is allowed even if previously selected accounts or the model have been removed.
+Manual/bulk inference tests skip managed keys, so they cannot bypass the barrier.
+
+Run the isolated offline suite (empty key pool; no Factory inference):
+
+```powershell
+node tests/run-network-checks.mjs
+```
+
+The synchronization tests cover repeated cycles, exclusions, group reservation,
+restart recovery, Retry-After, more than three failed attempts, ambiguous accepted
+requests, persistent verification failures, failed journal writes, competing
+scheduler instances, shutdown, schedule boundaries, quota guards and admin APIs.

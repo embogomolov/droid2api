@@ -165,11 +165,13 @@ class KeyPoolManager {
   async getNextKey({ excluded = new Set(), model = '', signal } = {}) {
     // BaSui: Select only successfully tested keys; fail immediately if none exist!
     let activeKeys = (this.keys || []).filter(k =>
-      k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id)
+      k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id) && !this.windowSync?.routingBlock(k, model)
     );
 
     if (activeKeys.length === 0) {
       // No successfully tested keys are available; fail immediately!
+      const held = this.keys.filter(k => !k.excluded && k.status === 'active' && this.windowSync?.routingBlock(k, model));
+      if (held.length) throw Object.assign(new Error('Selected accounts are waiting for synchronized five-hour window starts; see the admin dashboard'), { status: 503, retryAfter: 5 });
       const totalKeys = this.keys.length;
       const activeButUntestedKeys = (this.keys || []).filter(k => k.status === 'active' && !k.excluded && k.last_test_result !== 'success').length;
 
@@ -183,7 +185,7 @@ class KeyPoolManager {
     await Promise.all(activeKeys.map(key => this.refreshBillingLimits(key)));
     if (signal?.aborted) throw signal.reason;
     const states = activeKeys.map(key => ({ key, state: getLimitState(key, limitGroup(model)) }));
-    activeKeys = states.filter(({ key, state }) => !key.excluded && key.status === 'active' && state.available).map(({ key }) => key);
+    activeKeys = states.filter(({ key, state }) => !key.excluded && key.status === 'active' && state.available && !this.windowSync?.routingBlock(key, model)).map(({ key }) => key);
     if (!activeKeys.length) {
       const retryAt = Math.min(...states.map(({ state }) => state.retryAt));
       const error = new Error('All eligible accounts are waiting for a usage reset or Retry-After');
@@ -278,7 +280,7 @@ class KeyPoolManager {
       this.saveKeyPool();
     }
 
-    if (keyObj.excluded || keyObj.status !== 'active') {
+    if (keyObj.excluded || keyObj.status !== 'active' || this.windowSync?.routingBlock(keyObj, model)) {
       return this.getNextKey({ excluded: new Set([...excluded, keyObj.id]), model, signal });
     }
     this.currentKeyId = keyObj.id;
@@ -644,12 +646,12 @@ class KeyPoolManager {
       keysToTest = (this.keys || []).filter(k => 
         keyIds.includes(k.id) && 
         !k.last_test_at && 
-        k.status !== 'banned' && !k.excluded
+        k.status !== 'banned' && !k.excluded && !this.windowSync?.manages(k)
       );
     } else {
       keysToTest = (this.keys || []).filter(k => 
         !k.last_test_at && 
-        k.status !== 'banned' && !k.excluded
+        k.status !== 'banned' && !k.excluded && !this.windowSync?.manages(k)
       );
     }
 
@@ -774,6 +776,7 @@ class KeyPoolManager {
       throw new Error('Key not found');
     }
 
+    if (this.windowSync?.manages(key)) return { success: false, skipped: true, status: 409, message: 'Window synchronization owns this key; stop synchronization before manual testing' };
     if (key.excluded) return { success: false, skipped: true, status: 409, message: 'Key is excluded; include it before testing' };
     logInfo(`Testing key: ${keyId}`);
 
@@ -794,7 +797,7 @@ class KeyPoolManager {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        if (key.excluded) return { success: false, skipped: true, status: 409, message: 'Key was excluded before dispatch' };
+        if (key.excluded || this.windowSync?.manages(key)) return { success: false, skipped: true, status: 409, message: 'Key is excluded or managed by window synchronization' };
         const testUrl = getEndpointByType(model.type).base_url;
         const openaiRequest = {
           model: modelId,
@@ -982,7 +985,7 @@ class KeyPoolManager {
     } = options;
 
     // BaSui: Support testing by pool: if poolGroup is specified, test only keys in that pool
-    let keysToTest = (this.keys || []).filter(k => k.status !== 'banned' && !k.excluded);
+    let keysToTest = (this.keys || []).filter(k => k.status !== 'banned' && !k.excluded && !this.windowSync?.manages(k));
 
     if (!includeDisabled) {
       keysToTest = keysToTest.filter(k => k.status !== 'disabled');
