@@ -79,6 +79,18 @@ CLAUDE.md
 docs/
 scripts/
 
+# Local runtime state and Python bytecode
+data/banned_keys.json
+data/token_usage_detail.json
+__pycache__/
+*.py[cod]
+
+# Keep investigation source; exclude captured requests, images and credentials
+/work/*
+!/work/*.mjs
+!/work/*.py
+!/work/*.md
+
 # Local publication exclusions
 /work/
 repair_codex_history_index.py
