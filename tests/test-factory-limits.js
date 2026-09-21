@@ -29,7 +29,7 @@ const reset = () => {
   pool.saveKeyPool = async () => { saved++; };
   pool.saveKeyPoolImmediately = pool.saveKeyPool;
   pool.refreshBillingLimits = async () => { refreshes++; };
-  calls = []; scenario = 'ok';
+  calls = []; scenario = 'ok'; disconnected = false;
 };
 const upstream = http.createServer(async (req, res) => {
   let raw = '';
@@ -181,13 +181,30 @@ try {
   assert.equal(calls.length, 1);
   reset();
   const streamed = await call('/v1/responses', { stream: true }); assert.match(await streamed.text(), /response.completed/);
+  // Real transport lifecycle, with only the local fake upstream: no reservation survives
+  // a completed SSE response, a rejection, a failed connection or a client cancellation.
+  const ledgerTotal = field => pool.keys.reduce((n,k) => n + Object.values(k.quota_balance?.standard?.ledger || {}).reduce((sum,t) => sum + t[field],0),0);
+  for (const mode of ['ok', 'failed-event', 'all-403', 'disconnect']) {
+    reset(); pool.config.algorithm = 'quota-aware'; scenario = mode;
+    const response = await call('/v1/responses', { stream: ['ok','failed-event'].includes(mode) }); await response.text();
+    await delay(10);
+    assert.equal(pool.getQuotaBalancer().pending.size, 0, mode + ' released quota reservation');
+    assert.equal(ledgerTotal('completed'),mode==='ok'?1:0,mode+' records only successful completion');
+    assert.equal(ledgerTotal('uncertain'),['disconnect','failed-event'].includes(mode)?1:0);
+    assert.equal(ledgerTotal('rejected'),mode==='all-403'?1:0);
+    if (mode === 'all-403') assert.equal(pool.keys.reduce((n, k) => n + (k.quota_balance?.standard?.assigned || 0), 0), 0);
+  }
   reset(); scenario = 'wait';
+  pool.config.algorithm = 'quota-aware';
   const controller = new AbortController();
   const pending = call('/v1/responses', {}, { signal: controller.signal });
   while (!calls.length) await delay(5);
   controller.abort(); await assert.rejects(pending);
   for (let i = 0; i < 50 && !disconnected; i++) await delay(10);
   assert.equal(disconnected, true, 'client cancellation aborts Factory request');
+  assert.equal(pool.getQuotaBalancer().pending.size, 0, 'cancelled request released quota reservation');
+  assert.equal(ledgerTotal('completed'),0,'Cancellation cannot train a successful request price');
+  assert.equal(ledgerTotal('uncertain'),1);
 
   const bytes = Buffer.from('data: {"type":"response.output_text.delta","delta":"Привет"}\r\n\r\ndata: {"type":"response.completed"}\r\n\r\n');
   const chunks = [];

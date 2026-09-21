@@ -68,12 +68,14 @@ router.get('/keys', wrapAsync(async (req, res) => {
   const includeTokenUsage = req.query.includeTokenUsage === 'true';
 
   const result = keyPoolManager.getKeys(page, limit, status, poolGroup);
-  result.keys = result.keys.map(key => ({ ...key, routing: Object.fromEntries(
+  result.keys = result.keys.map(({ quota_balance, ...key }) => ({ ...key, routing: Object.fromEntries(
     [['standard', 'claude-haiku-4-5-20251001'], ['core', 'kimi-k3']].map(([group, model]) => {
       let blocked = null;
       try { blocked = getWindowSync(keyPoolManager).routingBlock(key, model); }
       catch { blocked = 'Window synchronization status is unavailable'; }
-      return [group, { blocked }];
+      const plan = keyPoolManager.config.algorithm === 'quota-aware' ? keyPoolManager.quotaBalancer?.lastPlan[group] : null;
+      const decision = plan?.accounts.find(account => account.id === key.id);
+      return [group, { blocked, quota: decision ? { ...decision, at: plan.at, selected: plan.selected === key.id } : null }];
     })
   ) }));
 
@@ -418,6 +420,12 @@ router.put('/keys/:id', wrapSync((req, res) => {
       return sendBadRequest(res, 'Key already exists in the pool');
     }
     updates.key = key;
+    // Calibration and measurements belong to the credential, not its editable row ID.
+    delete existingKey.quota_balance;
+    delete existingKey.billing_limits;
+    delete existingKey.limits_error;
+    existingKey.last_test_result = 'pending';
+    existingKey.status = 'disabled';
   }
   if (notes !== undefined) {
     updates.notes = notes;
@@ -427,7 +435,7 @@ router.put('/keys/:id', wrapSync((req, res) => {
   Object.assign(existingKey, updates);
   keyPoolManager.saveKeyPool();
 
-  logInfo(`Admin updated key: ${keyId}`, updates);
+  logInfo(`Admin updated key: ${keyId}`, { credentialChanged: Boolean(updates.key), notesChanged: notes !== undefined });
 
   sendSuccessResponse(res, existingKey, 'Key updated successfully');
 }, 'update key'));

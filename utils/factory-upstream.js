@@ -9,6 +9,7 @@ import { Response } from 'node-fetch';
 import keyPoolManager from '../auth.js';
 import fetchWithPool, { retryUnsentRequest } from './http-client.js';
 import { logRequest, logError, logInfo, logWarn } from '../logger.js';
+import { quotaProfile } from './quota-aware.js';
 
 // Keep every original SSE byte. An EOF without a terminal event is a failure,
 // never a completed answer and never a reason to replay an already-started turn.
@@ -84,8 +85,12 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   const clientClosed = () => { if (!res.writableFinished) abort('client_disconnected'); };
   req.once('aborted', clientClosed);
   res.once('close', clientClosed);
-  let timer, release = () => {}, session;
-  const cleanup = () => { clearTimeout(timer); release(); req.off('aborted', clientClosed); res.off('close', clientClosed); };
+  let timer, release = () => {}, session, quotaReservation;
+  const cleanup = () => {
+    clearTimeout(timer); release();
+    if (res.writableFinished && res.statusCode < 400 && !res.locals.factoryRequest.error && res.locals.factoryRequest.success !== false) quotaReservation?.complete();
+    quotaReservation?.release(); req.off('aborted', clientClosed); res.off('close', clientClosed);
+  };
   res.once('finish', cleanup);
   res.once('close', cleanup);
   try {
@@ -112,11 +117,15 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   const suppliedAuth = req.headers.authorization;
   const fixedAuth = process.env.FACTORY_API_KEY ? `Bearer ${process.env.FACTORY_API_KEY.trim()}` : suppliedAuth;
   const count = fixedAuth ? 1 : manager.keys.length;
+  const quotaWorkload = !fixedAuth && manager.config?.algorithm === 'quota-aware' ? quotaProfile(req.body.model, req.body) : 'unclassified';
   for (let attempt = 0; attempt < count; attempt++) {
+    quotaReservation?.release(); quotaReservation = null;
     if (controller.signal.aborted) return null;
     let key;
     try {
-      key = fixedAuth ? null : await manager.getNextKey({ excluded: attempted, model: req.body.model, signal: controller.signal });
+      key = fixedAuth ? null : await manager.getNextKey({ excluded: attempted, model: req.body.model, signal: controller.signal, reserveQuota: true, quotaWorkload });
+      quotaReservation = key?.quotaReservation;
+      if (controller.signal.aborted || res.destroyed) { quotaReservation?.release(); return null; }
     } catch (error) {
       if (controller.signal.aborted) return null;
       if (lastResponse) return sendError(lastResponse);
@@ -142,6 +151,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     clearTimeout(timer);
     const anthropic = headers['x-api-provider'] === 'anthropic';
     const counting = new URL(url).pathname.endsWith('/count_tokens');
+    if (counting) quotaReservation?.release(true); // Token counting is not generation work.
     const idleTimeout = anthropic ? 240_000 : 120_000; // Native Droid Anthropic stream idle timeout.
     phase = 'waiting_for_response';
     timer = setTimeout(() => abort('upstream_response_timeout'), anthropic ? 600_000 : 120_000);
@@ -203,6 +213,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       }
       response = await retryUnsentRequest(() => {
         if (selectedAccount && (selectedAccount.excluded || manager.windowSync?.routingBlock(selectedAccount, req.body.model))) throw new Error('Account held before dispatch');
+        quotaReservation?.sent();
         return usingWebSocket
         ? fetchFactoryWebSocket(websocketUrl, { headers, body, signal: controller.signal, session,
           onUsage: accountUsage })
@@ -212,6 +223,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
         }); }, { signal: controller.signal, onRetry: details => logWarn(`Factory request ${requestId}: retry before send`, details) });
     } catch (error) {
       clearTimeout(timer);
+      if (error.factoryRequestNotSent === true || ['connect', 'getaddrinfo'].includes(error.erroredSysCall || error.syscall)) quotaReservation?.release(true);
       observeHTTP?.(null);
       if (session && usingWebSocket && !controller.signal.aborted) {
         session.wsFailures = (session.wsFailures || 0) + 1;
@@ -280,6 +292,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       return { response, currentKeyId: keyId, outcome, usageRecorded };
     }
     observeHTTP?.(null);
+    if ([401, 402, 403, 429].includes(response.status) || response.factoryRequestNotSent) quotaReservation?.release(true);
     const retryable = [401, 402, 429].includes(response.status) || (response.factoryRequestNotSent && response.status >= 500);
     if (!retryable || fixedAuth || response.factoryRequestAccepted) return sendError(response);
     await manager.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), req.body.model);

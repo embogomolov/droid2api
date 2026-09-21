@@ -78,6 +78,9 @@ try {
   await stale.scheduler().tick(); assert.equal(stale.calls.length, 0, 'Partial telemetry cannot start a group');
   const exhausted = fixture(); exhausted.windows['fake-a'].weekly = 100;
   await exhausted.scheduler().tick(); assert.equal(exhausted.calls.length, 0, 'No prepaid probe when weekly exhausted');
+  exhausted.cfg.window_sync.keyIds = ['b'];
+  await exhausted.scheduler().tick(); assert.deepEqual(exhausted.calls, ['b'], 'Saving membership releases remaining members without restart');
+  assert.equal(exhausted.scheduler().routingBlock(exhausted.keys[0], exhausted.cfg.window_sync.modelId), null, 'Removed member is not held by synchronization');
   const disabled = fixture(); disabled.keys[1].status = 'disabled';
   await disabled.scheduler().tick(); assert.equal(disabled.calls.length, 0, 'Do not silently shrink disabled membership');
   disabled.keys[1].excluded = true; await disabled.scheduler().tick(); assert.deepEqual(disabled.calls, ['a']);
@@ -107,6 +110,9 @@ try {
   const scheduled = fixture(); scheduled.cfg.window_sync.workingHours = { enabled: true, start: '00:00', end: '00:01' };
   await scheduled.scheduler().tick(); assert.equal(scheduled.calls.length, 0);
   scheduled.cfg.window_sync.workingHours.enabled = false; await scheduled.scheduler().tick(); assert.equal(scheduled.calls.length, 2);
+  scheduled.cfg.window_sync.workingHours = { enabled: true, start: '09:00', end: '18:00' };
+  const evening = new Date(2026,8,10,20).getTime(), nextMorning = new Date(2026,8,11,9).getTime();
+  assert.equal(scheduled.scheduler().nextStartTime(evening), nextMorning);
   assert.throws(() => validateWindowSync({ ...f.cfg.window_sync, enabled: 'true' }, f.keys, f.cfg.models), /boolean/);
   assert.throws(() => validateWindowSync({ ...f.cfg.window_sync, keyIds: ['missing'] }, f.keys, f.cfg.models), /existing/);
   assert.throws(() => validateWindowSync({ ...f.cfg.window_sync, keyIds: ['a','a'] }, f.keys, f.cfg.models), /Duplicate/);
