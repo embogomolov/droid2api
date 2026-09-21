@@ -21,7 +21,8 @@ export function renderAccounts() {
   const query=$('accountSearch').value.toLowerCase();
   const keys=state.keys.filter(k=>(suffix(k.id)+' '+(k.notes||'')).toLowerCase().includes(query));
   $('accountSummary').textContent=state.keys.length+' accounts · '+state.keys.filter(k=>k.excluded).length+' excluded';
-  $('algorithmLabel').textContent='Balancing: '+(algorithms[state.config.key_pool?.algorithm]?.[0]||state.config.key_pool?.algorithm||'—');
+  const algorithm=state.config.key_pool?.algorithm==='weighted-usage'?'max-remaining':state.config.key_pool?.algorithm;
+  $('algorithmLabel').textContent='Balancing: '+(algorithms[algorithm]?.[0]||algorithm||'—');
   $('accountRows').innerHTML=keys.map(key=>{
     const snapshot=state.limits[key.id], limits=snapshot?.[state.group];
     const status=accountStatus(key,limits), managed=state.sync?.settings.enabled&&state.sync.settings.keyIds.includes(key.id)&&!key.excluded;
@@ -57,7 +58,9 @@ export function initAccounts(refresh) {
       if(!result.success)throw new Error(result.message||'Test failed (HTTP '+result.status+').'); notify('Test passed.');
     });
     if(button.dataset.action==='edit'){
-      dialog('Account '+suffix(key.id),'<label>Name / notes<input name="notes" value="'+e(key.notes)+'"></label><label>Group<select name="poolGroup">'+poolOptions(key.poolGroup||'default')+'</select></label><p class="hint">Last used: '+e(date(key.last_used_at))+' · Requests: '+number(key.usage_count)+'<br>Technical status: '+e(key.status)+' · Last test: '+e(key.last_test_result)+'</p><div class="actions"><button type="button" id="deleteAccount">Delete key</button></div>',async form=>{
+      const quota=key.routing?.[state.group]?.quota;
+      const explanation=quota?'<p class="hint">Last routing calculation: '+e(date(quota.at))+'<br>Target share: '+e((quota.share*100).toFixed(1))+'% · '+e({measured:'Reset-aware · refined by measured intervals',adaptive:'Reset-aware · no reliable price adjustment yet',partial:'Reset-aware · some quota data is missing or stale',learning:'Previous calculation · learning',telemetry_unavailable:'Quota telemetry unavailable'}[quota.mode])+(quota.limitingWindow?'<br>Limiting window: '+e({fiveHour:'5 hours',weekly:'7 days',monthly:'30 days'}[quota.limitingWindow])+' · '+e(quota.remaining??'Unknown')+'% remaining · planning boundary '+e(date(quota.resetAt)):'')+'<br>In flight at selection: '+e(quota.inFlight)+(quota.selected?' · Selected for that request':'')+(quota.windows?'<br>Calibration evidence: '+quota.windows.map(w=>e({fiveHour:'5h',weekly:'7d',monthly:'30d'}[w.window])+' '+e(w.intervals)+' intervals'+(!w.fresh?' (stale / missing)':'')).join(' · '):'')+'</p>':'';
+      dialog('Account '+suffix(key.id),'<label>Name / notes<input name="notes" value="'+e(key.notes)+'"></label><label>Group<select name="poolGroup">'+poolOptions(key.poolGroup||'default')+'</select></label><p class="hint">Last used: '+e(date(key.last_used_at))+' · Requests: '+number(key.usage_count)+'<br>Technical status: '+e(key.status)+' · Last test: '+e(key.last_test_result)+'</p>'+explanation+'<div class="actions"><button type="button" id="deleteAccount">Delete key</button></div>',async form=>{
         await api(endpoint+'/notes','PATCH',{notes:form.get('notes')});
         if(form.get('poolGroup')!==(key.poolGroup||'default'))await api(endpoint+'/pool','PATCH',{poolGroup:form.get('poolGroup')});
         await reload();notify('Account saved.');

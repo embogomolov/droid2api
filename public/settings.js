@@ -6,8 +6,9 @@ function describe(){ $('algorithmHelp').textContent=(algorithms[$('algorithm').v
 export function renderSettings(force=false) {
   if(!ready||force){
     $('algorithm').innerHTML=Object.entries(algorithms).map(([id,[name]])=>'<option value="'+id+'">'+e(name)+'</option>').join('');
-    if(state.config.key_pool?.algorithm&&!algorithms[state.config.key_pool.algorithm])$('algorithm').add(new Option(state.config.key_pool.algorithm,state.config.key_pool.algorithm));
-    $('algorithm').value=state.config.key_pool?.algorithm||'round-robin';describe();
+    const selected=state.config.key_pool?.algorithm==='weighted-usage'?'max-remaining':state.config.key_pool?.algorithm;
+    if(selected&&!algorithms[selected])$('algorithm').add(new Option(selected,selected));
+    $('algorithm').value=selected||'round-robin';describe();
     // Window selection has its own validated endpoint and must not be overwritten by the generic editor.
     $('configSection').innerHTML=Object.keys(state.config).filter(key=>key!=='window_sync'&&!/secret|password|access_key|api_key/i.test(key)).map(key=>'<option value="'+e(key)+'">'+e(sectionNames[key]||key)+'</option>').join('');
     $('configSection').value=state.config.models?'models':$('configSection').value;sectionValue();ready=true;

@@ -97,7 +97,54 @@ Choose a policy under **Settings → Balancing → Save balancing**.
 | **Random** | Picks an eligible account randomly. |
 | **Fewest requests** | Lowest recorded request count. |
 | **Weighted score / Fewest tokens / Time window** | Uses the corresponding score, token totals, or recent usage. |
-| **Weighted usage / Quota aware** | Same Factory-window headroom calculation as Max remaining. |
+| **Quota aware** | Interleaves requests by remaining allowance and time until each reset, refined by reliable consumption observations. |
+
+`weighted-usage` remains accepted in saved configurations as an alias of
+`max-remaining`; it is not a separate option in the interface.
+
+Quota aware uses Factory's remaining percentages and reset dates immediately. It
+compares remaining percentage per hour between accounts **within each window**,
+normalizes those values into relative shares, then uses each account's most restrictive
+share across the five-hour, weekly and monthly windows. Weighted fair scheduling
+interleaves requests; it does not drain one account before using the next. Concurrent
+requests reserve their place immediately. Unsent or explicitly rejected requests
+refund that reservation; token counting is not generation work.
+
+Consumption estimates refine each window independently, per account, usage pool,
+model, coarse context-size band and reasoning setting. Only successful completions
+contribute to these estimates. At least three intervals, each with eight settled
+completions and a usage increase over two percentage points, are required. The
+calculation allows two minutes around cohort boundaries for telemetry lag and a
+two-point rounding uncertainty. These are conservative estimation allowances, not
+guarantees about Factory's reporting delay. Mixed-model intervals, uncertain outcomes
+and detected external consumption cannot train a model's price. Such accounts still
+participate using remaining allowance and reset dates; they do not hold back other
+accounts' estimates. No-change readings do not renew evidence, which expires after
+seven days. A flat monthly counter does not prevent five-hour or weekly learning.
+
+Missing or failed telemetry is labeled and gets a conservative relative share, never
+an assumed full quota or imminent-reset advantage. Price corrections are damped by
+confidence. Factory's rounded/delayed readings, variable response costs and concurrent
+usage outside this proxy still prevent exact attribution or a guaranteed optimal
+schedule. This is an adaptive allocation policy, not a per-request billing meter.
+
+The calibration, last 64 measurements per pool and scheduling credits persist in
+`data/key_pool.json` through the existing atomic writer. In-flight locks are local
+to the running process and are not restored after restart; unfinished observations
+are marked uncertain. Legacy per-assignment estimates are discarded during migration,
+while scheduling credits are retained. Writes are batched without waiting for an
+idle period, and graceful shutdown flushes pending changes. Quota aware requires
+single-process mode (`CLUSTER_MODE=false`, the default); multi-worker mode is rejected
+instead of silently using inconsistent reservations. An abrupt power loss can lose
+the last batched statistics update.
+
+Automatic starts remain the authority for synchronized groups. Quota aware considers
+the group's next collective boundary, including exhausted weekly/monthly members
+and configured working hours, and never bypasses its routing barrier. Saved membership
+and exclusion changes apply on the next selection without a restart. Removing an
+account from automatic starts does not exclude it from normal routing. Account
+**Details** shows the last calculated share, limiting window, learning status and
+calculation time; these are scheduling estimates, not promised usage percentages.
 
 When multi-tier groups are enabled, group priority is applied first; lower numbers
 take precedence. Excluded, untested, disabled, unavailable, and synchronization-blocked
@@ -224,7 +271,7 @@ require a restart. `PORT` overrides the configured listen port.
 | Local file | Contents |
 | --- | --- |
 | `.env` | Credentials and environment settings |
-| `data/key_pool.json` | Factory keys, account metadata, and exclusions |
+| `data/key_pool.json` | Factory keys, account metadata, exclusions, and quota-balancing measurements/credits |
 | `data/config.json` | Models, endpoints, balancing, and automatic-window selection |
 | `data/window_sync.json` | Persistent start attempts |
 | `logs/` | Server logs |

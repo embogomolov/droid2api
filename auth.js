@@ -10,6 +10,7 @@ import { fetchBillingLimits, getLimitState, limitGroup, retryAfterTime, LIMIT_CA
 import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
+import { QuotaAware, observeQuota } from './utils/quota-aware.js';
 import {
   selectKeyByTimeWindow
 } from './utils/advanced-algorithms.js';
@@ -120,12 +121,16 @@ class KeyPoolManager {
       Object.values(group).some(w => Date.parse(w.windowEnd) > lastAttempt && Date.parse(w.windowEnd) <= Date.now()));
     if (!force && !resetDue && Date.now() - lastAttempt < LIMIT_CACHE_MS) return;
     this.limitAttempts.set(key.id, Date.now());
+    const credential = key.key;
     const pending = (async () => {
       try {
-        key.billing_limits = await fetchBillingLimits(key.key);
+        const snapshot = await fetchBillingLimits(credential);
+        if (key.key !== credential) return;
+        key.billing_limits = snapshot;
         delete key.limits_error;
-        void this.saveKeyPool();
+        this.observeBillingLimits(key);
       } catch (error) {
+        if (key.key !== credential) return;
         key.limits_error = error.message;
         void this.saveKeyPool();
         // Preserve the last valid measurement; inference can still succeed if telemetry is down.
@@ -162,7 +167,16 @@ class KeyPoolManager {
     await this.saveKeyPoolImmediately();
   }
 
-  async getNextKey({ excluded = new Set(), model = '', signal } = {}) {
+  getQuotaBalancer() {
+    return this.quotaBalancer ||= new QuotaAware({ keys: () => this.keys,
+      sync: () => this.windowSync?.settings() || getConfig().window_sync,
+      nextStart: at => this.windowSync?.nextStartTime(at) ?? at,
+      save: () => { void this.saveKeyPool(); } });
+  }
+
+  observeBillingLimits(key) { observeQuota(key); void this.saveKeyPool(); }
+
+  async getNextKey({ excluded = new Set(), model = '', signal, reserveQuota = false, quotaWorkload = 'unclassified' } = {}) {
     // BaSui: Select only successfully tested keys; fail immediately if none exist!
     let activeKeys = (this.keys || []).filter(k =>
       k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id) && !this.windowSync?.routingBlock(k, model)
@@ -204,7 +218,7 @@ class KeyPoolManager {
       }
     }
 
-    let keyObj;
+    let keyObj, quotaReservation;
 
     // BaSui: Select a key using the configured algorithm
     switch (this.config.algorithm) {
@@ -220,14 +234,22 @@ class KeyPoolManager {
         break;
 
       case 'max-remaining':
-      case 'weighted-usage':
-      case 'quota-aware': {
+      case 'weighted-usage': {
         const headroom = key => {
           const windows = getLimitState(key, limitGroup(model)).windows;
           const valid = Object.values(windows || {}).filter(w => !w.windowEnd || Date.parse(w.windowEnd) > Date.now());
           return valid.length ? 100 - Math.max(...valid.map(w => w.usedPercent)) : 0;
         };
         keyObj = activeKeys.reduce((best, key) => headroom(key) > headroom(best) ? key : best);
+        break;
+      }
+
+      case 'quota-aware': {
+        if (process.env.CLUSTER_MODE === 'true') throw Object.assign(new Error('Quota aware requires single-process mode (CLUSTER_MODE=false); independent workers cannot share its in-flight reservations'), { status: 503 });
+        const selected = this.getQuotaBalancer().select(activeKeys, limitGroup(model), reserveQuota, quotaWorkload);
+        keyObj = selected.key;
+        quotaReservation = selected.reservation;
+        logDebug('Quota aware selection', selected.decision);
         break;
       }
 
@@ -281,13 +303,15 @@ class KeyPoolManager {
     }
 
     if (keyObj.excluded || keyObj.status !== 'active' || this.windowSync?.routingBlock(keyObj, model)) {
-      return this.getNextKey({ excluded: new Set([...excluded, keyObj.id]), model, signal });
+      quotaReservation?.release();
+      return this.getNextKey({ excluded: new Set([...excluded, keyObj.id]), model, signal, reserveQuota, quotaWorkload });
     }
     this.currentKeyId = keyObj.id;
 
     return {
       keyId: keyObj.id,
-      key: keyObj.key
+      key: keyObj.key,
+      quotaReservation
     };
   }
 
@@ -1150,6 +1174,9 @@ class KeyPoolManager {
     ];
     if (newConfig.algorithm !== undefined && !validAlgorithms.includes(newConfig.algorithm)) {
       throw new Error(`Invalid algorithm. Must be one of: ${validAlgorithms.join(', ')}`);
+    }
+    if (newConfig.algorithm === 'quota-aware' && process.env.CLUSTER_MODE === 'true') {
+      throw new Error('Quota aware requires single-process mode (CLUSTER_MODE=false)');
     }
 
     for (const field of ['retry', 'autoBan', 'performance', 'multiTier', 'weights']) {

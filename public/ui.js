@@ -48,7 +48,6 @@ export const algorithms = {
  'least-used':['Fewest requests','Chooses by request count, not quota consumed.'],
  'weighted-score':['Weighted score','Uses the server score and usage history.'],
  'least-token-used':['Fewest tokens','Uses recorded token consumption.'],
- 'weighted-usage':['Weighted usage (legacy)','Uses Factory window headroom.'],
- 'quota-aware':['Quota aware','Uses Factory window headroom.'],
+ 'quota-aware':['Quota aware','Spreads work using remaining quota and reset times immediately. Reliable completed-request intervals refine each account and window independently.'],
  'time-window':['Time window','Uses recent usage within the configured time window.']
 };

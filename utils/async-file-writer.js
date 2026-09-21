@@ -40,12 +40,8 @@ class AsyncFileWriter {
     // BaSui: Store pending data; later writes replace earlier pending data.
     this.pendingData = data;
 
-    // BaSui: Clear the old timer and restart the debounce interval.
-    if (this.writeTimer) {
-      clearTimeout(this.writeTimer);
-    }
-
-    // BaSui: Debounce multiple writes within one second into a single write.
+    // Batch from the first pending update. Continuous traffic must not postpone
+    // persistence indefinitely by restarting the timer on every request.
     return new Promise((resolve, reject) => {
       
     // 🔧 Fix: Bound the queue size to prevent memory leaks.
@@ -58,7 +54,8 @@ class AsyncFileWriter {
 
     this.writeQueue.push({ resolve, reject });
 
-      this.writeTimer = setTimeout(async () => {
+      if (!this.writeTimer) this.writeTimer = setTimeout(async () => {
+        this.writeTimer = null;
         await this._flushWrite();
       }, this.debounceTime);
     });

@@ -88,6 +88,14 @@ export class WindowSync {
     finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
   }
   manages(key) { const cfg = this.settings(); return cfg.enabled && !key.excluded && cfg.keyIds.includes(key.id); }
+  nextStartTime(at) {
+    const hours = this.settings().workingHours;
+    if (withinWorkingHours(hours, at)) return at;
+    const start = new Date(at), [hour, minute] = hours.start.split(':').map(Number);
+    start.setHours(hour, minute, 0, 0);
+    if (start.getTime() < at) start.setDate(start.getDate() + 1);
+    return start.getTime();
+  }
   routingBlock(key, model) {
     const cfg = this.settings();
     if (!cfg.enabled || key.excluded || !cfg.keyIds.includes(key.id) || limitGroup(model) !== limitGroup(cfg.modelId)) return null;
@@ -189,6 +197,7 @@ export class WindowSync {
         const cooldown = key.cooldowns?.[group]?.until || 0;
         member.quotaReady &&= cooldown <= this.now();
         key.billing_limits = snapshot; delete key.limits_error;
+        this.manager.observeBillingLimits?.(key);
         // A changed future boundary proves a new window, including an ambiguous request before restart.
         if (state.phase === 'starting' && member.attempts && end > this.now() && end !== member.baselineEnd) member.confirmedEnd = end;
       } catch (error) {
