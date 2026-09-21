@@ -34,6 +34,8 @@ function getDefaultConfigFromEnv() {
       }
     ],
     models: [
+      { name: "GLM-5.3-Flash (Droid Core)", id: "glm-5.3-flash", type: "common", api_provider: "fireworks" },
+      { name: "GPT-5.6 Luna", id: "gpt-5.6-luna", type: "openai" },
       {
         name: "Opus 4.1",
         id: "claude-opus-4-1-20250805",

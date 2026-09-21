@@ -168,6 +168,19 @@ It does not undo a window that has already started.
 These controls govern this proxy only. A client using a built-in Factory model
 instead of the proxy can consume its logged-in Factory account directly.
 
+On **Accounts**, the action follows the selected **Standard / Droid Core** tab:
+**Start now** starts an inactive window; **Starting…** means the request is queued
+or its window is being verified; **Test** sends one short request within an active
+window. Tests are disabled for accounts managed by that pool's synchronization.
+Unavailable actions show the reason. Both actions use that pool's start model from
+**Five-hour windows**. New configurations default to Luna for Standard and
+GLM-5.3-Flash for Core; saved model choices are preserved.
+
+A manual start leaves synchronization enabled. The scheduler records the attempt,
+checks Factory's window before retrying, and waits for current group windows to end
+before the next automatic cycle. Manual starts are explicit and may run outside
+configured automatic working hours. A test with an unknown outcome is not replayed.
+
 ### Automatic five-hour starts
 
 In **Five-hour windows**, select **Standard** or **Droid Core**, choose accounts

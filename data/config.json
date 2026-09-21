@@ -92,6 +92,12 @@
       "type": "common",
       "api_provider": "fireworks",
       "reasoning": "auto"
+    },
+    {
+      "name": "GLM-5.3-Flash (Droid Core)",
+      "id": "glm-5.3-flash",
+      "type": "common",
+      "api_provider": "fireworks"
     }
   ],
   "dev_mode": false,

@@ -70,12 +70,12 @@ router.get('/keys', wrapAsync(async (req, res) => {
   const result = keyPoolManager.getKeys(page, limit, status, poolGroup);
   result.keys = result.keys.map(({ quota_balance, ...key }) => ({ ...key, routing: Object.fromEntries(
     [['standard', 'claude-haiku-4-5-20251001'], ['core', 'kimi-k3']].map(([group, model]) => {
-      let blocked = null;
-      try { blocked = getWindowSync(keyPoolManager).routingBlock(key, model); }
-      catch { blocked = 'Window synchronization status is unavailable'; }
+      let blocked = null, action;
+      try { blocked = getWindowSync(keyPoolManager).routingBlock(key, model);action=getWindowSync(keyPoolManager).accountAction(key,group); }
+      catch { blocked = 'Window synchronization status is unavailable';action={kind:'start',label:'Start now',disabled:true,reason:blocked}; }
       const plan = keyPoolManager.config.algorithm === 'quota-aware' ? keyPoolManager.quotaBalancer?.lastPlan[group] : null;
       const decision = plan?.accounts.find(account => account.id === key.id);
-      return [group, { blocked, quota: decision ? { ...decision, at: plan.at, selected: plan.selected === key.id } : null }];
+      return [group, { blocked, action, quota: decision ? { ...decision, at: plan.at, selected: plan.selected === key.id } : null }];
     })
   ) }));
 
@@ -440,10 +440,13 @@ router.put('/keys/:id', wrapSync((req, res) => {
   sendSuccessResponse(res, existingKey, 'Key updated successfully');
 }, 'update key'));
 
-/**
- * POST /admin/keys/:id/test
- * Test whether a single key is available
- */
+// Queue a pool-specific action through the durable window scheduler.
+router.post('/keys/:id/window-action', wrapAsync(async (req,res)=>{
+  const result=getWindowSync(keyPoolManager).requestAction(req.params.id,req.body?.group,req.body?.kind);
+  sendSuccessResponse(res,result);
+}, 'start or test usage window'));
+
+/** Test whether a single key is available using the legacy global test model. */
 router.post('/keys/:id/test', wrapAsync(async (req, res) => {
   const keyId = req.params.id;
   const result = await keyPoolManager.testKey(keyId);

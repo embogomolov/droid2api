@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
-import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS } from './factory-limits.js';
+import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS, getLimitState } from './factory-limits.js';
 import { getEndpointByType } from '../config.js';
 import { prepareDirectAnthropic, getAnthropicHeaders } from '../transformers/request-anthropic.js';
 import { transformToOpenAI, getOpenAIHeaders } from '../transformers/request-openai.js';
@@ -28,7 +28,7 @@ export async function sendWindowStart(key, model, signal, fetchImpl = fetchWithP
     body = prepareDirectAnthropic(request); delete body.thinking;
     headers = getAnthropicHeaders(auth, {}, false, model.id);
   } else if (model.type === 'openai') {
-    body = transformToOpenAI(request); body.reasoning = { effort: 'low' };
+    body = transformToOpenAI(request); body.reasoning = { effort: model.id==='gpt-5.6-luna'?'none':'low' };
     headers = getOpenAIHeaders(auth);
   } else {
     body = transformToCommon(request);
@@ -43,7 +43,7 @@ export async function sendWindowStart(key, model, signal, fetchImpl = fetchWithP
     if (!response.ok) { response.body?.destroy(); return { accepted: false, status: response.status, retryAt, error: `HTTP ${response.status}` }; }
     const data = await response.json();
     if (!data.id || data.error || data.status === 'failed') return { accepted: false, error: 'No successful generation confirmed', ambiguous: true };
-    return { accepted: true, status: response.status, responseId: data.id };
+    return { accepted: true, status: response.status, responseId: data.id, usage: data.usage };
   } catch (error) {
     return { accepted: false, ambiguous: true, error: timeout.signal.aborted ? 'Probe timed out; checking the window before retry' : error.code || error.name };
   } finally { clearTimeout(timer); response?.body?.destroy(); }
@@ -99,8 +99,12 @@ export class WindowSync {
     return (s.partners || [group]).filter(g=>this.participates(cfg,g)&&state.groups[g].cycleId===s.cycleId);
   }
   routingBlock(key, model) {
-    if (!this.manages(key, model)) return null;
-    const group=limitGroup(model), state=this.load(), cfg=this.settings(), s=state.groups[group];
+    const group=limitGroup(model), managed=this.manages(key,model);
+    let state;try{state=this.load();}catch(error){if(managed)throw error;return null;}
+    const pending=this.manualPending(state,group,key.id);
+    if(pending?.credential===identity(key))return 'Manual request is being verified';
+    if(!managed)return null;
+    const cfg=this.settings(), s=state.groups[group];
     if (this.peers(state,cfg,group).some(g=>state.groups[g].phase==='starting')) return 'Waiting for all participants of the current start';
     const member=s.members[key.id];
     const trusted=member?.credential===identity(key);
@@ -109,6 +113,98 @@ export class WindowSync {
     if(end>this.now())return null;
     if(s.cycleId&&!s.cycleKeyIds?.includes(key.id))return 'Joins the next synchronized start';
     return 'Waiting for the selected group to start its next five-hour windows';
+  }
+  // Manual intents share the scheduler journal and lock; no second dispatcher.
+  manualPending(state, group, id) {
+    const m=state.manual?.[group]?.[id];
+    return m&&['queued','starting'].includes(m.phase)?m:null;
+  }
+  accountAction(key, group, state=this.load()) {
+    const cfg=this.settings().groups[group], model=this.readConfig().models.find(m=>m.id===cfg.modelId);
+    const pending=this.manualPending(state,group,key.id), limits=getLimitState(key,group,this.now());
+    const active=Date.parse(limits.windows?.fiveHour?.windowEnd)>this.now();
+    const kind=active?'test':'start';
+    let reason='';
+    if(pending&&pending.credential===identity(key))return {kind:pending.kind,label:pending.kind==='test'?'Testing…':'Starting…',disabled:true,reason:pending.error||'Checking the window',modelId:pending.modelId};
+    if(key.excluded)reason='Enable usage first';
+    else if(key.status!=='active')reason='Account is disabled';
+    else if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)reason='Choose a start model in Five-hour windows';
+    else if(!limits.known||limits.stale||key.limits_error)reason='Refresh limits before sending a request';
+    else if(!limits.available)reason=limits.reason;
+    else if(!active&&limits.windows.fiveHour.usedPercent!==0)reason='Factory has not reported the window reset';
+    else if(this.peers(state,this.settings(),group).some(g=>state.groups[g].phase==='starting'))reason='An automatic start is already in progress';
+    else if(kind==='test'&&this.manages(key,model.id))reason='Automatic starts manage this pool';
+    const previous=state.manual?.[group]?.[key.id];
+    return {kind,label:kind==='start'?'Start now':'Test',disabled:!!reason,reason:reason||`Uses ${model.name||model.id} in ${group==='core'?'Droid Core':'Standard'}`,modelId:model?.id,
+      error:previous?.credential===identity(key)&&previous.phase==='failed'?previous.error:null};
+  }
+  requestAction(id, group, kind) {
+    const fail=(message,status=409)=>{throw Object.assign(new Error(message),{status});};
+    if(!GROUPS.includes(group)||!['start','test'].includes(kind))fail('Choose a usage pool and action',400);
+    const key=this.manager.keys.find(k=>k.id===id);if(!key)fail('Account not found',404);
+    const owned=!!this.activeState&&this.ownsLock();
+    if(!owned&&!this.acquire())fail('The scheduler is busy; refresh and retry');
+    if(!owned)this.journalFailure=null;
+    try {
+      const state=owned?this.activeState:this.load(), pending=this.manualPending(state,group,id);
+      if(pending&&pending.credential===identity(key))return {pending:true,message:'Already queued; no duplicate request sent'};
+      const action=this.accountAction(key,group,state);
+      if(action.disabled)fail(action.reason);
+      if(action.kind!==kind)fail('The window changed. Refresh the account before proceeding.');
+      state.manual ||= {};state.manual[group] ||= {};
+      state.manual[group][id]={kind,phase:'queued',modelId:action.modelId,credential:identity(key),requestedAt:this.now(),nextAttemptAt:0,attempts:0};
+      state.groups[group].nextCheckAt=0;this.save(state);
+      this.wake();return {pending:true,message:kind==='start'?'Start queued':'Test queued'};
+    }finally{if(!owned){if(this.ownsLock())fs.unlinkSync(this.lock);this.lockToken=null;}}
+  }
+  async runManual(state,signal) {
+    const pending=GROUPS.flatMap(group=>Object.entries(state.manual?.[group]||{}).filter(([,m])=>['queued','starting'].includes(m.phase)).map(([id,m])=>({group,id,m})));
+    const results=await Promise.allSettled(pending.map(async({group,id,m})=>{
+      if(m.nextAttemptAt>this.now()||signal.aborted||this.journalFailure)return;
+      const key=this.manager.keys.find(k=>k.id===id), model=this.readConfig().models.find(v=>v.id===m.modelId);
+      const valid=()=>key&&this.manager.keys.includes(key)&&!key.excluded&&key.status==='active'&&identity(key)===m.credential;
+      const fail=message=>{m.phase='failed';m.error=message;this.save(state);};
+      if(!valid())return fail('Account removed, disabled or changed');
+      if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)return fail('Start model is no longer available');
+      if(m.kind==='test'&&this.manages(key,model.id))return fail('Automatic starts now manage this pool');
+      try {
+        const snapshot=await this.refresh(key.key,{signal});
+        if(!valid()||signal.aborted)return;
+        const limits=getLimitState({billing_limits:snapshot,cooldowns:key.cooldowns},group,this.now());
+        if(!limits.known||limits.stale||!WINDOWS.every(n=>Number.isFinite(limits.windows[n].usedPercent)&&limits.windows[n].usedPercent>=0))throw new Error('Incomplete or stale quota data');
+        if(!key.billing_limits||snapshot.fetchedAt>=key.billing_limits.fetchedAt){key.billing_limits=snapshot;delete key.limits_error;this.manager.observeBillingLimits?.(key);}
+        const end=Date.parse(limits.windows.fiveHour.windowEnd);
+        if(m.kind==='start'&&end>this.now()) {
+          m.phase='done';m.confirmedEnd=end;m.error=null;state.groups[group].nextCheckAt=0;
+          await this.manager.saveKeyPoolImmediately?.();this.save(state);return;
+        }
+        if(m.acceptedAt) {
+          if(this.now()-m.acceptedAt>=5*3600000)return fail('Accepted request could not be confirmed before its window expired; refresh and start again');
+          m.nextAttemptAt=this.now()+2000;this.save(state);return;
+        }
+        if(!limits.available)return fail(limits.reason);
+        if(m.kind==='test'&&m.submittedAt)return fail('Previous test outcome is unknown; it was not replayed');
+        if(m.kind==='test'&&!(end>this.now()))return fail('Window ended; use Start now');
+        if(m.kind==='start'&&limits.windows.fiveHour.usedPercent!==0)return fail('Factory has not reported the window reset');
+        // Persist before the physical send; a crash resumes with telemetry, not a blind replay.
+        m.phase='starting';m.attempts++;m.submittedAt=this.now();m.nextAttemptAt=this.now()+30000;this.save(state);
+        const result=await this.send({...key},model,signal);
+        if(!valid())return fail('Account removed, disabled or changed after dispatch');
+        m.error=result.error||null;m.httpStatus=result.status||null;
+        if(result.accepted) {
+          m.acceptedAt=this.now();m.responseId=result.responseId;m.phase=m.kind==='test'?'done':'starting';m.nextAttemptAt=this.now()+2000;
+          key.last_test_result='success';key.last_test_at=new Date(this.now()).toISOString();key.last_error=null;
+          await this.manager.saveKeyPoolImmediately?.();
+        } else if(m.kind==='test'||(result.status>=400&&result.status<500&&![408,429].includes(result.status)))return fail(result.error||'Request failed');
+        else m.nextAttemptAt=Math.max(this.now()+30000,result.retryAt||0);
+        this.save(state);
+      }catch(error){
+        if(this.journalFailure)throw error;
+        if(m.kind==='test'&&m.submittedAt&&!m.acceptedAt)return fail('Test outcome is unknown; refresh before retrying');
+        m.error=error.message;m.nextAttemptAt=Math.max(this.now()+30000,error.retryAt||0);this.save(state);
+      }
+    }));
+    const failure=results.find(r=>r.status==='rejected');if(failure)throw failure.reason;
   }
   snapshot() {
     const settings=this.settings();
@@ -159,10 +255,11 @@ export class WindowSync {
   }
   async stop() { this.stopped = true; clearTimeout(this.timer); this.timer = null; this.controller?.abort(); await this.running; }
   async tick() {
-    if (!GROUPS.some(g=>this.settings().groups[g].enabled) || !this.acquire()) return;
+    if (!this.acquire()) return;
     this.controller = new AbortController(); this.journalFailure = null;
-    try { await this.run(this.controller.signal); this.error = null; }
-    finally { this.controller = null; if (this.ownsLock()) fs.unlinkSync(this.lock); this.lockToken = null; }
+    try { this.activeState=this.load();
+      if(GROUPS.some(g=>this.settings().groups[g].enabled||Object.keys(this.activeState.manual?.[g]||{}).some(id=>this.manualPending(this.activeState,g,id))))await this.run(this.controller.signal); this.error = null; }
+    finally { this.activeState=null;this.controller = null; if (this.ownsLock()) fs.unlinkSync(this.lock); this.lockToken = null; }
   }
   async prepare(group, state, signal, reads) {
     const cfg=this.settings().groups[group], s=state.groups[group], now=this.now();
@@ -217,17 +314,22 @@ export class WindowSync {
     return ctx;
   }
   async run(signal) {
-    const state=this.load(), cfg=this.settings(), reads=new Map(), batches=[], taken=new Set();
+    const state=this.activeState||this.load();
+    await this.runManual(state,signal);
+    const cfg=this.settings(), reads=new Map(), batches=[], taken=new Set();
     for(const group of GROUPS) {
       const s=state.groups[group];
       const signature=JSON.stringify([cfg,this.manager.keys.map(k=>[k.id,k.excluded,k.status,k.last_test_result,identity(k)])]);
       if(s.selection!==signature){s.selection=signature;s.nextCheckAt=0;}
+      if(Object.entries(state.manual?.[group]||{}).some(([id])=>this.manualPending(state,group,id)))continue;
       if(!this.participates(cfg,group)){s.message=cfg.groups[group].enabled?'No included accounts':'Automatic starts are off';continue;}
       if(s.phase==='starting'&&!taken.has(group)) {
         const peers=this.peers(state,cfg,group);batches.push(peers);peers.forEach(g=>taken.add(g));
       }
     }
-    const remaining=GROUPS.filter(g=>this.participates(cfg,g)&&!taken.has(g));
+    const manualGroups=GROUPS.filter(g=>Object.entries(state.manual?.[g]||{}).some(([id])=>this.manualPending(state,g,id)));
+    const remaining=GROUPS.filter(g=>this.participates(cfg,g)&&!taken.has(g)&&!manualGroups.includes(g));
+    if(cfg.startTogether&&manualGroups.length)remaining.length=0;
     if(cfg.startTogether&&taken.size===0&&remaining.length>1)batches.push(remaining);
     else if(!cfg.startTogether||taken.size===0)for(const g of remaining)batches.push([g]);
     // Drain every started operation before releasing the shared journal lock, even on disk errors.
@@ -242,6 +344,7 @@ export class WindowSync {
       if(contexts.some(c=>!c.valid)){this.save(state);return;}
       const starting=contexts.some(c=>c.s.phase==='starting');
       if(!starting) {
+        if(groups.some(g=>Object.entries(state.manual?.[g]||{}).some(([id])=>this.manualPending(state,g,id))))return;
         if(latest.startTogether!==cfg.startTogether || !contexts.every(c=>c.ready)) {this.save(state);return;}
         if(!groups.every(g=>withinWorkingHours(latest.groups[g].workingHours,this.now()))) {
           contexts.forEach(c=>c.s.message='Waiting for configured working hours');this.save(state);return;

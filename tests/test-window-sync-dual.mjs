@@ -3,6 +3,7 @@ import {WindowSync} from '../utils/window-sync.js';import {DEFAULT_WINDOW_SYNC,n
 const H=3600000;
 function fixture(ids=['a']){
  let time=Date.parse('2026-09-22T08:00:00Z');const directory=fs.mkdtempSync(path.join(os.tmpdir(),'dual-case-'));const keys=ids.map(id=>({id,key:'fake-'+id,status:'active',last_test_result:'success'}));const cfg={window_sync:structuredClone(DEFAULT_WINDOW_SYNC),models:[{id:DEFAULT_WINDOW_SYNC.groups.standard.modelId,type:'anthropic'},{id:'kimi-k3',type:'common'}]};
+ cfg.window_sync.groups.core.modelId='kimi-k3';
  const win=Object.fromEntries(keys.map(k=>[k.key,Object.fromEntries(['standard','core'].map(g=>[g,{end:null,weekly:10,monthly:10}]))]));const calls=[],reads=[];
  const options={manager:{keys},directory,readConfig:()=>cfg,now:()=>time,refresh:async secret=>{reads.push(secret);return {fetchedAt:time,limits:Object.fromEntries(Object.entries(win[secret]).map(([g,w])=>[g,Object.fromEntries(['fiveHour','weekly','monthly'].filter(n=>n!==w.missing).map(n=>[n,{usedPercent:n==='fiveHour'?(w.end?1:0):w[n],windowEnd:n==='fiveHour'?w.end:new Date(time+24*H).toISOString()}]))]))};},send:async(key,model)=>{const g=model.id==='kimi-k3'?'core':'standard';calls.push(g+':'+key.id);win[key.key][g].end=new Date(time+5*H).toISOString();return {accepted:true,responseId:'fake'};}};
  return {cfg,keys,win,calls,reads,options,now:()=>time,advance:n=>time+=n,enable:(g,list=ids)=>Object.assign(cfg.window_sync.groups[g],{enabled:true,keyIds:list}),scheduler:()=>new WindowSync(options)};

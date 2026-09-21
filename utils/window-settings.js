@@ -4,7 +4,7 @@ export const GROUPS = ['standard', 'core'];
 const groupDefaults = modelId => ({ enabled: false, keyIds: [], modelId,
   workingHours: { enabled: false, start: '09:00', end: '18:00' } });
 export const DEFAULT_WINDOW_SYNC = { version: 2, startTogether: false, groups: {
-  standard: groupDefaults('claude-haiku-4-5-20251001'), core: groupDefaults('kimi-k3')
+  standard: groupDefaults('gpt-5.6-luna'), core: groupDefaults('glm-5.3-flash')
 } };
 
 export function normalizeWindowSync(saved) {
