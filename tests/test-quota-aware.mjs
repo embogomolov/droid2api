@@ -1,3 +1,4 @@
+import {DEFAULT_WINDOW_SYNC,nextWindowStart} from '../utils/window-settings.js';
 // Deterministic replay of quota telemetry and actual transport completion. No network/accounts.
 import assert from 'node:assert/strict';
 import { QuotaAware, observeQuota, quotaProfile } from '../utils/quota-aware.js';
@@ -176,3 +177,15 @@ for(const synchronized of [false,true]) {
   console.log(synchronized?'Synchronized replay:':'Staggered replay:',JSON.stringify(counts));
 }
 console.log('PASS: independent windows, cold/partial data, rounded/rare/unfinished/mixed/external work, aging, reset deadlines, persistence, synchronized membership and concurrent refunds');
+
+// Two pools share a horizon only when explicitly linked; exclusions apply immediately.
+{
+const now=Date.parse('2026-09-22T08:00:00Z'),H=3600000,cfg=structuredClone(DEFAULT_WINDOW_SYNC);
+const make=(id,group,h,week=1)=>({id,status:'active',last_test_result:'success',billing_limits:{fetchedAt:now,limits:{[group]:Object.fromEntries(['fiveHour','weekly','monthly'].map((n,i)=>[n,{usedPercent:i===1?week:1,windowEnd:new Date(now+(i===0?h:i===1?48:720)*H).toISOString()}]))}}});
+const keys=[make('a','standard',2),make('b','core',4,100)];for(const [g,id]of [['standard','a'],['core','b']])Object.assign(cfg.groups[g],{enabled:true,keyIds:[id]});
+const q=new QuotaAware({keys:()=>keys,sync:()=>cfg,nextStart:(at,g)=>nextWindowStart(cfg,g,at),now:()=>now});
+assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
+cfg.startTogether=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+48*H);
+keys[1].excluded=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
+keys[1].excluded=false;cfg.groups.core.keyIds=[];assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
+}

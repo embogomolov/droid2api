@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { getLimitState, limitGroup, WINDOWS, LIMIT_CACHE_MS } from './factory-limits.js';
+import { getLimitState, WINDOWS, LIMIT_CACHE_MS } from './factory-limits.js';
+import { normalizeWindowSync, GROUPS } from './window-settings.js';
 
 const HOUR = 3_600_000;
 const PERIOD = { fiveHour: 5 * HOUR, weekly: 168 * HOUR, monthly: 720 * HOUR };
@@ -116,16 +117,18 @@ function estimate(w, profile, now) {
 }
 
 function commonReset(keys, settings, group, now) {
-  if (!settings?.enabled || limitGroup(settings.modelId) !== group) return { ids:new Set(), end:0 };
-  const ids = new Set(settings.keyIds), members = keys.filter(k=>ids.has(k.id)&&!k.excluded);
+  const cfg=normalizeWindowSync(settings);
+  if (!cfg.groups[group].enabled) return { ids:new Set(), end:0 };
+  const ids = new Set(cfg.groups[group].keyIds), members = keys.filter(k=>ids.has(k.id)&&!k.excluded);
   let end = now;
-  for (const key of members) {
-    const windows = getLimitState(key,group,now).windows;
+  const groups=cfg.startTogether?GROUPS.filter(g=>cfg.groups[g].enabled):[group];
+  for (const pool of groups) for (const key of keys.filter(k=>!k.excluded&&cfg.groups[pool].keyIds.includes(k.id))) {
+    const windows = getLimitState(key,pool,now).windows;
     for (const name of WINDOWS) {
       const w = windows?.[name];
       if (name === 'fiveHour' || w?.usedPercent >= 100) end = Math.max(end,Date.parse(w?.windowEnd)||now);
     }
-    end = Math.max(end,key.cooldowns?.[group]?.until||now);
+    end = Math.max(end,key.cooldowns?.[pool]?.until||now);
   }
   return { ids:new Set(members.map(k=>k.id)), end };
 }
@@ -140,7 +143,7 @@ export class QuotaAware {
   // deadlines cannot imply exact request capacity without upstream billing attribution.
   plan(keys,group,profile='unclassified') {
     const now=this.now(), barrier=commonReset(this.keys(),this.sync(),group,now), busy=new Map();
-    if (barrier.ids.size) barrier.end=this.nextStart(barrier.end);
+    if (barrier.ids.size) barrier.end=this.nextStart(barrier.end,group);
     for (const p of this.pending.values()) if (p.group===group) busy.set(p.key.id,(busy.get(p.key.id)||0)+1);
     const rows=keys.map(key=>{
       observeQuota(key);

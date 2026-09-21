@@ -4,7 +4,7 @@ import path from 'path';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
 import { getWindowSync, validateWindowSync } from '../utils/window-sync.js';
-import { updateConfig as updateFullConfig, loadConfig, getNotesMaxLength, getConfig } from '../config.js';
+import { updateConfig as updateFullConfig, saveConfig, loadConfig, getNotesMaxLength, getConfig } from '../config.js';
 import {
   sendSuccessResponse,
   sendErrorResponse,
@@ -28,7 +28,7 @@ router.get('/window-sync', wrapSync((req, res) => {
 router.put('/window-sync', wrapSync((req, res) => {
   const cfg = loadConfig();
   const settings = validateWindowSync(req.body, keyPoolManager.keys, cfg.models);
-  updateFullConfig({ window_sync: settings });
+  saveConfig({ ...cfg, window_sync: settings });
   const scheduler = getWindowSync(keyPoolManager);
   scheduler.wake();
   sendSuccessResponse(res, { settings });
@@ -505,6 +505,7 @@ router.get('/config/key-pool', wrapSync((req, res) => {
  */
 router.put('/config', wrapSync((req, res) => {
   const updates = req.body;
+  if (updates?.window_sync !== undefined) return sendBadRequest(res, 'Use /admin/window-sync to validate and save window settings');
 
   if (!updates || Object.keys(updates).length === 0) {
     return sendBadRequest(res, 'Config data is required');

@@ -170,7 +170,7 @@ class KeyPoolManager {
   getQuotaBalancer() {
     return this.quotaBalancer ||= new QuotaAware({ keys: () => this.keys,
       sync: () => this.windowSync?.settings() || getConfig().window_sync,
-      nextStart: at => this.windowSync?.nextStartTime(at) ?? at,
+      nextStart: (at, group) => this.windowSync?.nextStartTime(at, group) ?? at,
       save: () => { void this.saveKeyPool(); } });
   }
 
@@ -821,7 +821,7 @@ class KeyPoolManager {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
 
-        if (key.excluded || this.windowSync?.manages(key)) return { success: false, skipped: true, status: 409, message: 'Key is excluded or managed by window synchronization' };
+        if (key.excluded || this.windowSync?.manages(key, modelId)) return { success: false, skipped: true, status: 409, message: 'Key is excluded or managed by window synchronization' };
         const testUrl = getEndpointByType(model.type).base_url;
         const openaiRequest = {
           model: modelId,
