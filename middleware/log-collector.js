@@ -83,7 +83,7 @@ export function logCollectorMiddleware(req, res, next) {
       recorded = true;
       const report = res.locals?.factoryRequest || {};
       const failed = !res.writableFinished || res.statusCode >= 400 || report.success === false;
-      addLogToBuffer({ type: 'generation', timestamp: getTimestamp(), level: failed ? 'error' : 'info',
+      addLogToBuffer({ type: 'generation', url: req.path, timestamp: getTimestamp(), level: failed ? 'error' : 'info',
         summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
           elapsedMs: Date.now() - startTime, usage: report.usage || null,
           outcome: !res.writableFinished ? 'Disconnected' : res.statusCode >= 400 ? `HTTP ${res.statusCode}` : report.success === false ? 'Stream failed' : 'Completed',

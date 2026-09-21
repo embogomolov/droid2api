@@ -179,6 +179,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   const keywordFilterRouter = (await import('./api/keyword-filter-routes.js')).default;
   const statsTrackerMiddleware = (await import('./middleware/stats-tracker.js')).default;
   const { logCollectorMiddleware } = await import('./middleware/log-collector.js');
+  const { requestBodyMiddleware } = await import('./middleware/request-body.js');
   const redisCache = (await import('./utils/redis-cache.js')).default;
   const { startDailyResetScheduler, stopDailyResetScheduler, onDateChange } = await import('./utils/daily-reset-scheduler.js');
   const { startTokenSyncScheduler, stopTokenSyncScheduler } = await import('./utils/token-sync-scheduler.js');
@@ -229,9 +230,6 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   };
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(signal, () => void shutdown(signal));
   if (CLUSTER_MODE) process.on('message', message => { if (message === 'shutdown') void shutdown('cluster shutdown'); });
-
-  app.use(express.default.json({ limit: '50mb' }));
-  app.use(express.default.urlencoded({ extended: true, limit: '50mb' }));
 
   // BaSui: Override res.json to force UTF-8 encoding for all JSON responses and prevent garbled non-ASCII text
   app.use((req, res, next) => {
@@ -304,6 +302,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
 
   // BaSui: Log collection middleware (register before routes)
   app.use(logCollectorMiddleware);
+  app.use(requestBodyMiddleware);
 
   // BaSui: Request statistics middleware (register before routes)
   app.use(statsTrackerMiddleware);

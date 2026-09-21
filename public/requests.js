@@ -1,10 +1,10 @@
 import {$,api,escape as e,suffix,date,number} from './ui.js';
-let entries=[];
+let entries=[], refreshedAt='', refreshing=false;
 const redact=value=>String(value??'').replace(/fk-[\w-]+/g,'[key hidden]').replace(/Bearer\s+[^\s"'\\]+/gi,'Bearer [hidden]');
 export function renderRequests(){
   const query=$('logSearch').value.toLowerCase(), errors=$('errorsOnly').checked;
   const filtered=entries.filter(row=>(!errors||row.level==='error'||row.level==='warn')&&JSON.stringify(row).toLowerCase().includes(query));
-  $('logCount').textContent=filtered.length+' events · latest 500 server entries';
+  $('logCount').textContent=filtered.length+' events · latest 500 server entries'+(refreshedAt?' · Updated '+refreshedAt:'');
   $('requestRows').innerHTML=filtered.slice().reverse().map(row=>{
     const data=row.summary||{}, model=data.model||row.url||row.message||'Event';
     const outcome=data.outcome||(row.statusCode?'HTTP '+row.statusCode:row.level||'Received');
@@ -17,10 +17,15 @@ export function renderRequests(){
   }).join('')||'<tr><td colspan="6" class="empty">No matching events in the server buffer.</td></tr>';
 }
 export async function refreshRequests(){
+  if(refreshing)return;
+  refreshing=true;
+  const button=$('refreshRequests');button.disabled=true;button.textContent='Refreshing…';
   try{
     const result=await api('/logs/history?limit=500');
     entries=(result.logs||[]).filter(row=>row.type==='generation'||(!row.url&&['warn','error'].includes(row.level))||(row.url?.startsWith('/v1/')&&row.type==='response'));
+    refreshedAt=new Date().toLocaleTimeString();
     $('requestsError').hidden=true;renderRequests();
   }catch(error){$('requestsError').hidden=false;$('requestsError').textContent=error.message;}
+  finally{refreshing=false;button.disabled=false;button.textContent='Refresh';}
 }
 export function initRequests(){ $('logSearch').oninput=renderRequests;$('errorsOnly').onchange=renderRequests;$('refreshRequests').onclick=refreshRequests; }

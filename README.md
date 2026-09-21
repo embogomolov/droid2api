@@ -44,6 +44,10 @@ npm start
 On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
 Open `http://localhost:3000/` and sign in with `ADMIN_ACCESS_KEY`.
 
+Incoming request bodies, including image attachments, are limited to 256 MiB.
+Set `REQUEST_BODY_LIMIT_MB` in `.env` and restart to change this limit.
+Oversized requests return HTTP 413 and appear in **Requests** with the reason.
+
 ### Add accounts
 
 1. Open **Accounts → Add keys** and paste one Factory API key per line.
