@@ -113,6 +113,8 @@ try {
     limits: { standard: windows(12), core: windows(1) }, secret: 'do not persist'
   })) });
   assert.equal(measured.limits.standard.weekly.usedPercent, 12); assert.equal(measured.secret, undefined);
+  const coreOnly=await fetchBillingLimits('fake',{fetchImpl:async()=>new Response(JSON.stringify({limits:{core:windows(7)}}))});
+  assert.equal(coreOnly.limits.core.fiveHour.usedPercent,7);assert.deepEqual(coreOnly.limits.standard,{});
   await assert.rejects(fetchBillingLimits('fake', { fetchImpl: async () => new Response('{}') }));
 
   // Real route and pool selection, only the upstream is simulated.

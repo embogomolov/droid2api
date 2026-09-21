@@ -66,7 +66,7 @@ export async function fetchBillingLimits(apiKey, { signal, fetchImpl = fetch } =
         windowEnd: Number.isFinite(reset) ? new Date(reset).toISOString() : null };
     }
   }
-  if (!Object.keys(limits.standard).length) throw new Error('Limits API returned no usable usage windows');
+  if (!Object.values(limits).some(windows => Object.keys(windows).length)) throw new Error('Limits API returned no usable usage windows');
   return { limits, fetchedAt: Date.now(),
     // Respect an already-enabled prepaid account setting; never enable paid usage here.
     extraUsageEnabled: data.overagePreference === 'extraUsage' && data.extraUsageAllowed === true && data.extraUsageBalanceCents > 0 };

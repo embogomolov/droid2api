@@ -162,7 +162,7 @@ exclusion; test, status, and quota requirements still apply. Already-sent reques
 can finish.
 
 Turning off **Enable automatic starts** stops automatic start requests and releases
-the synchronization barrier. Accounts remain available for normal client requests.
+that pool's synchronization barrier. Accounts remain available for normal client requests.
 It does not undo a window that has already started.
 
 These controls govern this proxy only. A client using a built-in Factory model
@@ -170,13 +170,23 @@ instead of the proxy can consume its logged-in Factory account directly.
 
 ### Automatic five-hour starts
 
-Select accounts and an available start model in **Five-hour windows**, enable
-**Enable automatic starts**, and save. Choose a Standard model for Standard windows
-or a Core model for Core windows. Automatic starts and working hours are off by
-default. New accounts are not added to the selection automatically.
+In **Five-hour windows**, select **Standard** or **Droid Core**, choose accounts
+and a start model, enable **Enable automatic starts**, and save. Each pool has its
+own selection, model, working hours and persistent cycle. Switching pools preserves
+unsaved edits; **Save settings** saves both. An account can belong to both pools.
+Automatic starts and working hours are off by default. Existing single-pool settings
+and attempts migrate to their original pool; the other pool stays off.
+
+Pools start independently unless **Start both pools together** is enabled. Joint
+starts wait for both groups, then send a separate request for each account/pool.
+Their working hours must overlap. Disabling either pool removes it from the barrier.
+Quota aware uses the same group membership and joint scheduling horizon.
 
 - Active windows remain usable. Selected accounts whose windows have ended wait
   until the whole included group is ready and has weekly and monthly quota.
+- Removing a member or excluding an account takes effect without restarting.
+  New members added during a launch join the next cycle. Changing independent/joint
+  mode affects the next cycle; an in-progress cycle retains its original partners.
 - Excluded accounts are omitted. Selected disabled, untested, or exhausted accounts
   can block the group. Remove them from the selection or disable synchronization
   to let other accounts work independently.
@@ -185,7 +195,8 @@ default. New accounts are not added to the selection automatically.
 - Failed checks retry with backoff. Ambiguous generation failures trigger fresh
   quota checks before retrying. Successful starts are verified without replaying
   the generation. Delayed telemetry can make an ambiguous retry redundant;
-  simultaneous or exactly-once starts are not guaranteed.
+  simultaneous or exactly-once starts are not guaranteed. If a confirmed window
+  expires while another participant is still pending, it is checked and started again.
 - Working hours use the server timezone and limit new cycles. A cycle in progress
   can finish outside those hours.
 - Attempts survive restarts. Starting the proxy with this feature enabled can start
