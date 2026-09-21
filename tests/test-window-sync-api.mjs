@@ -43,6 +43,15 @@ try {
  assert.equal((await call('PATCH', '/keys/a/exclusion', { excluded: true })).status, 200);
  assert.equal((await call('GET', '/window-sync')).body.data.keys.find(k => k.id === 'a').excluded, true);
  const bad = await call('PATCH', '/keys/a/exclusion', { excluded: 'false' }); assert.equal(bad.status, 400);
+
+ assert.equal((await call('POST','/keys/a/window-action',{group:'core',kind:'start'},false)).status,401);
+ assert.equal((await call('POST','/keys/a/window-action',{group:'bogus',kind:'start'})).status,400);
+ assert.equal((await call('POST','/keys/a/window-action',{group:'core',kind:'start'})).status,409);
+ const now=Date.now();pool.keys[1].billing_limits={fetchedAt:now,limits:{core:Object.fromEntries(['fiveHour','weekly','monthly'].map(n=>[n,{usedPercent:0,windowEnd:null}]))}};
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'test'})).status,409);
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'start'})).status,200);
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'start'})).status,200);
+ assert.equal((await call('GET','/keys')).body.data.keys.find(k=>k.id==='b').routing.core.action.label,'Starting…');
  fs.writeFileSync(scheduler.file, '{broken journal');
  pool.keys = [];
  assert.equal((await call('PUT', '/window-sync', { ...cfg, groups:{...cfg.groups,standard:{...cfg.groups.standard,enabled:false,modelId:'removed-model'}} })).status, 200, 'Always allow disabling after account/model removal');

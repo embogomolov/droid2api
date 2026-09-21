@@ -26,9 +26,8 @@ export function renderAccounts() {
   $('accountRows').innerHTML=keys.map(key=>{
     const snapshot=state.limits[key.id], limits=snapshot?.[state.group];
     const status=accountStatus(key,limits), managed=state.sync?.settings.groups[state.group].enabled&&state.sync.settings.groups[state.group].keyIds.includes(key.id)&&!key.excluded;
-    const testManaged=state.sync?.keys.find(k=>k.id===key.id)?.testManaged;
-    const testDisabled=key.excluded||testManaged;
-    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'">'+e(status[0])+'</span><span class="subline" title="'+e(status[2])+'">'+e(limits?.available===false?limits.reason:'')+'</span>'+(managed?'<span class="subline">Synchronized group</span>':'')+(limits?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="test" '+(testDisabled?'disabled ':'')+'title="'+(testManaged?'The test model uses a pool managed by automatic starts':key.excluded?'Enable usage before testing':'Sends a real request and uses quota')+'">Test</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div></td></tr>';
+    const windowAction=key.routing?.[state.group]?.action||{label:'Start now',disabled:true,reason:'Refresh account status'};
+    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'">'+e(status[0])+'</span><span class="subline" title="'+e(status[2])+'">'+e(limits?.available===false?limits.reason:'')+'</span>'+(managed?'<span class="subline">Synchronized group</span>':'')+(limits?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="window" '+(windowAction.disabled?'disabled ':'')+'title="'+e(windowAction.reason)+'">'+e(windowAction.label)+'</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div>'+((windowAction.error||windowAction.disabled)?'<small class="subline">'+e(windowAction.error||windowAction.reason)+'</small>':'')+'</td></tr>';
   }).join('')||'<tr><td colspan="6" class="empty">'+(state.keys.length?'No matching accounts.':'No accounts yet. Add a Factory key to begin.')+'</td></tr>';
 }
 function poolOptions(current) {
@@ -43,7 +42,7 @@ export function initAccounts(refresh) {
     state.group=button.dataset.group; document.querySelectorAll('[data-group]').forEach(b=>b.setAttribute('aria-pressed',String(b===button))); renderAccounts();
   });
   $('refreshAccounts').onclick=event=>action(event.currentTarget,()=>reload(true));
-  $('addAccount').onclick=()=>dialog('Add Factory keys','<label>Keys, one per line<textarea name="keys" rows="5" required spellcheck="false" autocomplete="off" placeholder="fk-…"></textarea></label><label>Group<select name="poolGroup">'+poolOptions('default')+'</select></label><p class="hint">Keys are imported without a test. Use Test on an account when you are ready to spend quota.</p>',async form=>{
+  $('addAccount').onclick=()=>dialog('Add Factory keys','<label>Keys, one per line<textarea name="keys" rows="5" required spellcheck="false" autocomplete="off" placeholder="fk-…"></textarea></label><label>Group<select name="poolGroup">'+poolOptions('default')+'</select></label><p class="hint">Keys are imported without a test. Refresh limits, then use Start now or Test in the intended usage pool when you are ready to spend quota.</p>',async form=>{
     const keys=[...new Set(String(form.get('keys')).split(/\s+/).filter(Boolean))];
     if(!keys.length||keys.some(key=>!key.startsWith('fk-')))throw new Error('Every key must start with fk-.');
     const result=await api('/keys/batch','POST',{keys,poolGroup:form.get('poolGroup'),autoTest:false});
@@ -54,10 +53,14 @@ export function initAccounts(refresh) {
     const key=state.keys.find(k=>k.id===button.closest('tr').dataset.account); if(!key)return;
     const endpoint='/keys/'+encodeURIComponent(key.id);
     if(button.dataset.action==='exclude')return action(button,async()=>{await api(endpoint+'/exclusion','PATCH',{excluded:!key.excluded}); await reload(); notify(key.excluded?'Usage enabled. A successful test and available quota are still required.':'Usage disabled. Already sent requests may finish.');});
-    if(button.dataset.action==='test')return confirmAction('Test '+suffix(key.id),'This sends a real model request, uses quota and can start usage windows.',async()=>{
-      const result=await api(endpoint+'/test','POST',{},120000); await reload();
-      if(!result.success)throw new Error(result.message||'Test failed (HTTP '+result.status+').'); notify('Test passed.');
-    });
+    if(button.dataset.action==='window'){
+      const group=state.group, item=key.routing?.[group]?.action, pool=group==='core'?'Droid Core':'Standard';
+      if(!item||item.disabled)return;
+      return confirmAction(item.label+' · '+pool+' · '+suffix(key.id),
+        'Uses '+item.modelId+' and consumes '+pool+' quota. '+(item.kind==='start'?'Starts this account now. Automatic synchronization stays enabled for subsequent cycles.':'Sends one short test request.'),async()=>{
+          await api(endpoint+'/window-action','POST',{group,kind:item.kind});await reload();notify(item.label+' queued for '+pool+'.');
+        });
+    }
     if(button.dataset.action==='edit'){
       const quota=key.routing?.[state.group]?.quota;
       const explanation=quota?'<p class="hint">Last routing calculation: '+e(date(quota.at))+'<br>Target share: '+e((quota.share*100).toFixed(1))+'% · '+e({measured:'Reset-aware · refined by measured intervals',adaptive:'Reset-aware · no reliable price adjustment yet',partial:'Reset-aware · some quota data is missing or stale',learning:'Previous calculation · learning',telemetry_unavailable:'Quota telemetry unavailable'}[quota.mode])+(quota.limitingWindow?'<br>Limiting window: '+e({fiveHour:'5 hours',weekly:'7 days',monthly:'30 days'}[quota.limitingWindow])+' · '+e(quota.remaining??'Unknown')+'% remaining · planning boundary '+e(date(quota.resetAt)):'')+'<br>In flight at selection: '+e(quota.inFlight)+(quota.selected?' · Selected for that request':'')+(quota.windows?'<br>Calibration evidence: '+quota.windows.map(w=>e({fiveHour:'5h',weekly:'7d',monthly:'30d'}[w.window])+' '+e(w.intervals)+' intervals'+(!w.fresh?' (stale / missing)':'')).join(' · '):'')+'</p>':'';

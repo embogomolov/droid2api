@@ -169,7 +169,7 @@ nav a{font-size:13px;padding:10px}
 /* One usage control, with secondary actions below it. */
 .row-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-width:230px;margin-left:auto}
 .row-actions [data-action="exclude"]{grid-column:1/-1;grid-row:1;white-space:normal;overflow-wrap:anywhere}
-.row-actions [data-action="test"],.row-actions [data-action="edit"]{grid-row:2}
+.row-actions [data-action="window"],.row-actions [data-action="edit"]{grid-row:2}
 @media(max-width:700px){.row-actions{margin-left:0}}
 
 .sync-title{font-size:16px;font-weight:600;margin-bottom:10px}
