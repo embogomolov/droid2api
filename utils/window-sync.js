@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
-import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS, getLimitState } from './factory-limits.js';
+import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS, getRequestQuota } from './factory-limits.js';
 import { getEndpointByType } from '../config.js';
 import { prepareDirectAnthropic, getAnthropicHeaders } from '../transformers/request-anthropic.js';
 import { transformToOpenAI, getOpenAIHeaders } from '../transformers/request-openai.js';
@@ -62,11 +62,21 @@ export class WindowSync {
       const state = freshState(), group = limitGroup(saved.modelId || this.readConfig().window_sync?.modelId);
       state.groups[group] = { ...saved, cycleKeyIds: Object.keys(saved.members), partners: [group] };
       delete state.groups[group].version;
-      return state;
+      return this.retireCoreStarts(state);
     }
     if (saved.version !== 2 || !GROUPS.every(g => saved.groups?.[g]?.members && typeof saved.groups[g].members==='object' && !Array.isArray(saved.groups[g].members) && ['waiting','starting','active'].includes(saved.groups[g].phase) && (saved.groups[g].phase!=='starting'||Array.isArray(saved.groups[g].cycleKeyIds))))
       throw new Error('Invalid saved window-sync state; refusing to discard previous attempts');
-    return saved;
+    return this.retireCoreStarts(saved);
+  }
+  retireCoreStarts(state) {
+    // Preserve accepted attempts for inspection, but never replay an unsupported
+    // forced Core start or let it hold normal model requests after an upgrade.
+    for(const m of Object.values(state.manual?.core||{}))if(m.kind==='start'&&['queued','starting'].includes(m.phase)){
+      m.phase=m.submittedAt?'unconfirmed':'cancelled';
+      m.error=m.acceptedAt?'Request accepted; Core window was not confirmed. Forced Core start stopped.':
+        m.submittedAt?'Previous request outcome was not confirmed; it will not be replayed.':'Forced Core start cancelled; Factory controls the consumed allowance.';
+    }
+    return state;
   }
   save(state) {
     try {
@@ -80,7 +90,7 @@ export class WindowSync {
     } catch(error) { this.journalFailure = error; throw error; }
   }
   manages(key, model = this.readConfig().key_test_model || 'claude-sonnet-4-5-20250929') {
-    const cfg = this.settings().groups[limitGroup(model)];
+    const cfg = this.settings().groups[getRequestQuota(key,model,this.now()).group];
     return cfg.enabled && !key.excluded && cfg.keyIds.includes(key.id);
   }
   nextStartTime(at, group = 'standard') {
@@ -99,9 +109,9 @@ export class WindowSync {
     return (s.partners || [group]).filter(g=>this.participates(cfg,g)&&state.groups[g].cycleId===s.cycleId);
   }
   routingBlock(key, model) {
-    const group=limitGroup(model), managed=this.manages(key,model);
+    const group=getRequestQuota(key,model,this.now()).group, managed=this.manages(key,model);
     let state;try{state=this.load();}catch(error){if(managed)throw error;return null;}
-    const pending=this.manualPending(state,group,key.id);
+    const pending=GROUPS.map(g=>this.manualPending(state,g,key.id)).find(m=>m?.credential===identity(key));
     if(pending?.credential===identity(key))return 'Manual request is being verified';
     if(!managed)return null;
     const cfg=this.settings(), s=state.groups[group];
@@ -121,26 +131,28 @@ export class WindowSync {
   }
   accountAction(key, group, state=this.load()) {
     const cfg=this.settings().groups[group], model=this.readConfig().models.find(m=>m.id===cfg.modelId);
-    const pending=this.manualPending(state,group,key.id), limits=getLimitState(key,group,this.now());
+    const pending=this.manualPending(state,group,key.id), limits=getRequestQuota(key,model?.id,this.now());
     const active=Date.parse(limits.windows?.fiveHour?.windowEnd)>this.now();
-    const kind=active?'test':'start';
+    const kind=group==='core'||active?'test':'start';
     let reason='';
     if(pending&&pending.credential===identity(key))return {kind:pending.kind,label:pending.kind==='test'?'Testing…':'Starting…',disabled:true,reason:pending.error||'Checking the window',modelId:pending.modelId};
-    if(key.excluded)reason='Enable usage first';
+    if(GROUPS.some(g=>this.manualPending(state,g,key.id)?.credential===identity(key)))reason='Another request for this account is being verified';
+    else if(key.excluded)reason='Enable usage first';
     else if(key.status!=='active')reason='Account is disabled';
     else if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)reason='Choose a start model in Five-hour windows';
     else if(!limits.known||limits.stale||key.limits_error)reason='Refresh limits before sending a request';
     else if(!limits.available)reason=limits.reason;
-    else if(!active&&limits.windows.fiveHour.usedPercent!==0)reason='Factory has not reported the window reset';
-    else if(this.peers(state,this.settings(),group).some(g=>state.groups[g].phase==='starting'))reason='An automatic start is already in progress';
-    else if(kind==='test'&&this.manages(key,model.id))reason='Automatic starts manage this pool';
+    else if(kind==='start'&&!active&&limits.windows.fiveHour.usedPercent!==0)reason='Factory has not reported the window reset';
+    else if(this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))reason='An automatic start is already in progress';
+    else if(kind==='test'&&this.manages(key,model.id)&&(group==='standard'||!active))reason='Standard automatic starts manage this window';
     const previous=state.manual?.[group]?.[key.id];
-    return {kind,label:kind==='start'?'Start now':'Test',disabled:!!reason,reason:reason||`Uses ${model.name||model.id} in ${group==='core'?'Droid Core':'Standard'}`,modelId:model?.id,
-      error:previous?.credential===identity(key)&&previous.phase==='failed'?previous.error:null};
+    return {kind,label:kind==='start'?'Start now':'Test',disabled:!!reason,reason:reason||(group==='core'?'Tests a Core model. Factory consumes Standard first; this does not force a Core window.':`Uses ${model.name||model.id} in Standard`),modelId:model?.id,quotaGroup:limits.group,
+      error:previous?.credential===identity(key)&&['failed','unconfirmed','cancelled'].includes(previous.phase)?previous.error:null};
   }
   requestAction(id, group, kind) {
     const fail=(message,status=409)=>{throw Object.assign(new Error(message),{status});};
     if(!GROUPS.includes(group)||!['start','test'].includes(kind))fail('Choose a usage pool and action',400);
+    if(group==='core'&&kind==='start')fail('A Core model request cannot force a Core window. Use Test; Factory controls the consumed allowance.',400);
     const key=this.manager.keys.find(k=>k.id===id);if(!key)fail('Account not found',404);
     const owned=!!this.activeState&&this.ownsLock();
     if(!owned&&!this.acquire())fail('The scheduler is busy; refresh and retry');
@@ -159,18 +171,20 @@ export class WindowSync {
   }
   async runManual(state,signal) {
     const pending=GROUPS.flatMap(group=>Object.entries(state.manual?.[group]||{}).filter(([,m])=>['queued','starting'].includes(m.phase)).map(([id,m])=>({group,id,m})));
+    const busy=new Set();
     const results=await Promise.allSettled(pending.map(async({group,id,m})=>{
+      if(busy.has(id))return;busy.add(id);
       if(m.nextAttemptAt>this.now()||signal.aborted||this.journalFailure)return;
       const key=this.manager.keys.find(k=>k.id===id), model=this.readConfig().models.find(v=>v.id===m.modelId);
       const valid=()=>key&&this.manager.keys.includes(key)&&!key.excluded&&key.status==='active'&&identity(key)===m.credential;
       const fail=message=>{m.phase='failed';m.error=message;this.save(state);};
       if(!valid())return fail('Account removed, disabled or changed');
       if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)return fail('Start model is no longer available');
-      if(m.kind==='test'&&this.manages(key,model.id))return fail('Automatic starts now manage this pool');
+      if(group==='standard'&&m.kind==='test'&&this.manages(key,model.id))return fail('Automatic starts now manage this pool');
       try {
         const snapshot=await this.refresh(key.key,{signal});
         if(!valid()||signal.aborted)return;
-        const limits=getLimitState({billing_limits:snapshot,cooldowns:key.cooldowns},group,this.now());
+        const limits=getRequestQuota({billing_limits:snapshot,cooldowns:key.cooldowns},model.id,this.now());
         if(!limits.known||limits.stale||!WINDOWS.every(n=>Number.isFinite(limits.windows[n].usedPercent)&&limits.windows[n].usedPercent>=0))throw new Error('Incomplete or stale quota data');
         if(!key.billing_limits||snapshot.fetchedAt>=key.billing_limits.fetchedAt){key.billing_limits=snapshot;delete key.limits_error;this.manager.observeBillingLimits?.(key);}
         const end=Date.parse(limits.windows.fiveHour.windowEnd);
@@ -184,7 +198,8 @@ export class WindowSync {
         }
         if(!limits.available)return fail(limits.reason);
         if(m.kind==='test'&&m.submittedAt)return fail('Previous test outcome is unknown; it was not replayed');
-        if(m.kind==='test'&&!(end>this.now()))return fail('Window ended; use Start now');
+        if(m.kind==='test'&&this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))return fail('An automatic Standard start is already in progress');
+        if(m.kind==='test'&&!(end>this.now())&&(group==='standard'||this.manages(key,model.id)))return fail('Waiting for the Standard window start');
         if(m.kind==='start'&&limits.windows.fiveHour.usedPercent!==0)return fail('Factory has not reported the window reset');
         // Persist before the physical send; a crash resumes with telemetry, not a blind replay.
         m.phase='starting';m.attempts++;m.submittedAt=this.now();m.nextAttemptAt=this.now()+30000;this.save(state);

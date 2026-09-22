@@ -20,7 +20,9 @@ export function normalizeWindowSync(saved) {
       throw new Error(`Invalid saved ${group} window settings`);
   }
   if(saved.startTogether!==undefined&&typeof saved.startTogether!=='boolean')throw new Error('Invalid saved joint-start setting');
-  cfg.startTogether = saved.startTogether === true;
+  // Legacy Core/joint starts cannot force which allowance Factory consumes.
+  cfg.groups.core.enabled = false;
+  cfg.startTogether = false;
   return cfg;
 }
 
@@ -46,6 +48,7 @@ export function nextWindowStart(cfg, group, at) {
 export function validateWindowSync(value, keys, models) {
   const fail=message=>{throw Object.assign(new Error(message),{status:400});};
   if (!value || value.version!==2 || typeof value.startTogether!=='boolean' || !value.groups) fail('Reload the page: version 2 window settings are required');
+  if(value.groups.core?.enabled || value.startTogether)fail('Factory controls Core fallback; independent or joint Core starts are not supported. Reload the page.');
   const cfg=structuredClone(DEFAULT_WINDOW_SYNC);
   for (const group of GROUPS) {
     const v=value.groups[group];

@@ -32,7 +32,7 @@ assert.ok(Math.abs(counts.near/200-rows[0].share)<0.01);
 q.select(keys,'standard');const restoredKeys=structuredClone(keys),restored=make(restoredKeys);
 assert.deepEqual(Array.from({length:11},()=>q.select(keys,'standard').key.id),Array.from({length:11},()=>restored.select(restoredKeys,'standard').key.id));
 const legacy=key('legacy');legacy.quota_balance={version:1,standard:{assigned:17,credit:0.3,cost:99,ratios:{monthly:{five:2,other:1}}}};
-observeQuota(legacy);assert.equal(legacy.quota_balance.version,2);assert.equal(legacy.quota_balance.standard.assigned,17);assert.equal(legacy.quota_balance.standard.cost,undefined);
+observeQuota(legacy);assert.equal(legacy.quota_balance.version,3);assert.equal(legacy.quota_balance.standard.assigned,17);assert.equal(legacy.quota_balance.standard.cost,undefined);
 
 // Partial windows and unknown accounts do not switch off healthy peers' reset calculation.
 const unknown={id:'unknown'};rows=make([...keys,unknown]).plan([...keys,unknown],'standard');
@@ -178,14 +178,14 @@ for(const synchronized of [false,true]) {
 }
 console.log('PASS: independent windows, cold/partial data, rounded/rare/unfinished/mixed/external work, aging, reset deadlines, persistence, synchronized membership and concurrent refunds');
 
-// Two pools share a horizon only when explicitly linked; exclusions apply immediately.
+// Legacy Core/joint settings cannot extend the Standard synchronization horizon.
 {
 const now=Date.parse('2026-09-22T08:00:00Z'),H=3600000,cfg=structuredClone(DEFAULT_WINDOW_SYNC);
 const make=(id,group,h,week=1)=>({id,status:'active',last_test_result:'success',billing_limits:{fetchedAt:now,limits:{[group]:Object.fromEntries(['fiveHour','weekly','monthly'].map((n,i)=>[n,{usedPercent:i===1?week:1,windowEnd:new Date(now+(i===0?h:i===1?48:720)*H).toISOString()}]))}}});
 const keys=[make('a','standard',2),make('b','core',4,100)];for(const [g,id]of [['standard','a'],['core','b']])Object.assign(cfg.groups[g],{enabled:true,keyIds:[id]});
 const q=new QuotaAware({keys:()=>keys,sync:()=>cfg,nextStart:(at,g)=>nextWindowStart(cfg,g,at),now:()=>now});
 assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
-cfg.startTogether=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+48*H);
+cfg.startTogether=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
 keys[1].excluded=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
 keys[1].excluded=false;cfg.groups.core.keyIds=[];assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
 }

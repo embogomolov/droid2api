@@ -20,15 +20,16 @@
         <p class="footnote">Factory usage, not local token estimates. Excluded accounts cannot be selected. Unknown data is never treated as an empty quota.</p>
       </section>
       <section id="windows" hidden>
-        <div class="heading"><div><h1>Five-hour windows</h1><p>Automatically start the next window after the current one ends.</p></div><button id="reloadWindows">Reload saved settings</button></div>
-        <div class="toolbar"><div class="segmented" aria-label="Automatic start pool"><button type="button" data-sync-group="standard" aria-pressed="true">Standard</button><button type="button" data-sync-group="core" aria-pressed="false">Droid Core</button></div></div>
+        <div class="heading"><div><h1>Five-hour windows</h1><p>Start selected Standard windows together. Factory controls when Core allowance is used.</p></div><button id="reloadWindows">Reload saved settings</button></div>
         <div class="split"><form id="windowForm" class="panel stack">
           <label class="check"><input id="syncEnabled" type="checkbox">Enable automatic starts</label>
           <fieldset><legend>Accounts</legend><div id="syncKeys" class="stack tight"></div></fieldset>
           <label>Start model<select id="syncModel"></select></label><p class="hint">Each start sends a short request and uses quota. Failed checks retry automatically.</p>
           <details id="syncOptions"><summary>Working hours (optional)</summary><div class="details-body">          <label class="check"><input id="hoursEnabled" type="checkbox">Only start new cycles during working hours</label>
           <div id="hoursFields" class="two-columns" hidden><label>From<input id="hoursStart" type="time" value="09:00" required></label><label>Until<input id="hoursEnd" type="time" value="18:00" required></label></div>
-          <small id="syncTimezone"></small></div></details><label class="check"><input id="syncTogether" type="checkbox">Start both pools together</label><small id="syncTogetherHelp"></small><div class="actions"><button class="primary">Save settings</button><span id="windowSaved" class="muted" role="status"></span></div>
+          <small id="syncTimezone"></small></div></details>
+          <details><summary>Core model tests</summary><div class="details-body"><label>Test model<select id="coreTestModel"></select></label><p class="hint">Used by Test on the Core tab. Standard is consumed first. A test cannot force a Core window; its reset time appears only when Factory reports it.</p></div></details>
+          <div class="actions"><button class="primary">Save settings</button><span id="windowSaved" class="muted" role="status"></span></div>
         </form><div class="panel"><h2 id="syncPoolTitle">Standard automatic start</h2><div id="syncStatus" aria-live="polite">Loading…</div></div></div>
         <details class="below"><summary>Checks and attempts</summary><div id="syncMembers" class="table-wrap below"></div></details>
       </section>

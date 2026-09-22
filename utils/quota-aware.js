@@ -24,13 +24,13 @@ export function quotaProfile(model = '', body = {}) {
 }
 
 function stateFor(key, group) {
-  if (key.quota_balance?.version !== 2) {
+  if (key.quota_balance?.version !== 3) {
     const old = key.quota_balance;
-    key.quota_balance = { version: 2 };
+    key.quota_balance = { version: 3 };
     for (const name of ['standard','core']) if (old?.[name]) key.quota_balance[name] = {
       credit: finite(old[name].credit) ? old[name].credit : 0, assigned: old[name].assigned || 0
     };
-    // V1 per-assignment prices and percentage ratios were not trustworthy calibration.
+    // Old calibration attributed Core models by name, regardless of consumed allowance.
   }
   const s = key.quota_balance[group] ||= { credit: 0, assigned: 0 };
   s.ledger ||= {}; s.windows ||= {}; s.samples ||= [];
@@ -142,10 +142,16 @@ export class QuotaAware {
   // ponytail: online relative-share planning, not a future workload optimizer. Exact
   // deadlines cannot imply exact request capacity without upstream billing attribution.
   plan(keys,group,profile='unclassified') {
-    const now=this.now(), barrier=commonReset(this.keys(),this.sync(),group,now), busy=new Map();
-    if (barrier.ids.size) barrier.end=this.nextStart(barrier.end,group);
-    for (const p of this.pending.values()) if (p.group===group) busy.set(p.key.id,(busy.get(p.key.id)||0)+1);
+    const now=this.now(), groups=typeof group==='function'?group:()=>group, barriers=new Map(), busy=new Map();
+    for (const p of this.pending.values()) busy.set(p.key.id,(busy.get(p.key.id)||0)+1);
     const rows=keys.map(key=>{
+      const group=groups(key);
+      if(!barriers.has(group)){
+        const barrier=commonReset(this.keys(),this.sync(),group,now);
+        if(barrier.ids.size)barrier.end=this.nextStart(barrier.end,group);
+        barriers.set(group,barrier);
+      }
+      const barrier=barriers.get(group);
       observeQuota(key);
       const s=stateFor(key,group), limits=getLimitState(key,group,now);
       const budgets=WINDOWS.map(name=>{
@@ -162,7 +168,7 @@ export class QuotaAware {
         const hours=(fresh&&finite(end)?Math.max(LIMIT_CACHE_MS,end-now):PERIOD[name])/HOUR;
         return { window:name, remaining, resetAt:finite(end)?end:null, fresh, hours, ...learning };
       });
-      return { key,s,budgets,inFlight:busy.get(key.id)||0 };
+      return { key,group,s,budgets,inFlight:busy.get(key.id)||0 };
     });
     for (let i=0;i<WINDOWS.length;i++) {
       const budgets=rows.map(r=>r.budgets[i]);
@@ -194,7 +200,7 @@ export class QuotaAware {
     return rows;
   }
 
-  select(keys,group,track=false,profile='unclassified') {
+  select(keys,group,track=false,profile='unclassified',attributionKnown=()=>true) {
     const rows=this.plan(keys,group,profile);
     if (!rows.length) throw new Error('Quota aware has no eligible accounts');
     // Preserve service credits across temporary cooldowns and membership edits. An account
@@ -208,18 +214,23 @@ export class QuotaAware {
     const chosen=rows.filter(r=>r.share>0).reduce((a,b)=>!a||b.s.credit+b.share-b.inFlight>a.s.credit+a.share-a.inFlight?b:a,null);
     for (const r of rows) r.s.credit+=r.share;
     chosen.s.credit--; chosen.s.assigned++;
-    this.lastPlan[group]={at:this.now(),selected:chosen.key.id,accounts:rows.map(r=>({
-      id:r.key.id,share:r.share,mode:r.mode,inFlight:r.inFlight,limitingWindow:r.limiting.window,
+    const planId=typeof group==='function'?'requests':group;
+    this.lastPlan[planId]={at:this.now(),selected:chosen.key.id,accounts:rows.map(r=>({
+      id:r.key.id,group:r.group,share:r.share,mode:r.mode,inFlight:r.inFlight,limitingWindow:r.limiting.window,
       resetAt:r.limiting.resetAt,remaining:r.limiting.remaining,
       windows:r.budgets.map(b=>({window:b.window,confidence:b.confidence,intervals:b.intervals,fresh:b.fresh,resetAt:b.resetAt}))
     }))};
     let reservation;
     if (track) {
-      const token=Symbol(), p={key:chosen.key,group,sent:false,completed:false}; this.pending.set(token,p);
+      const token=Symbol(), p={key:chosen.key,group:chosen.group,sent:false,completed:false,attributionKnown:attributionKnown(chosen.key)}; this.pending.set(token,p);
       const ledger=ledgerFor(chosen.s,profile);
       reservation={
         sent:()=>{if (!p.sent&&this.pending.has(token)){p.sent=true;ledger.started++;this.save();}},
-        complete:()=>{if (p.sent&&!p.completed&&this.pending.has(token)){p.completed=true;ledger.completed++;this.save();}},
+        complete:()=>{if (p.sent&&!p.completed&&this.pending.has(token)){
+          p.completed=true;
+          const stableGroup=typeof group!=='function'||group(chosen.key)===p.group;
+          ledger[p.attributionKnown&&attributionKnown(chosen.key)&&stableGroup?'completed':'uncertain']++;this.save();
+        }},
         release:(rejected=false)=>{
           if (!this.pending.delete(token)) return;
           if (!p.sent||rejected) {
@@ -234,6 +245,6 @@ export class QuotaAware {
         }
       };
     }
-    return {key:chosen.key,reservation,decision:this.lastPlan[group]};
+    return {key:chosen.key,reservation,decision:this.lastPlan[planId]};
   }
 }

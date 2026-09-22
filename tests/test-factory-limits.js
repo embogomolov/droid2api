@@ -22,7 +22,7 @@ const now = Date.now();
 const windows = (percent = 0, end = now + 60_000) => Object.fromEntries(
   ['fiveHour', 'weekly', 'monthly'].map(name => [name, { usedPercent: percent, windowEnd: new Date(end).toISOString() }]));
 const key = id => ({ id, key: `fake-${id}`, status: 'active', last_test_result: 'success',
-  billing_limits: { fetchedAt: now, limits: { standard: windows(), core: windows() } } });
+  billing_limits: { fetchedAt: now, overagePreference: 'droidCore', limits: { standard: windows(), core: windows() } } });
 const reset = () => {
   pool.keys = [key('a'), key('b')]; pool.stats = {}; pool.poolGroups = [];
   pool.config = { ...savedPool.config, algorithm: 'round-robin', multiTier: { enabled: false } };
@@ -152,6 +152,19 @@ try {
   assert.equal(calls[0].body.model, 'kimi-k3');
   assert.equal(calls[0].body.reasoning_history, 'preserved');
   assert.equal(calls[0].body.max_tokens, 65536);
+  reset();pool.keys[0].billing_limits.limits.core=windows(100);
+  await (await call('/v1/chat/completions',{model:'kimi-k3',messages:[{role:'user',content:'OK'}]})).text();
+  assert.equal(calls[0].id,'a','Available Standard serves the selected Core model even when Core is exhausted');
+  assert.equal(calls[0].body.model,'kimi-k3');
+  for(const group of ['standard','core']){
+    reset();scenario='first-429';
+    if(group==='core')pool.keys[0].billing_limits.limits.standard=windows(100);
+    await (await call('/v1/chat/completions',{model:'kimi-k3',messages:[{role:'user',content:'OK'}]})).text();
+    assert.deepEqual(calls.map(c=>c.id),['a','b']);
+    assert.ok(pool.keys[0].cooldowns[group].until>Date.now(),'Cooldown belongs to the selected allowance');
+    assert.equal(pool.keys[0].cooldowns[group==='core'?'standard':'core'],undefined);
+    assert.ok(calls.every(c=>c.body.model==='kimi-k3'),'Failover never substitutes a model');
+  }
   reset(); scenario = 'all-429';
   await (await call()).text(); calls = [];
   const blocked = await call(); assert.equal(blocked.status, 429); await blocked.text();
