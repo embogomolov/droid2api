@@ -28,15 +28,22 @@ try{
  assert.throws(()=>validateWindowSync(cfg.window_sync,keys,cfg.models),/Factory controls Core/);
  const s=new WindowSync({directory,manager:{keys},readConfig:()=>cfg,now:()=>now,refresh:async secret=>keys.find(k=>k.key===secret).billing_limits,send:async()=>{throw new Error('Must not send any generation');}});
  await s.stop();
- const journal=s.load();journal.manual={core:{a:{kind:'start',phase:'starting',attempts:1,acceptedAt:now-1000,submittedAt:now-2000,responseId:'saved-result',credential:createHash('sha256').update(keys[0].key).digest('hex')}}};
- s.save(journal);await s.tick();
- const retired=s.load().manual.core.a;
- assert.equal(retired.phase,'unconfirmed');assert.equal(retired.attempts,1);assert.equal(retired.responseId,'saved-result');
+ const credential=createHash('sha256').update(keys[0].key).digest('hex');
+ const journal=s.load();journal.manual={standard:{a:{kind:'start',phase:'done',credential}},core:{}};
+ for(const phase of ['queued','starting','failed','done','unconfirmed','cancelled'])journal.manual.core[phase]={kind:'start',phase,attempts:1,credential,error:'Old start error'};
+ journal.manual.core.a={kind:'test',phase:'failed',credential,error:'Real test error'};
+ s.save(journal);cfg.window_sync.groups.standard.enabled=false;await s.tick();
+ const cleaned=JSON.parse(fs.readFileSync(s.file,'utf8'));
+ assert.deepEqual(Object.keys(cleaned.manual.core),['a'],'Remove obsolete starts from disk even when synchronization is disabled');
+ assert.deepEqual(cleaned.manual.standard,journal.manual.standard,'Preserve Standard recovery records');
+ assert.equal(s.accountAction(keys[0],'core').error,'Real test error','Keep errors from supported Core tests');
+ delete cleaned.manual.core.a;s.save(cleaned);cfg.window_sync.groups.standard.enabled=true;
+ assert.equal(s.accountAction(keys[0],'core').error,null,'Obsolete starts cannot surface as current action errors');
  assert.equal(s.routingBlock(keys[0],'kimi-k3'),null,'Legacy Core wait cannot block an active Standard window');
  assert.equal(s.manages(keys[1],'kimi-k3'),false,'A Core fallback request is not held by Standard synchronization');
  assert.equal(s.accountAction(keys[0],'core').kind,'test');assert.equal(s.accountAction(keys[0],'core').disabled,false);
  assert.throws(()=>s.requestAction('a','core','start'),/cannot force/);
- const pendingState=s.load();pendingState.manual.standard={a:{kind:'start',phase:'queued',credential:retired.credential}};
+ const pendingState=s.load();pendingState.manual.standard={a:{kind:'start',phase:'queued',credential}};
  assert.equal(s.accountAction(keys[0],'core',pendingState).disabled,true,'A pending Standard request also blocks a duplicate Core test');
  const balancer=new QuotaAware({keys:()=>keys,now:()=>now}), group=k=>getRequestQuota(k,'kimi-k3',now).group;
  const counts={a:0,b:0};for(let i=0;i<100;i++)counts[balancer.select(keys,group).key.id]++;
@@ -54,5 +61,5 @@ try{
  keys[1].billing_limits.extraUsageEnabled=false;keys[1].billing_limits.overagePreference='droidCore';
  for(const w of Object.values(keys[1].billing_limits.limits.standard))w.windowEnd=new Date(now-1).toISOString();
  assert.equal(getRequestQuota(keys[1],'kimi-k3',now).group,'standard','Standard reset resumes Standard use');
- console.log('PASS: Standard-first routing, mixed fair shares, preserved legacy attempts, no unconfirmed calibration, fallback policy and resets');
+ console.log('PASS: Standard-first routing, mixed fair shares, obsolete start cleanup, no unconfirmed calibration, fallback policy and resets');
 }finally{destroyPool();fs.rmSync(directory,{recursive:true,force:true});}

@@ -32,7 +32,7 @@ try {
   f.windows['fake-b'].end = new Date(f.time + 10_000).toISOString();
   await s.tick(); assert.equal(f.calls.length, 0);
   assert.ok(s.routingBlock(f.keys[0], f.cfg.window_sync.groups.standard.modelId));
-  assert.equal(s.routingBlock(f.keys[1], f.cfg.window_sync.groups.standard.modelId), null, 'Old active window remains usable');
+  assert.equal(s.routingBlock(f.keys[1], f.cfg.window_sync.groups.standard.modelId), 'Window ending', 'Stop dispatching near the end of an active window');
   assert.ok(s.routingBlock(f.keys[0], 'kimi-k3'), 'Core models also wait when Standard is the applicable allowance');
   f.advance(10_001); await s.tick(); assert.deepEqual(f.calls, ['a','b']);
   assert.equal(s.load().groups.standard.phase, 'starting');

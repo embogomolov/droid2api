@@ -3,6 +3,7 @@ let draft=null, dirty=false;
 const group='standard';
 function captureDraft() {
   if(!draft)return;
+  draft.stopBeforeResetSeconds=Number($('stopBeforeResetSeconds').value);
   draft.groups[group]={enabled:$('syncEnabled').checked,keyIds:[...document.querySelectorAll('[name=syncKey]:checked')].map(i=>i.value),modelId:$('syncModel').value,
     workingHours:{enabled:$('hoursEnabled').checked,start:$('hoursStart').value,end:$('hoursEnd').value}};
   draft.groups.core.modelId=$('coreTestModel').value;
@@ -14,6 +15,7 @@ export function renderWindows(force=false,showForm=false) {
   const saved=data.settings.groups[group], cycle=data.state.groups[group], phase=cycle.phase;
   let cfg=draft.groups[group];
   if(showForm){
+    $('stopBeforeResetSeconds').value=draft.stopBeforeResetSeconds;
     $('syncEnabled').checked=cfg.enabled; $('hoursEnabled').checked=cfg.workingHours.enabled;
     $('syncOptions').open=cfg.workingHours.enabled; $('hoursStart').value=cfg.workingHours.start; $('hoursEnd').value=cfg.workingHours.end;
     $('syncModel').innerHTML=data.models.filter(m=>m.group===group).map(m=>'<option value="'+e(m.id)+'">'+e(m.name)+'</option>').join('');

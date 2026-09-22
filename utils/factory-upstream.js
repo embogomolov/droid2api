@@ -85,9 +85,10 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   const clientClosed = () => { if (!res.writableFinished) abort('client_disconnected'); };
   req.once('aborted', clientClosed);
   res.once('close', clientClosed);
-  let timer, release = () => {}, session, quotaReservation;
+  let timer, release = () => {}, session, quotaReservation, finishRequest;
   const cleanup = () => {
     clearTimeout(timer); release();
+    finishRequest?.();finishRequest=null;
     if (res.writableFinished && res.statusCode < 400 && !res.locals.factoryRequest.error && res.locals.factoryRequest.success !== false) quotaReservation?.complete();
     quotaReservation?.release(); req.off('aborted', clientClosed); res.off('close', clientClosed);
   };
@@ -119,6 +120,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   const count = fixedAuth ? 1 : manager.keys.length;
   const quotaWorkload = !fixedAuth && manager.config?.algorithm === 'quota-aware' ? quotaProfile(req.body.model, req.body) : 'unclassified';
   for (let attempt = 0; attempt < count; attempt++) {
+    finishRequest?.();finishRequest=null;
     quotaReservation?.release(); quotaReservation = null;
     if (controller.signal.aborted) return null;
     let key;
@@ -211,18 +213,29 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
             images: prepared.images, reuseReason: 'native_http_fallback' });
         };
       }
-      response = await retryUnsentRequest(() => {
-        if (selectedAccount && (selectedAccount.excluded || manager.windowSync?.routingBlock(selectedAccount, req.body.model))) throw new Error('Account held before dispatch');
+      const serializedBody=usingWebSocket?null:JSON.stringify(httpBody);
+      const beforeSend = () => {
+        const blocked=selectedAccount&&(selectedAccount.excluded?'Account excluded':manager.windowSync?.routingBlock(selectedAccount,req.body.model));
+        if(blocked)throw Object.assign(new Error(blocked),{code:'WINDOW_SYNC_WAIT',factoryRequestNotSent:true});
+        if(selectedAccount&&!counting)finishRequest ||= manager.windowSync?.trackRequest(selectedAccount);
         quotaReservation?.sent();
+      };
+      response = await retryUnsentRequest(() => {
+        if(!usingWebSocket)beforeSend();
         return usingWebSocket
         ? fetchFactoryWebSocket(websocketUrl, { headers, body, signal: controller.signal, session,
-          onUsage: accountUsage })
+          onUsage: accountUsage, beforeSend })
         : fetchWithPool(httpUrl, {
-          method: 'POST', headers, body: JSON.stringify(httpBody), retry: false,
+          method: 'POST', headers, body: serializedBody, retry: false,
           signal: controller.signal, redirect: 'error'
         }); }, { signal: controller.signal, onRetry: details => logWarn(`Factory request ${requestId}: retry before send`, details) });
     } catch (error) {
       clearTimeout(timer);
+      if(error.code==='WINDOW_SYNC_WAIT'){
+        quotaReservation?.release(true);finishRequest?.();finishRequest=null;
+        if(!fixedAuth)continue;
+        res.setHeader('Retry-After','5');res.status(503).json({error:{type:'window_sync_wait',message:error.message}});return null;
+      }
       if (error.factoryRequestNotSent === true || ['connect', 'getaddrinfo'].includes(error.erroredSysCall || error.syscall)) quotaReservation?.release(true);
       observeHTTP?.(null);
       if (session && usingWebSocket && !controller.signal.aborted) {
@@ -300,6 +313,6 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     lastResponse = new Response(await response.text(), { status: response.status, headers: response.headers });
   }
   if (lastResponse) return sendError(lastResponse);
-  if (!res.destroyed) res.status(503).json({ error: { type: 'account_unavailable', message: 'No keys configured' } });
+  if (!res.destroyed) {res.setHeader('Retry-After','5');res.status(503).json({ error: { type: 'account_unavailable', message: 'No accounts available for this request' } });}
   return null;
 }

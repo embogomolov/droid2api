@@ -25,6 +25,7 @@
           <label class="check"><input id="syncEnabled" type="checkbox">Enable automatic starts</label>
           <fieldset><legend>Accounts</legend><div id="syncKeys" class="stack tight"></div></fieldset>
           <label>Start model<select id="syncModel"></select></label><p class="hint">Each start sends a short request and uses quota. Failed checks retry automatically.</p>
+          <label>Stop new requests before reset (seconds)<input id="stopBeforeResetSeconds" type="number" min="0" max="17999" step="1" value="30" required></label>
           <details id="syncOptions"><summary>Working hours (optional)</summary><div class="details-body">          <label class="check"><input id="hoursEnabled" type="checkbox">Only start new cycles during working hours</label>
           <div id="hoursFields" class="two-columns" hidden><label>From<input id="hoursStart" type="time" value="09:00" required></label><label>Until<input id="hoursEnd" type="time" value="18:00" required></label></div>
           <small id="syncTimezone"></small></div></details>

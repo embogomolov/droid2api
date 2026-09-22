@@ -26,8 +26,11 @@ export async function refresh(force=false){
   while(refreshing)await refreshing;
   refreshing=(async()=>{
     const previous=JSON.stringify(state.keys.map(k=>[k.id,k.excluded,k.status,k.last_test_result,k.notes]));
-    const jobs=[loadKeys(),api('/window-sync').then(data=>state.sync=data),api('/pool-groups').then(data=>state.pools=Array.isArray(data)?data:data.groups||data.poolGroups||[])];
-    if(force||Date.now()-lastLimits>60000)jobs.push(api('/token/limits'+(force?'?forceRefresh=true':''),'GET',undefined,45000).then(data=>{state.limits=data.keys;lastLimits=Date.now();}));
+    const limits=force||Date.now()-lastLimits>60000
+      ? api('/token/limits'+(force?'?forceRefresh=true':''),'GET',undefined,45000).then(data=>{state.limits=data.keys;lastLimits=Date.now();})
+      : Promise.resolve();
+    // Routing status must observe the completed quota refresh, including failures.
+    const jobs=[limits,limits.then(loadKeys,loadKeys),api('/window-sync').then(data=>state.sync=data),api('/pool-groups').then(data=>state.pools=Array.isArray(data)?data:data.groups||data.poolGroups||[])];
     const results=await Promise.allSettled(jobs);if(!signedIn)return;
     const errors=results.filter(r=>r.status==='rejected');
     $('accountsError').hidden=!errors.length;$('accountsError').textContent=errors.map(r=>r.reason.message).join(' ');
