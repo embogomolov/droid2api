@@ -295,7 +295,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     if ([401, 402, 403, 429].includes(response.status) || response.factoryRequestNotSent) quotaReservation?.release(true);
     const retryable = [401, 402, 429].includes(response.status) || (response.factoryRequestNotSent && response.status >= 500);
     if (!retryable || fixedAuth || response.factoryRequestAccepted) return sendError(response);
-    await manager.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), req.body.model);
+    await manager.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), req.body.model, key?.quotaGroup);
     // Consume each rejection before releasing the connection and changing accounts.
     lastResponse = new Response(await response.text(), { status: response.status, headers: response.headers });
   }

@@ -4,10 +4,11 @@ export function meter(window, stale=false) {
   if (!window || !Number.isFinite(window.usedPercent)) return '<div class="muted">No data</div><div class="meter-empty"></div><small>Awaiting Factory</small>';
   const expired=Date.parse(window.windowEnd)<=Date.now(), value=expired?0:window.usedPercent;
   const tone=stale?'stale':value>=90?'bad':value>=70?'warn':'';
-  const reset=expired||window.awaitingStart||(!window.windowEnd&&value===0)?'Starts with next use':window.windowEnd?'Reset '+date(window.windowEnd):'Reset not reported';
+  const reset=expired||window.awaitingStart||(!window.windowEnd&&value===0)?'Window not started':window.windowEnd?'Reset '+date(window.windowEnd):'Reset not reported';
   return '<div class="meter-head"><strong>'+e(value)+'%</strong><span>'+(stale?'Last reported':e(Math.max(0,100-value))+'% left')+'</span></div><div class="meter-track" role="progressbar" aria-label="Quota used'+(stale?' (stale data)':'')+'" aria-valuenow="'+Math.min(100,Math.max(0,value))+'" aria-valuemin="0" aria-valuemax="100"><div class="meter-fill '+tone+'" style="width:'+Math.min(100,Math.max(0,value))+'%"></div></div><div class="meter-note">'+e(reset)+'</div>';
 }
 export function accountStatus(key, limits) {
+  limits=key.routing?.[state.group]?.allowance||limits;
   if(key.excluded)return ['Excluded','dim','Not used by routing or automatic starts'];
   if(key.status!=='active')return [key.status==='banned'?'Blocked':'Disabled','bad',key.banned_reason||'Not eligible for routing'];
   if(key.last_test_result!=='success')return [key.last_test_result==='failed'?'Test failed':'Needs test','warn','A successful test is required'];
@@ -25,9 +26,11 @@ export function renderAccounts() {
   $('algorithmLabel').textContent='Balancing: '+(algorithms[algorithm]?.[0]||algorithm||'—');
   $('accountRows').innerHTML=keys.map(key=>{
     const snapshot=state.limits[key.id], limits=snapshot?.[state.group];
-    const status=accountStatus(key,limits), managed=state.sync?.settings.groups[state.group].enabled&&state.sync.settings.groups[state.group].keyIds.includes(key.id)&&!key.excluded;
-    const windowAction=key.routing?.[state.group]?.action||{label:'Start now',disabled:true,reason:'Refresh account status'};
-    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'">'+e(status[0])+'</span><span class="subline" title="'+e(status[2])+'">'+e(limits?.available===false?limits.reason:'')+'</span>'+(managed?'<span class="subline">Synchronized group</span>':'')+(limits?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="window" '+(windowAction.disabled?'disabled ':'')+'title="'+e(windowAction.reason)+'">'+e(windowAction.label)+'</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div>'+((windowAction.error||windowAction.disabled)?'<small class="subline">'+e(windowAction.error||windowAction.reason)+'</small>':'')+'</td></tr>';
+    const allowance=key.routing?.[state.group]?.allowance||limits, billingGroup=allowance?.group||state.group;
+    const status=accountStatus(key,limits), managed=state.sync?.settings.groups[billingGroup].enabled&&state.sync.settings.groups[billingGroup].keyIds.includes(key.id)&&!key.excluded;
+    const routingText=allowance?.available===false?allowance.reason:state.group==='core'?'Expected allowance: '+(billingGroup==='core'?'Core':'Standard'):'';
+    const windowAction=key.routing?.[state.group]?.action||{label:state.group==='core'?'Test':'Start now',disabled:true,reason:'Refresh account status'};
+    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'">'+e(status[0])+'</span><span class="subline" title="'+e(status[2])+'">'+e(routingText)+'</span>'+(managed?'<span class="subline">Synchronized Standard window</span>':'')+(allowance?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="window" '+(windowAction.disabled?'disabled ':'')+'title="'+e(windowAction.reason)+'">'+e(windowAction.label)+'</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div>'+((windowAction.error||windowAction.disabled)?'<small class="subline">'+e(windowAction.error||windowAction.reason)+'</small>':'')+'</td></tr>';
   }).join('')||'<tr><td colspan="6" class="empty">'+(state.keys.length?'No matching accounts.':'No accounts yet. Add a Factory key to begin.')+'</td></tr>';
 }
 function poolOptions(current) {
@@ -42,7 +45,7 @@ export function initAccounts(refresh) {
     state.group=button.dataset.group; document.querySelectorAll('[data-group]').forEach(b=>b.setAttribute('aria-pressed',String(b===button))); renderAccounts();
   });
   $('refreshAccounts').onclick=event=>action(event.currentTarget,()=>reload(true));
-  $('addAccount').onclick=()=>dialog('Add Factory keys','<label>Keys, one per line<textarea name="keys" rows="5" required spellcheck="false" autocomplete="off" placeholder="fk-…"></textarea></label><label>Group<select name="poolGroup">'+poolOptions('default')+'</select></label><p class="hint">Keys are imported without a test. Refresh limits, then use Start now or Test in the intended usage pool when you are ready to spend quota.</p>',async form=>{
+  $('addAccount').onclick=()=>dialog('Add Factory keys','<label>Keys, one per line<textarea name="keys" rows="5" required spellcheck="false" autocomplete="off" placeholder="fk-…"></textarea></label><label>Group<select name="poolGroup">'+poolOptions('default')+'</select></label><p class="hint">Keys are imported without a test. Refresh limits, then use Start now or Test when you are ready to spend quota. Factory consumes Standard before Core.</p>',async form=>{
     const keys=[...new Set(String(form.get('keys')).split(/\s+/).filter(Boolean))];
     if(!keys.length||keys.some(key=>!key.startsWith('fk-')))throw new Error('Every key must start with fk-.');
     const result=await api('/keys/batch','POST',{keys,poolGroup:form.get('poolGroup'),autoTest:false});
@@ -57,8 +60,8 @@ export function initAccounts(refresh) {
       const group=state.group, item=key.routing?.[group]?.action, pool=group==='core'?'Droid Core':'Standard';
       if(!item||item.disabled)return;
       return confirmAction(item.label+' · '+pool+' · '+suffix(key.id),
-        'Uses '+item.modelId+' and consumes '+pool+' quota. '+(item.kind==='start'?'Starts this account now. Automatic synchronization stays enabled for subsequent cycles.':'Sends one short test request.'),async()=>{
-          await api(endpoint+'/window-action','POST',{group,kind:item.kind});await reload();notify(item.label+' queued for '+pool+'.');
+        'Uses '+item.modelId+'. '+(group==='core'?'Sends one short test. Factory consumes Standard first; this does not force a Core window.':item.kind==='start'?'Starts the Standard window now. Synchronization stays enabled for subsequent cycles.':'Sends one short test request using Standard allowance.'),async()=>{
+          await api(endpoint+'/window-action','POST',{group,kind:item.kind});await reload();notify(item.label+' queued.');
         });
     }
     if(button.dataset.action==='edit'){

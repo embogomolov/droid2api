@@ -6,7 +6,7 @@ import { logDebug, logError, logInfo, logWarning } from './logger.js';
 import { transformToAnthropic, getAnthropicHeaders } from './transformers/request-anthropic.js';
 import { getKeyPoolConfig, getConfig, getModelById, getEndpointByType, updateConfig as updateFullConfig } from './config.js';
 import { transformToOpenAI, getOpenAIHeaders } from './transformers/request-openai.js';
-import { fetchBillingLimits, getLimitState, limitGroup, retryAfterTime, LIMIT_CACHE_MS } from './utils/factory-limits.js';
+import { fetchBillingLimits, getRequestQuota, retryAfterTime, LIMIT_CACHE_MS } from './utils/factory-limits.js';
 import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
@@ -142,10 +142,10 @@ class KeyPoolManager {
     return pending;
   }
 
-  async recordUpstreamFailure(keyId, status, retryAfter, model) {
+  async recordUpstreamFailure(keyId, status, retryAfter, model, quotaGroup) {
     const key = this.keys.find(k => k.id === keyId);
     if (!key) return;
-    const group = limitGroup(model);
+    const group = quotaGroup || getRequestQuota(key, model).group;
     if (status === 401) {
       key.status = 'disabled';
       key.last_test_result = 'failed';
@@ -179,7 +179,7 @@ class KeyPoolManager {
   async getNextKey({ excluded = new Set(), model = '', signal, reserveQuota = false, quotaWorkload = 'unclassified' } = {}) {
     // BaSui: Select only successfully tested keys; fail immediately if none exist!
     let activeKeys = (this.keys || []).filter(k =>
-      k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id) && !this.windowSync?.routingBlock(k, model)
+      k.status === 'active' && !k.excluded && k.last_test_result === 'success' && !excluded.has(k.id)
     );
 
     if (activeKeys.length === 0) {
@@ -198,13 +198,15 @@ class KeyPoolManager {
 
     await Promise.all(activeKeys.map(key => this.refreshBillingLimits(key)));
     if (signal?.aborted) throw signal.reason;
-    const states = activeKeys.map(key => ({ key, state: getLimitState(key, limitGroup(model)) }));
+    const states = activeKeys.map(key => ({ key, state: getRequestQuota(key, model) }));
     activeKeys = states.filter(({ key, state }) => !key.excluded && key.status === 'active' && state.available && !this.windowSync?.routingBlock(key, model)).map(({ key }) => key);
     if (!activeKeys.length) {
-      const retryAt = Math.min(...states.map(({ state }) => state.retryAt));
+      const held = states.some(({key,state}) => state.available && this.windowSync?.routingBlock(key,model));
+      if(held)throw Object.assign(new Error('Selected accounts are waiting for synchronized Standard windows; see the admin dashboard'),{status:503,retryAfter:5});
+      const retryAt = Math.min(...states.map(({ state }) => state.retryAt).filter(Number.isFinite));
       const error = new Error('All eligible accounts are waiting for a usage reset or Retry-After');
       error.status = 429;
-      error.retryAfter = Math.max(1, Math.ceil((retryAt - Date.now()) / 1000));
+      error.retryAfter = Number.isFinite(retryAt) ? Math.max(1, Math.ceil((retryAt - Date.now()) / 1000)) : 60;
       throw error;
     }
 
@@ -236,7 +238,7 @@ class KeyPoolManager {
       case 'max-remaining':
       case 'weighted-usage': {
         const headroom = key => {
-          const windows = getLimitState(key, limitGroup(model)).windows;
+          const windows = getRequestQuota(key, model).windows;
           const valid = Object.values(windows || {}).filter(w => !w.windowEnd || Date.parse(w.windowEnd) > Date.now());
           return valid.length ? 100 - Math.max(...valid.map(w => w.usedPercent)) : 0;
         };
@@ -246,7 +248,8 @@ class KeyPoolManager {
 
       case 'quota-aware': {
         if (process.env.CLUSTER_MODE === 'true') throw Object.assign(new Error('Quota aware requires single-process mode (CLUSTER_MODE=false); independent workers cannot share its in-flight reservations'), { status: 503 });
-        const selected = this.getQuotaBalancer().select(activeKeys, limitGroup(model), reserveQuota, quotaWorkload);
+        const selected = this.getQuotaBalancer().select(activeKeys, key => getRequestQuota(key, model).group, reserveQuota, quotaWorkload,
+          key => getRequestQuota(key, model).attributionKnown);
         keyObj = selected.key;
         quotaReservation = selected.reservation;
         logDebug('Quota aware selection', selected.decision);
@@ -311,6 +314,7 @@ class KeyPoolManager {
     return {
       keyId: keyObj.id,
       key: keyObj.key,
+      quotaGroup: getRequestQuota(keyObj, model).group,
       quotaReservation
     };
   }
@@ -932,7 +936,7 @@ class KeyPoolManager {
           key.banned_at = null;
           key.banned_reason = null;
           key.last_error = null;
-          if (key.cooldowns) delete key.cooldowns[limitGroup(modelId)];
+          if (key.cooldowns) delete key.cooldowns[getRequestQuota(key,modelId).group];
           key.last_test_result = 'success';
           await this.saveKeyPoolImmediately();
 

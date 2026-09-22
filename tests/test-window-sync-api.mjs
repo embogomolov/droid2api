@@ -27,9 +27,9 @@ try {
  // Existing single-pool settings migrate into their real usage pool without enabling the other.
  saveConfig({...getConfig(),window_sync:{enabled:true,keyIds:['b'],modelId:'kimi-k3',workingHours:{enabled:false,start:'09:00',end:'18:00'}}});
  const migrated=(await call('GET','/window-sync')).body.data.settings;
- assert.equal(migrated.groups.core.enabled,true);assert.equal(migrated.groups.standard.enabled,false);
+ assert.equal(migrated.groups.core.enabled,false);assert.equal(migrated.groups.standard.enabled,false);
  assert.equal((await call('PUT','/window-sync',migrated)).status,200);
- assert.equal(scheduler.manages(pool.keys[1], 'kimi-k3'),true);assert.equal(scheduler.manages(pool.keys[1],'claude-haiku-4-5-20251001'),false);
+ assert.equal(scheduler.manages(pool.keys[1], 'kimi-k3'),false);assert.equal(scheduler.manages(pool.keys[1],'claude-haiku-4-5-20251001'),false);
  assert.equal((await call('PUT','/config',{window_sync:migrated})).status,400,'Generic editor cannot bypass validation');
  const cfg = structuredClone(DEFAULT_WINDOW_SYNC);Object.assign(cfg.groups.standard,{enabled:true,keyIds:['a','b']});
  assert.equal((await call('PUT', '/window-sync', { ...cfg, groups:{...cfg.groups,standard:{...cfg.groups.standard,keyIds:['unknown']}} })).status, 400);
@@ -37,7 +37,7 @@ try {
  assert.deepEqual(JSON.parse(fs.readFileSync(new URL('../data/config.json', import.meta.url))).window_sync, cfg);
  const routing = (await call('GET', '/keys')).body.data.keys[0].routing;
  assert.ok(routing.standard.blocked, 'UI status uses the scheduler routing barrier');
- assert.equal(routing.core.blocked, null, 'Standard synchronization does not block Core');
+ assert.equal(routing.core.blocked, routing.standard.blocked, 'Core models still consume Standard until fallback');
  assert.equal((await pool.testKey('a')).skipped, true, 'Manual tests cannot bypass barrier');
  await assert.rejects(pool.getNextKey({ model: cfg.groups.standard.modelId }), error => error.status === 503 && error.retryAfter === 5);
  assert.equal((await call('PATCH', '/keys/a/exclusion', { excluded: true })).status, 200);
@@ -46,12 +46,13 @@ try {
 
  assert.equal((await call('POST','/keys/a/window-action',{group:'core',kind:'start'},false)).status,401);
  assert.equal((await call('POST','/keys/a/window-action',{group:'bogus',kind:'start'})).status,400);
- assert.equal((await call('POST','/keys/a/window-action',{group:'core',kind:'start'})).status,409);
- const now=Date.now();pool.keys[1].billing_limits={fetchedAt:now,limits:{core:Object.fromEntries(['fiveHour','weekly','monthly'].map(n=>[n,{usedPercent:0,windowEnd:null}]))}};
- assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'test'})).status,409);
- assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'start'})).status,200);
- assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'start'})).status,200);
- assert.equal((await call('GET','/keys')).body.data.keys.find(k=>k.id==='b').routing.core.action.label,'Starting…');
+ assert.equal((await call('POST','/keys/a/window-action',{group:'core',kind:'start'})).status,400);
+ delete pool.keys[1].limits_error;
+ const now=Date.now();pool.keys[1].billing_limits={fetchedAt:now,overagePreference:'droidCore',limits:Object.fromEntries(['standard','core'].map(g=>[g,Object.fromEntries(['fiveHour','weekly','monthly'].map(n=>[n,{usedPercent:1,windowEnd:new Date(now+3600000).toISOString()}]))]))};
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'start'})).status,400);
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'test'})).status,200);
+ assert.equal((await call('POST','/keys/b/window-action',{group:'core',kind:'test'})).status,200);
+ assert.equal((await call('GET','/keys')).body.data.keys.find(k=>k.id==='b').routing.core.action.label,'Testing…');
  fs.writeFileSync(scheduler.file, '{broken journal');
  pool.keys = [];
  assert.equal((await call('PUT', '/window-sync', { ...cfg, groups:{...cfg.groups,standard:{...cfg.groups.standard,enabled:false,modelId:'removed-model'}} })).status, 200, 'Always allow disabling after account/model removal');

@@ -14,55 +14,55 @@ async function fixture() {
   const ends={a:{},b:{}}, calls=[];
   const options={directory,manager:{keys},readConfig:()=>cfg,now:()=>now,
     refresh:async secret=>({fetchedAt:now,limits:Object.fromEntries(['standard','core'].map(g=>[g,Object.fromEntries(['fiveHour','weekly','monthly'].map(n=>[n,{usedPercent:n==='fiveHour'?(ends[secret.slice(5)][g]>now?1:0):1,windowEnd:n==='fiveHour'?(ends[secret.slice(5)][g]?new Date(ends[secret.slice(5)][g]).toISOString():null):new Date(now+24*H).toISOString()}]))]))}),
-    send:async(k,m)=>{const g=m.id.startsWith('glm')?'core':'standard';calls.push(g+':'+k.id);ends[k.id][g]=now+5*H;return {accepted:true,responseId:'fake'};}};
+    send:async(k,m)=>{const g='standard';calls.push(g+':'+k.id);ends[k.id][g]=now+5*H;return {accepted:true,responseId:'fake'};}};
   const fresh=async()=>{for(const k of keys)k.billing_limits=await options.refresh(k.key);};await fresh();
   const scheduler=async()=>{const s=new WindowSync(options);await s.stop();return s;};
   return {cfg,keys,ends,calls,options,fresh,scheduler,advance:n=>now+=n,now:()=>now};
 }
 try {
   const f=await fixture(), s=await f.scheduler();
-  Object.assign(f.cfg.window_sync.groups.core,{enabled:true,keyIds:['a','b']});
-  assert.equal(s.accountAction(f.keys[0],'core').label,'Start now');
-  s.requestAction('a','core','start');s.requestAction('a','core','start');
-  assert.equal(s.accountAction(f.keys[0],'core').label,'Starting…');
-  await s.tick();assert.deepEqual(f.calls,['core:a']);
+  Object.assign(f.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});
+  assert.equal(s.accountAction(f.keys[0],'standard').label,'Start now');
+  s.requestAction('a','standard','start');s.requestAction('a','standard','start');
+  assert.equal(s.accountAction(f.keys[0],'standard').label,'Starting…');
+  await s.tick();assert.deepEqual(f.calls,['standard:a']);
   f.advance(2001);const restored=await f.scheduler();await restored.tick();
-  assert.equal(restored.load().manual.core.a.phase,'done');assert.deepEqual(f.calls,['core:a']);
+  assert.equal(restored.load().manual.standard.a.phase,'done');assert.deepEqual(f.calls,['standard:a']);
+  assert.equal(restored.accountAction(f.keys[0],'standard').label,'Test');
+  assert.equal(restored.accountAction(f.keys[0],'standard').disabled,true);
   assert.equal(restored.accountAction(f.keys[0],'core').label,'Test');
-  assert.equal(restored.accountAction(f.keys[0],'core').disabled,true);
-  assert.equal(restored.accountAction(f.keys[0],'standard').label,'Start now');
-  assert.equal(f.cfg.window_sync.groups.core.enabled,true);
-  f.advance(5*H);await restored.tick();assert.deepEqual(f.calls,['core:a','core:a','core:b']);
+  assert.equal(f.cfg.window_sync.groups.standard.enabled,true);
+  f.advance(5*H);await restored.tick();assert.deepEqual(f.calls,['standard:a','standard:a','standard:b']);
 
   const lag=await fixture(), l=await lag.scheduler();
   lag.options.send=async()=>{lag.calls.push('sent');return {accepted:true};};
   // Construct after overriding the transport.
-  const ls=await lag.scheduler();ls.requestAction('a','core','start');await ls.tick();
+  const ls=await lag.scheduler();ls.requestAction('a','standard','start');await ls.tick();
   lag.advance(31000);await (await lag.scheduler()).tick();assert.equal(lag.calls.length,1);
-  assert.equal(ls.load().manual.core.a.phase,'starting','Accepted requests only poll telemetry');
+  assert.equal(ls.load().manual.standard.a.phase,'starting','Accepted requests only poll telemetry');
 
   const ambiguous=await fixture(), original=ambiguous.options.send;
   ambiguous.options.send=async(...args)=>{await original(...args);return {accepted:false,ambiguous:true};};
-  const a=await ambiguous.scheduler();a.requestAction('a','core','start');await a.tick();
+  const a=await ambiguous.scheduler();a.requestAction('a','standard','start');await a.tick();
   ambiguous.advance(31000);await (await ambiguous.scheduler()).tick();assert.equal(ambiguous.calls.length,1);
 
-  const test=await fixture();test.ends.a.core=test.now()+H;await test.fresh();const t=await test.scheduler();
-  t.requestAction('a','core','test');await t.tick();assert.deepEqual(test.calls,['core:a']);
+  const test=await fixture();test.ends.a.standard=test.now()+H;await test.fresh();const t=await test.scheduler();
+  t.requestAction('a','standard','test');await t.tick();assert.deepEqual(test.calls,['standard:a']);
   test.advance(31000);await (await test.scheduler()).tick();assert.equal(test.calls.length,1);
-  await test.fresh();t.requestAction('a','core','test');const journal=t.load();journal.manual.core.a.submittedAt=test.now();t.save(journal);
+  await test.fresh();t.requestAction('a','standard','test');const journal=t.load();journal.manual.standard.a.submittedAt=test.now();t.save(journal);
   await (await test.scheduler()).tick();assert.equal(test.calls.length,1,'Unknown test result must not replay');
 
   const guards=await fixture(), g=await guards.scheduler();
-  guards.keys[0].excluded=true;assert.throws(()=>g.requestAction('a','core','start'),/Enable usage/);
-  guards.keys[0].excluded=false;delete guards.keys[0].billing_limits;assert.throws(()=>g.requestAction('a','core','start'),/Refresh limits/);
+  guards.keys[0].excluded=true;assert.throws(()=>g.requestAction('a','standard','start'),/Enable usage/);
+  guards.keys[0].excluded=false;delete guards.keys[0].billing_limits;assert.throws(()=>g.requestAction('a','standard','start'),/Refresh limits/);
   assert.throws(()=>g.requestAction('a','wrong','start'),/pool/);
-  await guards.fresh();guards.keys[0].billing_limits.limits.core.weekly.usedPercent=100;
-  assert.throws(()=>g.requestAction('a','core','start'),/limit/);
+  await guards.fresh();guards.keys[0].billing_limits.limits.standard.weekly.usedPercent=100;
+  assert.throws(()=>g.requestAction('a','standard','start'),/limit/);
 
-  const concurrent=await fixture();Object.assign(concurrent.cfg.window_sync.groups.core,{enabled:true,keyIds:['a','b']});
+  const concurrent=await fixture();Object.assign(concurrent.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});
   const c=await concurrent.scheduler(), refresh=concurrent.options.refresh;let queued=false;
-  c.refresh=async(...args)=>{if(!queued){queued=true;c.requestAction('a','core','start');}return refresh(...args);};
+  c.refresh=async(...args)=>{if(!queued){queued=true;c.requestAction('a','standard','start');}return refresh(...args);};
   await c.tick();assert.equal(concurrent.calls.length,0,'Enqueue during readiness prevents automatic dispatch');
-  await c.tick();assert.deepEqual(concurrent.calls,['core:a']);
+  await c.tick();assert.deepEqual(concurrent.calls,['standard:a']);
   console.log('PASS: pool-specific manual start/test, duplicate clicks, restart, telemetry lag, ambiguous outcome, sync handoff, guards and concurrent enqueue');
 } finally { destroyPool();for(const directory of directories)fs.rmSync(directory,{recursive:true,force:true}); }

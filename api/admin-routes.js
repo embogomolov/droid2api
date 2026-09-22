@@ -4,6 +4,7 @@ import path from 'path';
 import keyPoolManager from '../auth.js';
 import { logInfo, logError } from '../logger.js';
 import { getWindowSync, validateWindowSync } from '../utils/window-sync.js';
+import { getRequestQuota } from '../utils/factory-limits.js';
 import { updateConfig as updateFullConfig, saveConfig, loadConfig, getNotesMaxLength, getConfig } from '../config.js';
 import {
   sendSuccessResponse,
@@ -72,10 +73,10 @@ router.get('/keys', wrapAsync(async (req, res) => {
     [['standard', 'claude-haiku-4-5-20251001'], ['core', 'kimi-k3']].map(([group, model]) => {
       let blocked = null, action;
       try { blocked = getWindowSync(keyPoolManager).routingBlock(key, model);action=getWindowSync(keyPoolManager).accountAction(key,group); }
-      catch { blocked = 'Window synchronization status is unavailable';action={kind:'start',label:'Start now',disabled:true,reason:blocked}; }
-      const plan = keyPoolManager.config.algorithm === 'quota-aware' ? keyPoolManager.quotaBalancer?.lastPlan[group] : null;
+      catch { blocked = 'Window synchronization status is unavailable';action={kind:group==='core'?'test':'start',label:group==='core'?'Test':'Start now',disabled:true,reason:blocked}; }
+      const plan = keyPoolManager.config.algorithm === 'quota-aware' ? keyPoolManager.quotaBalancer?.lastPlan.requests || keyPoolManager.quotaBalancer?.lastPlan[group] : null;
       const decision = plan?.accounts.find(account => account.id === key.id);
-      return [group, { blocked, action, quota: decision ? { ...decision, at: plan.at, selected: plan.selected === key.id } : null }];
+      return [group, { blocked, action, allowance:getRequestQuota(key,model), quota: decision ? { ...decision, at: plan.at, selected: plan.selected === key.id } : null }];
     })
   ) }));
 

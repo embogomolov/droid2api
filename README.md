@@ -106,6 +106,12 @@ Choose a policy under **Settings → Balancing → Save balancing**.
 `weighted-usage` remains accepted in saved configurations as an alias of
 `max-remaining`; it is not a separate option in the interface.
 
+The model in each client request is preserved. Routing chooses an account, using
+its Standard allowance first. A Core-eligible model can use the account's Core
+allowance when Standard is reported exhausted and its Factory fallback preference
+is Droid Core. The proxy does not enable fallback or prepaid usage on the account.
+Unknown fallback settings never imply free Core allowance.
+
 Quota aware uses Factory's remaining percentages and reset dates immediately. It
 compares remaining percentage per hour between accounts **within each window**,
 normalizes those values into relative shares, then uses each account's most restrictive
@@ -115,8 +121,9 @@ requests reserve their place immediately. Unsent or explicitly rejected requests
 refund that reservation; token counting is not generation work.
 
 Consumption estimates refine each window independently, per account, usage pool,
-model, coarse context-size band and reasoning setting. Only successful completions
-contribute to these estimates. At least three intervals, each with eight settled
+model, coarse context-size band and reasoning setting. Only successful completions with a consistent applicable allowance
+contribute to these estimates. Core attribution without a reported active Core
+window is uncertain and cannot train a price. At least three intervals, each with eight settled
 completions and a usage increase over two percentage points, are required. The
 calculation allows two minutes around cohort boundaries for telemetry lag and a
 two-point rounding uncertainty. These are conservative estimation allowances, not
@@ -166,62 +173,54 @@ exclusion; test, status, and quota requirements still apply. Already-sent reques
 can finish.
 
 Turning off **Enable automatic starts** stops automatic start requests and releases
-that pool's synchronization barrier. Accounts remain available for normal client requests.
+the Standard synchronization barrier. Accounts remain available for normal client requests.
 It does not undo a window that has already started.
 
 These controls govern this proxy only. A client using a built-in Factory model
 instead of the proxy can consume its logged-in Factory account directly.
 
-On **Accounts**, the action follows the selected **Standard / Droid Core** tab:
-**Start now** starts an inactive window; **Starting…** means the request is queued
-or its window is being verified; **Test** sends one short request within an active
-window. Tests are disabled for accounts managed by that pool's synchronization.
-Unavailable actions show the reason. Both actions use that pool's start model from
-**Five-hour windows**. New configurations default to Luna for Standard and
-GLM-5.3-Flash for Core; saved model choices are preserved.
+On **Accounts**, **Start now** starts a Standard window; **Starting…** means the
+request is queued or awaiting confirmation. **Test** checks a model with one short
+request. The Core tab offers **Test**, never a forced Core start. Factory consumes
+Standard first, so a Core model test may consume Standard. It does not guarantee
+that a Core window will start. Unavailable actions show the reason.
 
-A manual start leaves synchronization enabled. The scheduler records the attempt,
-checks Factory's window before retrying, and waits for current group windows to end
-before the next automatic cycle. Manual starts are explicit and may run outside
-configured automatic working hours. A test with an unknown outcome is not replayed.
+The Standard start model and Core test model are selected in **Five-hour windows**.
+Defaults are Luna and GLM-5.3-Flash respectively; saved model choices are preserved.
+A manual Standard start leaves synchronization enabled for subsequent cycles.
+Attempts survive restarts; accepted requests are checked through telemetry and are
+not replayed. Tests with unknown outcomes are not automatically replayed.
 
 ### Automatic five-hour starts
 
-In **Five-hour windows**, select **Standard** or **Droid Core**, choose accounts
-and a start model, enable **Enable automatic starts**, and save. Each pool has its
-own selection, model, working hours and persistent cycle. Switching pools preserves
-unsaved edits; **Save settings** saves both. An account can belong to both pools.
-Automatic starts and working hours are off by default. Existing single-pool settings
-and attempts migrate to their original pool; the other pool stays off.
+Select Standard accounts and a start model, enable **Enable automatic starts**,
+and save. Working hours are optional and off by default. Selected accounts whose
+Standard windows have ended wait until all included participants are ready and
+have weekly/monthly allowance. Active windows remain usable.
 
-Pools start independently unless **Start both pools together** is enabled. Joint
-starts wait for both groups, then send a separate request for each account/pool.
-Their working hours must overlap. Disabling either pool removes it from the barrier.
-Quota aware uses the same group membership and joint scheduling horizon.
+- Removing an account from the selection or excluding it takes effect immediately.
+  New participants added during a launch join the next cycle.
+- Disabled, untested or exhausted participants can hold the group. Remove them
+  from the selection or disable synchronization to let other accounts proceed.
+- Start requests run in parallel with a 32-output-token cap and consume quota.
+- Failed quota checks retry with backoff. Accepted requests await telemetry without
+  another generation. Ambiguous transport failures are checked before a retry;
+  exactly simultaneous or exactly-once starts cannot be guaranteed.
+- Working hours limit new cycles, in the server timezone. In-progress cycles finish
+  outside those hours. Starting the proxy may activate ready Standard windows.
 
-- Active windows remain usable. Selected accounts whose windows have ended wait
-  until the whole included group is ready and has weekly and monthly quota.
-- Removing a member or excluding an account takes effect without restarting.
-  New members added during a launch join the next cycle. Changing independent/joint
-  mode affects the next cycle; an in-progress cycle retains its original partners.
-- Excluded accounts are omitted. Selected disabled, untested, or exhausted accounts
-  can block the group. Remove them from the selection or disable synchronization
-  to let other accounts work independently.
-- Short start requests run in parallel with a 32-output-token cap. They consume
-  quota; normal client budgets are unaffected.
-- Failed checks retry with backoff. Ambiguous generation failures trigger fresh
-  quota checks before retrying. Successful starts are verified without replaying
-  the generation. Delayed telemetry can make an ambiguous retry redundant;
-  simultaneous or exactly-once starts are not guaranteed. If a confirmed window
-  expires while another participant is still pending, it is checked and started again.
-- Working hours use the server timezone and limit new cycles. A cycle in progress
-  can finish outside those hours.
-- Attempts survive restarts. Starting the proxy with this feature enabled can start
-  ready windows without any client request. A single selected account is supported.
+Factory controls Core fallback; selecting a Core model does not select a billing
+pool. Independent and joint Core starts are unsupported. Saved Core automatic-start
+settings are ignored, while model choices and attempt records are preserved. Old
+pending Core starts stop without replay and cannot block ordinary requests.
 
-The panel separates the window end from the next telemetry check and explains why
-the group is waiting. **Checks and attempts** contains per-account details.
-Synchronization cannot increase quota or reset an active Factory window.
+Core reset times come only from `limits.core.fiveHour.windowEnd` in Factory's
+billing response. A missing date remains unknown; HTTP 200 never invents a reset.
+**Accounts** displays the expected allowance for Core-model routing separately
+from the two sets of usage meters.
+
+The panel distinguishes window resets from quota-check times. Synchronization
+cannot increase quota or reset an active Factory window.
 
 ## Models and clients
 

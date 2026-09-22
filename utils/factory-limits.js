@@ -5,7 +5,24 @@ export const LIMIT_CACHE_MS = 60_000;
 export const WINDOWS = ['fiveHour', 'weekly', 'monthly'];
 
 export function limitGroup(model = '') {
+  // Model eligibility, NOT the account's currently consumed allowance.
   return /^(glm-|kimi-|minimax-|deepseek-)/i.test(model) ? 'core' : 'standard';
+}
+
+export function getRequestQuota(key, model = '', now = Date.now()) {
+  const standard = getLimitState(key, 'standard', now);
+  const exhausted = WINDOWS.some(name => standard.windows?.[name]?.usedPercent >= 100 && Date.parse(standard.windows[name].windowEnd) > now);
+  const fallback = key.billing_limits?.overagePreference;
+  const core = limitGroup(model) === 'core';
+  const group = core && exhausted && fallback === 'droidCore' ? 'core' : 'standard';
+  const state = group === 'core' ? getLimitState(key, group, now) : standard;
+  const policyKnown = !core || !exhausted || ['droidCore', 'extraUsage', 'none'].includes(fallback);
+  // A displayed limit and HTTP 200 do not prove the billed pool. In particular, do
+  // not train Core prices until Factory reports an actual Core window.
+  const attributionKnown = policyKnown && standard.known && !standard.stale && state.known && !state.stale &&
+    !key.limits_error && !state.extraUsage && (group !== 'core' || Date.parse(state.windows?.fiveHour?.windowEnd) > now);
+  return { ...state, group, attributionKnown,
+    reason: !policyKnown ? 'Refresh Factory fallback settings before using Core allowance' : state.reason };
 }
 
 // Unknown or expired measurements are never converted into a zero allowance.
@@ -68,6 +85,7 @@ export async function fetchBillingLimits(apiKey, { signal, fetchImpl = fetch } =
   }
   if (!Object.values(limits).some(windows => Object.keys(windows).length)) throw new Error('Limits API returned no usable usage windows');
   return { limits, fetchedAt: Date.now(),
+    overagePreference: ['droidCore', 'extraUsage'].includes(data.overagePreference) ? data.overagePreference : data.overagePreference == null ? 'none' : 'unknown',
     // Respect an already-enabled prepaid account setting; never enable paid usage here.
     extraUsageEnabled: data.overagePreference === 'extraUsage' && data.extraUsageAllowed === true && data.extraUsageBalanceCents > 0 };
 }

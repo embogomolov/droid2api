@@ -1,16 +1,12 @@
 import {$,state,api,escape as e,suffix,date,action,notify} from './ui.js';
-let draft=null, group='standard', dirty=false;
-const poolName=g=>g==='core'?'Droid Core':'Standard';
+let draft=null, dirty=false;
+const group='standard';
 function captureDraft() {
   if(!draft)return;
   draft.groups[group]={enabled:$('syncEnabled').checked,keyIds:[...document.querySelectorAll('[name=syncKey]:checked')].map(i=>i.value),modelId:$('syncModel').value,
     workingHours:{enabled:$('hoursEnabled').checked,start:$('hoursStart').value,end:$('hoursEnd').value}};
-  draft.startTogether=$('syncTogether').checked&&Object.values(draft.groups).every(g=>g.enabled);
-}
-function renderTogether() {
-  $('syncTogether').disabled=!Object.values(draft.groups).every(g=>g.enabled);
-  $('syncTogether').checked=draft.startTogether;
-  $('syncTogetherHelp').textContent=$('syncTogether').disabled?'Enable automatic starts in both pools to link them.':draft.startTogether?'Both pools wait for all selected accounts. Each pool sends its own start request.':'Each pool starts independently. Settings for both pools are saved together.';
+  draft.groups.core.modelId=$('coreTestModel').value;
+  draft.groups.core.enabled=false;draft.startTogether=false;
 }
 export function renderWindows(force=false,showForm=false) {
   const data=state.sync; if(!data)return;
@@ -23,6 +19,9 @@ export function renderWindows(force=false,showForm=false) {
     $('syncModel').innerHTML=data.models.filter(m=>m.group===group).map(m=>'<option value="'+e(m.id)+'">'+e(m.name)+'</option>').join('');
     if(!data.models.some(m=>m.id===cfg.modelId))$('syncModel').add(new Option(cfg.modelId+' (removed)',cfg.modelId));
     $('syncModel').value=cfg.modelId;
+    $('coreTestModel').innerHTML=data.models.filter(m=>m.group==='core').map(m=>'<option value="'+e(m.id)+'">'+e(m.name)+'</option>').join('');
+    if(!data.models.some(m=>m.id===draft.groups.core.modelId))$('coreTestModel').add(new Option(draft.groups.core.modelId+' (removed)',draft.groups.core.modelId));
+    $('coreTestModel').value=draft.groups.core.modelId;
     $('syncKeys').innerHTML=data.keys.map(key=>{
       const name=state.keys.find(k=>k.id===key.id)?.notes;
       return '<label class="check"><input type="checkbox" name="syncKey" value="'+e(key.id)+'" '+(cfg.keyIds.includes(key.id)?'checked':'')+'><span>'+e(name&&!name.startsWith('Imported at ')?name:suffix(key.id))+(key.excluded?' <small>Excluded — omitted</small>':!key.tested?' <small>Needs test</small>':'')+'</span></label>';
@@ -30,9 +29,7 @@ export function renderWindows(force=false,showForm=false) {
     for(const id of cfg.keyIds.filter(id=>!data.keys.some(k=>k.id===id)))$('syncKeys').insertAdjacentHTML('beforeend','<label class="check"><input type="checkbox" name="syncKey" value="'+e(id)+'" checked><span>'+e(suffix(id))+' <small>Removed — uncheck to save</small></span></label>');
     $('windowSaved').textContent=dirty?'Unsaved changes':'Saved configuration';
   }
-  cfg=saved;renderTogether();
-  document.querySelectorAll('[data-sync-group]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.syncGroup===group)));
-  $('syncPoolTitle').textContent=poolName(group)+' automatic start';
+  cfg=saved;
   $('hoursFields').hidden=!$('hoursEnabled').checked;
   $('syncTimezone').textContent='Server timezone: '+data.timezone;
   const selected=cfg.keyIds.map(id=>({key:data.keys.find(key=>key.id===id), member:cycle.members[id]||{}}));
@@ -52,9 +49,6 @@ export function renderWindows(force=false,showForm=false) {
   else if(futureEnds.length){title=included.length===1?'Current window is still running':'Waiting for current windows to end';explanation='You can keep using available accounts. Automatic starts wait until every selected window has ended.';}
   else if(cycle.message==='Waiting for configured working hours'){title='Waiting for working hours';explanation='The next automatic start is outside the allowed schedule.';}
   else {title='Checking readiness';explanation='Factory must confirm that the selected accounts are ready before a start request is sent.';}
-  const partners=phase==='starting'?cycle.partners||[group]:data.settings.startTogether?['standard','core']:[group];
-  const other=partners.find(g=>g!==group&&data.settings.groups[g].enabled&&data.settings.groups[g].keyIds.some(id=>data.keys.some(k=>k.id===id&&!k.excluded)));
-  if(cfg.enabled&&other)explanation+=' Linked with '+poolName(other)+': the current start waits for both pools.';
   const check=cycle.nextCheckAt;
   const nextCheck=check>Date.now()?new Date(check).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Due now';
   const model=data.models.find(model=>model.id===cfg.modelId)?.name||cfg.modelId;
@@ -70,8 +64,7 @@ export function renderWindows(force=false,showForm=false) {
   }).join('')+'</tbody></table>';
 }
 export function initWindows(refresh) {
-  $('windowForm').oninput=()=>{captureDraft();dirty=true;renderTogether();$('windowSaved').textContent='Unsaved changes';$('hoursFields').hidden=!$('hoursEnabled').checked;};
-  document.querySelectorAll('[data-sync-group]').forEach(button=>button.onclick=()=>{captureDraft();group=button.dataset.syncGroup;renderWindows(false,true);});
+  $('windowForm').oninput=()=>{captureDraft();dirty=true;$('windowSaved').textContent='Unsaved changes';$('hoursFields').hidden=!$('hoursEnabled').checked;};
   $('reloadWindows').onclick=event=>action(event.currentTarget,async()=>{state.sync=await api('/window-sync');renderWindows(true);});
   $('windowForm').onsubmit=event=>{
     event.preventDefault();action(event.submitter,async()=>{

@@ -33,7 +33,7 @@ try {
   await s.tick(); assert.equal(f.calls.length, 0);
   assert.ok(s.routingBlock(f.keys[0], f.cfg.window_sync.groups.standard.modelId));
   assert.equal(s.routingBlock(f.keys[1], f.cfg.window_sync.groups.standard.modelId), null, 'Old active window remains usable');
-  assert.equal(s.routingBlock(f.keys[0], 'kimi-k3'), null, 'Other usage pool is independent');
+  assert.ok(s.routingBlock(f.keys[0], 'kimi-k3'), 'Core models also wait when Standard is the applicable allowance');
   f.advance(10_001); await s.tick(); assert.deepEqual(f.calls, ['a','b']);
   assert.equal(s.load().groups.standard.phase, 'starting');
   assert.ok(s.routingBlock(f.keys[0], f.cfg.window_sync.groups.standard.modelId), 'Accepted account waits for full group');
