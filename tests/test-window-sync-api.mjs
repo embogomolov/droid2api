@@ -22,6 +22,7 @@ const call = async (method, path, body, auth = true) => {
 try {
  assert.equal((await call('GET', '/window-sync', null, false)).status, 401);
  const initial = await call('GET', '/window-sync'); assert.equal(initial.status, 200); assert.equal(initial.body.data.settings.groups.standard.enabled, false);
+ assert.equal(initial.body.data.settings.stopBeforeResetSeconds,30);
  assert.equal(initial.body.data.settings.groups.standard.workingHours.enabled, false);
  assert.equal(JSON.stringify(initial.body).includes('fake-a'), false, 'Admin status must not expose credentials');
  // Existing single-pool settings migrate into their real usage pool without enabling the other.
@@ -32,9 +33,12 @@ try {
  assert.equal(scheduler.manages(pool.keys[1], 'kimi-k3'),false);assert.equal(scheduler.manages(pool.keys[1],'claude-haiku-4-5-20251001'),false);
  assert.equal((await call('PUT','/config',{window_sync:migrated})).status,400,'Generic editor cannot bypass validation');
  const cfg = structuredClone(DEFAULT_WINDOW_SYNC);Object.assign(cfg.groups.standard,{enabled:true,keyIds:['a','b']});
+ cfg.stopBeforeResetSeconds=45;
+ assert.equal((await call('PUT','/window-sync',{...cfg,stopBeforeResetSeconds:-1})).status,400);
  assert.equal((await call('PUT', '/window-sync', { ...cfg, groups:{...cfg.groups,standard:{...cfg.groups.standard,keyIds:['unknown']}} })).status, 400);
  assert.equal((await call('PUT', '/window-sync', cfg)).status, 200);
  assert.deepEqual(JSON.parse(fs.readFileSync(new URL('../data/config.json', import.meta.url))).window_sync, cfg);
+ assert.equal((await call('GET','/window-sync')).body.data.settings.stopBeforeResetSeconds,45);
  const routing = (await call('GET', '/keys')).body.data.keys[0].routing;
  assert.ok(routing.standard.blocked, 'UI status uses the scheduler routing barrier');
  assert.equal(routing.core.blocked, routing.standard.blocked, 'Core models still consume Standard until fallback');

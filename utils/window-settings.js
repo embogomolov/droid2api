@@ -3,13 +3,15 @@ import { limitGroup } from './factory-limits.js';
 export const GROUPS = ['standard', 'core'];
 const groupDefaults = modelId => ({ enabled: false, keyIds: [], modelId,
   workingHours: { enabled: false, start: '09:00', end: '18:00' } });
-export const DEFAULT_WINDOW_SYNC = { version: 2, startTogether: false, groups: {
+export const DEFAULT_WINDOW_SYNC = { version: 2, startTogether: false, stopBeforeResetSeconds: 30, groups: {
   standard: groupDefaults('gpt-5.6-luna'), core: groupDefaults('glm-5.3-flash')
 } };
 
 export function normalizeWindowSync(saved) {
   const cfg = structuredClone(DEFAULT_WINDOW_SYNC);
   if (!saved) return cfg;
+  cfg.stopBeforeResetSeconds = saved.stopBeforeResetSeconds ?? 30;
+  if(!validStopInterval(cfg.stopBeforeResetSeconds))throw new Error('Stop-before-reset interval must be a whole number from 0 to 17999 seconds');
   if (saved.version !== undefined && ![1, 2].includes(saved.version)) throw new Error('Unsupported window settings version');
   const groups = saved.groups || { [limitGroup(saved.modelId)]: saved };
   for (const group of GROUPS) if (groups[group]) cfg.groups[group] = {
@@ -27,6 +29,7 @@ export function normalizeWindowSync(saved) {
 }
 
 const validHours=h=>h&&typeof h.enabled==='boolean'&&[h.start,h.end].every(t=>typeof t==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(t))&&(!h.enabled||h.start!==h.end);
+const validStopInterval=value=>Number.isInteger(value)&&value>=0&&value<18000;
 const minute = text => { const [h,m] = text.split(':').map(Number); return h*60+m; };
 function allowed(hours, m) {
   if (!hours.enabled) return true;
@@ -50,6 +53,8 @@ export function validateWindowSync(value, keys, models) {
   if (!value || value.version!==2 || typeof value.startTogether!=='boolean' || !value.groups) fail('Reload the page: version 2 window settings are required');
   if(value.groups.core?.enabled || value.startTogether)fail('Factory controls Core fallback; independent or joint Core starts are not supported. Reload the page.');
   const cfg=structuredClone(DEFAULT_WINDOW_SYNC);
+  cfg.stopBeforeResetSeconds=value.stopBeforeResetSeconds??30;
+  if(!validStopInterval(cfg.stopBeforeResetSeconds))fail('Stop-before-reset interval must be a whole number from 0 to 17999 seconds');
   for (const group of GROUPS) {
     const v=value.groups[group];
     if(!v||typeof v.enabled!=='boolean')fail(`${group}: enabled must be a boolean`);

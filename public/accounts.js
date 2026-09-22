@@ -14,7 +14,7 @@ export function accountStatus(key, limits) {
   if(key.last_test_result!=='success')return [key.last_test_result==='failed'?'Test failed':'Needs test','warn','A successful test is required'];
   if(limits?.available===false)return ['Limit / cooldown','bad',limits.reason+(limits.retryAt?' · '+date(limits.retryAt):'')];
   const route=key.routing?.[state.group];
-  if(route?.blocked)return ['Waiting for group','warn',route.blocked];
+  if(route?.blocked)return [route.blocked==='Window ending'?'Window ending':'Waiting for group','warn',route.blocked];
   if(!limits?.known || limits.stale)return ['Needs quota refresh','warn','Last data is missing or stale; routing rechecks it'];
   return ['Eligible','','Selection follows your balancing policy'];
 }
@@ -27,10 +27,10 @@ export function renderAccounts() {
   $('accountRows').innerHTML=keys.map(key=>{
     const snapshot=state.limits[key.id], limits=snapshot?.[state.group];
     const allowance=key.routing?.[state.group]?.allowance||limits, billingGroup=allowance?.group||state.group;
-    const status=accountStatus(key,limits), managed=state.sync?.settings.groups[billingGroup].enabled&&state.sync.settings.groups[billingGroup].keyIds.includes(key.id)&&!key.excluded;
-    const routingText=allowance?.available===false?allowance.reason:state.group==='core'?'Expected allowance: '+(billingGroup==='core'?'Core':'Standard'):'';
+    const status=accountStatus(key,limits);
     const windowAction=key.routing?.[state.group]?.action||{label:state.group==='core'?'Test':'Start now',disabled:true,reason:'Refresh account status'};
-    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'">'+e(status[0])+'</span><span class="subline" title="'+e(status[2])+'">'+e(routingText)+'</span>'+(managed?'<span class="subline">Synchronized Standard window</span>':'')+(allowance?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="window" '+(windowAction.disabled?'disabled ':'')+'title="'+e(windowAction.reason)+'">'+e(windowAction.label)+'</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div>'+((windowAction.error||windowAction.disabled)?'<small class="subline">'+e(windowAction.error||windowAction.reason)+'</small>':'')+'</td></tr>';
+    const routingText=allowance?.available===false?allowance.reason:key.routing?.[state.group]?.blocked?'':windowAction.error||(state.group==='core'&&status[0]==='Eligible'?'Quota: '+(billingGroup==='core'?'Core':'Standard'):'');
+    return '<tr data-account="'+e(key.id)+'"><td><span class="account-name" title="'+e(key.notes||suffix(key.id))+'">'+e(key.notes||suffix(key.id))+'</span><span class="subline">'+e(key.notes?suffix(key.id):key.poolGroup||'default')+'</span><span class="subline">Updated '+e(date(snapshot?.fetchedAt))+(snapshot?.error?' · refresh failed':'')+'</span></td><td><span class="badge '+status[1]+'" title="'+e(status[2])+'">'+e(status[0])+'</span>'+(routingText?'<span class="subline">'+e(routingText)+'</span>':'')+(allowance?.extraUsage?'<span class="subline">Prepaid extra usage enabled</span>':'')+'</td>'+['fiveHour','weekly','monthly'].map((name,index)=>'<td data-label="'+['5 hours used','7 days used','30 days used'][index]+'">'+meter(limits?.windows?.[name],limits?.stale)+'</td>').join('')+'<td><div class="row-actions"><button data-action="window" '+(windowAction.disabled?'disabled ':'')+'title="'+e(windowAction.reason)+'">'+e(windowAction.label)+'</button><button data-action="exclude">'+(key.excluded?'Enable usage':'Disable usage')+'</button><button data-action="edit" aria-label="Details for '+e(suffix(key.id))+'">Details</button></div>'+'</td></tr>';
   }).join('')||'<tr><td colspan="6" class="empty">'+(state.keys.length?'No matching accounts.':'No accounts yet. Add a Factory key to begin.')+'</td></tr>';
 }
 function poolOptions(current) {

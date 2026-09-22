@@ -198,6 +198,12 @@ and save. Working hours are optional and off by default. Selected accounts whose
 Standard windows have ended wait until all included participants are ready and
 have weekly/monthly allowance. Active windows remain usable.
 
+**Stop new requests before reset (seconds)** defaults to **30**; **0** disables the
+advance cutoff. Selected accounts stop receiving requests, tests and retries during
+this interval. Existing requests finish, then Factory limits are refreshed before
+the next group start. The interval is saved and changes apply immediately. It is
+a safety margin, not a guarantee about Factory's processing time.
+
 - Removing an account from the selection or excluding it takes effect immediately.
   New participants added during a launch join the next cycle.
 - Disabled, untested or exhausted participants can hold the group. Remove them
@@ -211,8 +217,9 @@ have weekly/monthly allowance. Active windows remain usable.
 
 Factory controls Core fallback; selecting a Core model does not select a billing
 pool. Independent and joint Core starts are unsupported. Saved Core automatic-start
-settings are ignored, while model choices and attempt records are preserved. Old
-pending Core starts stop without replay and cannot block ordinary requests.
+settings are ignored, while model choices are preserved. Obsolete manual Core-start
+records are removed without replay. Standard starts and Core tests retain their
+recovery records.
 
 Core reset times come only from `limits.core.fiveHour.windowEnd` in Factory's
 billing response. A missing date remains unknown; HTTP 200 never invents a reset.

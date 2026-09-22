@@ -24,7 +24,7 @@ const cfg = getConfig(), savedConfig = structuredClone(cfg), savedPool = { ...po
 const fixedKey = process.env.FACTORY_API_KEY;
 delete process.env.FACTORY_API_KEY;
 const sockets = new Set();
-let frames = [], scenario = 'ok', attempts = [], httpCalls = 0, connectionCount = 0;
+let frames = [], scenario = 'ok', attempts = [], httpCalls = 0, connectionCount = 0, cutoffReached = false;
 const wss = new WebSocketServer({ noServer: true, maxPayload: 0 });
 const upstream = http.createServer(async (req, res) => {
   httpCalls++;
@@ -38,6 +38,7 @@ const upstream = http.createServer(async (req, res) => {
 upstream.on('upgrade', (req, socket, head) => {
   const id = req.headers.authorization?.replace('Bearer fake-', '');
   attempts.push(id);
+  if(scenario==='window-cutoff'&&id==='a')cutoffReached=true;
   if (scenario === 'handshake-401' && id === 'a') {
     const body = '{"error":"invalid credential"}';
     socket.end(`HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`); return;
@@ -102,6 +103,16 @@ try {
     method: 'POST', body: JSON.stringify({ model: 'gpt-6-astra', input: 'OK', ...body }), ...options,
     headers: { 'content-type': 'application/json', ...options.headers }
   });
+  reset();
+  const savedSync=pool.windowSync;let outstanding=0,tracked=0;
+  try {
+    scenario='window-cutoff';cutoffReached=false;
+    pool.windowSync={routingBlock:key=>key.id==='a'&&cutoffReached?'Window ending':null,
+      trackRequest:()=>{outstanding++;tracked++;let done=false;return()=>{if(!done){done=true;outstanding--;}};}};
+    const guarded=await call({stream:false});assert.equal(guarded.status,200);await guarded.text();
+    assert.deepEqual(frames.map(f=>f.id),['b'],'A cutoff during handshake sends no model frame to the first account');
+    assert.equal(tracked,1);assert.equal(outstanding,0,'Request drain tracking ends when the response finishes');
+  }finally{pool.windowSync=savedSync;}
   reset();
   const history = [{ role: 'user', content: [{ type: 'input_text', text: 'x'.repeat(6 * 1024 * 1024) + 'Keep this ending' }] }];
   const response = await call({ input: history, instructions: 'Custom Codex instructions', reasoning: { effort: 'high' }, stream: false,

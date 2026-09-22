@@ -17,7 +17,7 @@ export function factoryWebSocketUrl(address) {
 }
 
 // A caller holding the task lock can reuse its socket. Stateless callers remain isolated.
-export function fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout = 15_000, session, onUsage = () => {} }) {
+export function fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout = 15_000, session, onUsage = () => {}, beforeSend = () => {} }) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason || new Error('Request aborted')); return; }
     const wsHeaders = Object.fromEntries(Object.entries(headers).filter(([name]) =>
@@ -80,7 +80,9 @@ export function fetchFactoryWebSocket(address, { headers, body, signal, handshak
         }).slice(0, 4) });
     };
     const sendRequest = () => {
-      frame = JSON.stringify(fullRequest); frameRecorded = false; accepted = false;
+      frame = JSON.stringify(fullRequest);
+      try { beforeSend(); } catch(error) { fail(error);return; }
+      frameRecorded = false; accepted = false;
       frameSent = true; // Even a failed send callback does not prove non-delivery.
       socket.send(frame, error => { if (error) fail(error); });
     };
@@ -194,7 +196,7 @@ export function fetchFactoryWebSocket(address, { headers, body, signal, handshak
         // Recover only an explicit rejection of our own chain ID, once, using
         // full client history. Ambiguous disconnects are never replayed.
         finish(); resetConnection(session);
-        fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout, session, onUsage }).then(resolve, reject);
+        fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout, session, onUsage, beforeSend }).then(resolve, reject);
         return;
       }
       terminal = ['response.completed', 'response.incomplete', 'response.failed', 'error'].includes(event.type);

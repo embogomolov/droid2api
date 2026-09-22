@@ -29,7 +29,7 @@ try {
   f.advance(2001);const restored=await f.scheduler();await restored.tick();
   assert.equal(restored.load().manual.standard.a.phase,'done');assert.deepEqual(f.calls,['standard:a']);
   assert.equal(restored.accountAction(f.keys[0],'standard').label,'Test');
-  assert.equal(restored.accountAction(f.keys[0],'standard').disabled,true);
+  assert.equal(restored.accountAction(f.keys[0],'standard').disabled,false);
   assert.equal(restored.accountAction(f.keys[0],'core').label,'Test');
   assert.equal(f.cfg.window_sync.groups.standard.enabled,true);
   f.advance(5*H);await restored.tick();assert.deepEqual(f.calls,['standard:a','standard:a','standard:b']);
@@ -47,10 +47,20 @@ try {
   ambiguous.advance(31000);await (await ambiguous.scheduler()).tick();assert.equal(ambiguous.calls.length,1);
 
   const test=await fixture();test.ends.a.standard=test.now()+H;await test.fresh();const t=await test.scheduler();
+  Object.assign(test.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});
+  assert.equal(t.accountAction(test.keys[0],'standard').disabled,false,'Test is allowed in an active synchronized window');
+  assert.equal(t.accountAction(test.keys[1],'core').disabled,true,'Core test cannot open a synchronized Standard window early');
   t.requestAction('a','standard','test');await t.tick();assert.deepEqual(test.calls,['standard:a']);
   test.advance(31000);await (await test.scheduler()).tick();assert.equal(test.calls.length,1);
   await test.fresh();t.requestAction('a','standard','test');const journal=t.load();journal.manual.standard.a.submittedAt=test.now();t.save(journal);
   await (await test.scheduler()).tick();assert.equal(test.calls.length,1,'Unknown test result must not replay');
+
+  const expired=await fixture();expired.ends.a.standard=expired.now()+H;await expired.fresh();
+  Object.assign(expired.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});
+  const ex=await expired.scheduler();ex.requestAction('a','standard','test');expired.advance(H+1);
+  await ex.runManual(ex.load(),new AbortController().signal);
+  assert.equal(expired.calls.length,0,'A queued test cannot open the next window after the current one expires');
+  assert.equal(ex.load().manual.standard.a.phase,'failed');
 
   const guards=await fixture(), g=await guards.scheduler();
   guards.keys[0].excluded=true;assert.throws(()=>g.requestAction('a','standard','start'),/Enable usage/);

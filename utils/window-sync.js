@@ -53,6 +53,7 @@ export class WindowSync {
   constructor({ manager, directory = path.join(root, 'data'), readConfig = () => JSON.parse(fs.readFileSync(path.join(root, 'data/config.json'), 'utf8')), refresh = fetchBillingLimits, send = sendWindowStart, now = Date.now } = {}) {
     this.manager = manager; this.directory = directory; this.readConfig = readConfig; this.refresh = refresh; this.send = send; this.now = now;
     this.file = path.join(directory, 'window_sync.json'); this.lock = path.join(directory, 'window_sync.lock');
+    this.requests = new Map();
   }
   settings() { return normalizeWindowSync(this.readConfig().window_sync); }
   load() {
@@ -62,20 +63,21 @@ export class WindowSync {
       const state = freshState(), group = limitGroup(saved.modelId || this.readConfig().window_sync?.modelId);
       state.groups[group] = { ...saved, cycleKeyIds: Object.keys(saved.members), partners: [group] };
       delete state.groups[group].version;
-      return this.retireCoreStarts(state);
+      return this.discardCoreStarts(state);
     }
     if (saved.version !== 2 || !GROUPS.every(g => saved.groups?.[g]?.members && typeof saved.groups[g].members==='object' && !Array.isArray(saved.groups[g].members) && ['waiting','starting','active'].includes(saved.groups[g].phase) && (saved.groups[g].phase!=='starting'||Array.isArray(saved.groups[g].cycleKeyIds))))
       throw new Error('Invalid saved window-sync state; refusing to discard previous attempts');
-    return this.retireCoreStarts(saved);
+    return this.discardCoreStarts(saved);
   }
-  retireCoreStarts(state) {
-    // Preserve accepted attempts for inspection, but never replay an unsupported
-    // forced Core start or let it hold normal model requests after an upgrade.
-    for(const m of Object.values(state.manual?.core||{}))if(m.kind==='start'&&['queued','starting'].includes(m.phase)){
-      m.phase=m.submittedAt?'unconfirmed':'cancelled';
-      m.error=m.acceptedAt?'Request accepted; Core window was not confirmed. Forced Core start stopped.':
-        m.submittedAt?'Previous request outcome was not confirmed; it will not be replayed.':'Forced Core start cancelled; Factory controls the consumed allowance.';
+  discardCoreStarts(state) {
+    // Forced Core starts no longer exist. Remove their intents in every phase;
+    // real tests and Standard starts still need their journal for crash recovery.
+    let removed=false;
+    for(const [id,m] of Object.entries(state.manual?.core||{}))if(m.kind==='start'){
+      delete state.manual.core[id];removed=true;
     }
+    // Readers see the cleaned state; only the scheduler lock owner writes it.
+    if(removed&&this.ownsLock())this.save(state);
     return state;
   }
   save(state) {
@@ -92,6 +94,16 @@ export class WindowSync {
   manages(key, model = this.readConfig().key_test_model || 'claude-sonnet-4-5-20250929') {
     const cfg = this.settings().groups[getRequestQuota(key,model,this.now()).group];
     return cfg.enabled && !key.excluded && cfg.keyIds.includes(key.id);
+  }
+  closingBlock(key, model, end) {
+    const remaining=end-this.now();
+    return this.manages(key,model)&&remaining>0&&remaining<=this.settings().stopBeforeResetSeconds*1000 ? 'Window ending' : null;
+  }
+  trackRequest(key) {
+    const entry=this.requests.get(key.id)||{count:0,finishedAt:0};
+    this.requests.set(key.id,entry);entry.count++;
+    let finished=false;
+    return ()=>{if(!finished){finished=true;entry.count--;entry.finishedAt=this.now();}};
   }
   nextStartTime(at, group = 'standard') {
     const cfg=this.settings();
@@ -120,7 +132,7 @@ export class WindowSync {
     const trusted=member?.credential===identity(key);
     const end=Math.max(Date.parse(key.billing_limits?.limits?.[group]?.fiveHour?.windowEnd)||0,
       trusted ? member.confirmedEnd||0 : 0);
-    if(end>this.now())return null;
+    if(end>this.now())return this.closingBlock(key,model,end);
     if(s.cycleId&&!s.cycleKeyIds?.includes(key.id))return 'Joins the next synchronized start';
     return 'Waiting for the selected group to start its next five-hour windows';
   }
@@ -144,7 +156,8 @@ export class WindowSync {
     else if(!limits.available)reason=limits.reason;
     else if(kind==='start'&&!active&&limits.windows.fiveHour.usedPercent!==0)reason='Factory has not reported the window reset';
     else if(this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))reason='An automatic start is already in progress';
-    else if(kind==='test'&&this.manages(key,model.id)&&(group==='standard'||!active))reason='Standard automatic starts manage this window';
+    else if(this.closingBlock(key,model.id,Date.parse(limits.windows?.fiveHour?.windowEnd)))reason='Window ending';
+    else if(kind==='test'&&this.manages(key,model.id)&&!active)reason='Waiting for the synchronized Standard window start';
     const previous=state.manual?.[group]?.[key.id];
     return {kind,label:kind==='start'?'Start now':'Test',disabled:!!reason,reason:reason||(group==='core'?'Tests a Core model. Factory consumes Standard first; this does not force a Core window.':`Uses ${model.name||model.id} in Standard`),modelId:model?.id,quotaGroup:limits.group,
       error:previous?.credential===identity(key)&&['failed','unconfirmed','cancelled'].includes(previous.phase)?previous.error:null};
@@ -180,7 +193,7 @@ export class WindowSync {
       const fail=message=>{m.phase='failed';m.error=message;this.save(state);};
       if(!valid())return fail('Account removed, disabled or changed');
       if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)return fail('Start model is no longer available');
-      if(group==='standard'&&m.kind==='test'&&this.manages(key,model.id))return fail('Automatic starts now manage this pool');
+      if(m.kind==='start'&&this.requests.get(id)?.count){m.nextAttemptAt=this.now()+2000;this.save(state);return;}
       try {
         const snapshot=await this.refresh(key.key,{signal});
         if(!valid()||signal.aborted)return;
@@ -197,6 +210,7 @@ export class WindowSync {
           m.nextAttemptAt=this.now()+2000;this.save(state);return;
         }
         if(!limits.available)return fail(limits.reason);
+        if(m.kind==='test'&&this.closingBlock(key,model.id,end))return fail('Window ending');
         if(m.kind==='test'&&m.submittedAt)return fail('Previous test outcome is unknown; it was not replayed');
         if(m.kind==='test'&&this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))return fail('An automatic Standard start is already in progress');
         if(m.kind==='test'&&!(end>this.now())&&(group==='standard'||this.manages(key,model.id)))return fail('Waiting for the Standard window start');
@@ -300,6 +314,8 @@ export class WindowSync {
     await Promise.all(participants.map(async key=>{
       const m=s.members[key.id], secret=key.key;
       if(m.refreshAfter>now)return;
+      if(this.requests.get(key.id)?.count){m.ready=false;return;}
+      const checkedAt=this.now();
       try {
         // One fetch per credential in this pass, even when it participates in both pools.
         if(!reads.has(secret))reads.set(secret,this.refresh(secret,{signal}));
@@ -312,6 +328,8 @@ export class WindowSync {
           ready:(Number.isFinite(end)&&end<=this.now())||(!windows.fiveHour.windowEnd&&windows.fiveHour.usedPercent===0),
           quotaReady:['weekly','monthly'].every(n=>windows[n].usedPercent<100||Date.parse(windows[n].windowEnd)<=this.now())&&(key.cooldowns?.[group]?.until||0)<=this.now(),
           refreshError:null,refreshFailures:0,refreshAfter:0});
+        const requests=this.requests.get(key.id);
+        if(requests?.count||requests?.finishedAt>checkedAt)m.ready=false;
         if(!key.billing_limits || snapshot.fetchedAt>=key.billing_limits.fetchedAt) {
           key.billing_limits=snapshot;delete key.limits_error;this.manager.observeBillingLimits?.(key);
         }
