@@ -1,0 +1,14 @@
+{
+  "read_only": true,
+  "groups": 96,
+  "files": 829,
+  "bytes": 29114816301,
+  "timings": {
+    "python": 3.9883868000179064,
+    "rust": 2.193085000006249
+  },
+  "index_seconds": 0.13502519999747165,
+  "index_rows": 6681,
+  "stale_index_rows": 38,
+  "provider_fields": 13931
+}

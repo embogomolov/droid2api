@@ -1,0 +1,32 @@
+{
+  "scope": "Direct API key as default; masked terminal input; native Codex experimental_bearer_token",
+  "checks": [
+    "focused provider configuration and validation unit checks",
+    "Unicode masked input check",
+    "clippy all targets and features",
+    "macOS 80x24 interactive API key paste, masking, save, retry and migration fixture",
+    "Apple Silicon and Intel startup",
+    "installed zsh command resolution",
+    "installed artifact and build source hash verification"
+  ],
+  "model_requests": 0,
+  "source_sha256": {
+    "provider_migrate_rs/Cargo.toml": "a2ae30ce45699a58a141685b2349dd9a3622d85f6706ac7fe7ddd455a8eb486d",
+    "provider_migrate_rs/Cargo.lock": "6fb3c52d82015f69a2bbcc817640610b6d6640a33ae2de1fef8916e22115103b",
+    "provider_migrate_rs/src/app.rs": "d52e6823c6d2f032472f119190c2e795f6ae97626285797e996c9da969c58b0b",
+    "provider_migrate_rs/src/engine.rs": "388cc6a01d843803abde34bdbe25fb681655947faadb8c4b51dd5ed1ce486ef2",
+    "provider_migrate_rs/src/main.rs": "627c7437b17e41923e35b9f2e6934a78e15cea5b675d2a57bf546e4304c4fd95",
+    "provider_migrate_rs/src/migrate.rs": "ec5fbaece37d1d03286211d5286b08d23a04a589a6043b2cd668253e2d93df40",
+    "provider_migrate_rs/src/platform.rs": "8a00de7c850a319e9f2352cf83e4a94a7ce37619b09d577aa755a996d9b93b73",
+    "provider_migrate_rs/src/tui.rs": "242f4b4dc6ac05dc2d2f3267bff8af8a8b748369d6681a4b9762b9bb54285c1a",
+    "provider_migrate_rs/src/platform/macos.rs": "eabb692bf18ceece4c5b2bc53826ec61579e479af517f766747024c0a35e920f",
+    "provider_migrate_rs/src/platform/windows.rs": "914eac4931e6e762bce1e5f516bce29e7effe16c06ed3c24c66c32d87ee3134b",
+    "test_provider_ui.py": "96062ae597600119113694af7e6ab21376b7cb1e94fb9203fd5c43b7ace7f2b7",
+    "PROVIDER_SWITCH.md": "98654ead8f5ce63b39cc6082554bdd0e601ea4cf7f09d03d1713017817283236"
+  },
+  "artifacts_sha256": {
+    "Codex Provider Switcher.exe": "0a0dadb15ceb635dc48bd812cbee9b5a3479efa539eba000c5c25d5dd2c3d154",
+    "codex-provider-switcher": "35e97823225fc71417c814ee8b8d1cb7f4df194b8af7798a526fddf6bcc47e39",
+    "provider-switcher-macos-universal.tar.gz": "df3d8eed2c70771f56d25fb434788b6b4eb266a77e64968186560cce5b4ebdaf"
+  }
+}

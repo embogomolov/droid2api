@@ -1,0 +1,129 @@
+[
+  {
+    "phase": "initial acceptance before repetition",
+    "build": "current",
+    "passed": false,
+    "error": "thread/unarchive: no archived rollout found for thread id",
+    "cause": "not established; not reproduced in the subsequent 24 recorded runs"
+  },
+  {
+    "iteration": 0,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 0,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 1,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 1,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 2,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 2,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 3,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 3,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 4,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 4,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 5,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 5,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 6,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 6,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 7,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 7,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 8,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 8,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 9,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 9,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 10,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 10,
+    "build": "current",
+    "passed": true
+  },
+  {
+    "iteration": 11,
+    "build": "baseline",
+    "passed": true
+  },
+  {
+    "iteration": 11,
+    "build": "current",
+    "passed": true
+  }
+]

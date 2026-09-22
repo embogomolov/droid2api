@@ -1,0 +1,79 @@
+{
+  "rust": "1.96.0",
+  "shared_implementation": [
+    "catalog",
+    "TUI",
+    "record scanning",
+    "mapped and streamed copying",
+    "history indices",
+    "transactions",
+    "recovery"
+  ],
+  "platform_selection": "compile-time cfg; no subprocess adapters",
+  "targets": [
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "execution": "native Windows",
+      "unit_tests_passed": 6,
+      "fault_cases_per_copy_mode": 36,
+      "copy_modes": [
+        "automatic",
+        "forced mapped"
+      ],
+      "native_codex": "0.154.0-alpha.6.2",
+      "native_acceptance": "passed; 10 loopback mock requests"
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "execution": "native macOS 26.6, APFS",
+      "unit_tests_passed": 7,
+      "fault_cases_per_copy_mode": 36,
+      "copy_modes": [
+        "automatic",
+        "forced mapped"
+      ],
+      "pty_russian_search": "passed",
+      "unix_modes_and_hardlinks": "passed",
+      "native_codex": "0.154.0-alpha.6 (arm64)",
+      "native_acceptance": "passed; 10 loopback mock requests"
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "execution": "Rosetta on macOS 26.6, APFS; not physical Intel hardware",
+      "unit_tests_passed": 7,
+      "fault_cases_per_copy_mode": 36,
+      "copy_modes": [
+        "automatic",
+        "forced mapped"
+      ],
+      "pty_russian_search": "passed",
+      "unix_modes_and_hardlinks": "passed",
+      "native_codex": "0.154.0-alpha.6 (arm64)",
+      "native_acceptance": "passed; 10 loopback mock requests"
+    }
+  ],
+  "production_sha256": {
+    "windows": "8c83e08c675a51a1c2163ed33274910d2606482f6ede2c275bb20aac8ce6270e",
+    "macos_universal": "cba97aeea63966bacf824e08fe037dc468127a66c02a2abd16aa036a3f24f5f4"
+  },
+  "macos_dylibs": [
+    "/usr/lib/libiconv.2.dylib",
+    "/usr/lib/libSystem.B.dylib"
+  ],
+  "macos_archive_sha256": "c45fb2b2c95afee1cc5c0be6d946023150eeff959bfeeba0936cd7b51b7505c1",
+  "windows_performance": "windows-platform-parity.json; five alternating trials, exact plan and byte round-trip checks",
+  "user_history_mutations": false,
+  "external_model_requests": false,
+  "source_sha256": {
+    "provider_migrate_rs/src/app.rs": "14f5796b7dd80273047087d2e3ce75718fd2af53296deafc2bae0cd1d033bb16",
+    "provider_migrate_rs/src/engine.rs": "388cc6a01d843803abde34bdbe25fb681655947faadb8c4b51dd5ed1ce486ef2",
+    "provider_migrate_rs/src/main.rs": "627c7437b17e41923e35b9f2e6934a78e15cea5b675d2a57bf546e4304c4fd95",
+    "provider_migrate_rs/src/migrate.rs": "1f4ae8a3f2e1e9c1bd51d7ca021fbeef970bb8b37a1313d3de1393f7c13c1054",
+    "provider_migrate_rs/src/platform.rs": "8a00de7c850a319e9f2352cf83e4a94a7ce37619b09d577aa755a996d9b93b73",
+    "provider_migrate_rs/src/tui.rs": "f8f19c87c6ec29b7a539f8ef28d67900e85b9a75e80e1dfd54573f4d5d9ae73e",
+    "provider_migrate_rs/src/platform/macos.rs": "eabb692bf18ceece4c5b2bc53826ec61579e479af517f766747024c0a35e920f",
+    "provider_migrate_rs/src/platform/windows.rs": "914eac4931e6e762bce1e5f516bce29e7effe16c06ed3c24c66c32d87ee3134b",
+    "provider_migrate_rs/Cargo.toml": "0cd2264862596f65b8106a498ad76cc735f3aead88d3c04f4485289882c19987",
+    "provider_migrate_rs/Cargo.lock": "89da716b0ccb75f8fa0e025d3e9aa317e61a4fce6d637a53a5a9516b27e1e7c4"
+  }
+}

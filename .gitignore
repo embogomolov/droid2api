@@ -99,3 +99,14 @@ data/window_sync.lock
 /work/
 repair_codex_history_index.py
 *history-index-local*.cmd
+
+# Local standalone provider switcher and disposable verification data
+/Codex Provider Switcher.exe
+/Codex Provider Switcher
+/provider-switcher-macos*.tar.gz
+/.provider-tui-check-*/
+/.standalone-benchmark-*/
+/.provider-benchmark-*/
+/.copy-benchmark-*/
+
+/codex-provider-switcher

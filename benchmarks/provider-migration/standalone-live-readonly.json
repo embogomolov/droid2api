@@ -1,0 +1,10 @@
+{
+  "read_only": true,
+  "groups": 97,
+  "files": 853,
+  "bytes": 29889196323,
+  "standalone_process_seconds": 3.0468386000138707,
+  "python_plan_seconds": 5.779385899979388,
+  "equal_plans": true,
+  "repaired_indices": 38
+}

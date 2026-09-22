@@ -1,0 +1,36 @@
+{
+  "scope": "Vertical low-text terminal UI; same-terminal zsh executable",
+  "macos_install": "~/.local/bin/codex-provider-switcher",
+  "checks": [
+    "80x24 focused interactive flow",
+    "vertical keyboard and mouse navigation",
+    "theme-native foreground with reverse selection",
+    "layout bounds at 60x20, 80x24, 120x40",
+    "provider creation, default-only and conversation-only operations",
+    "optional default switch, retry after writer lock",
+    "Apple Silicon and Intel executable startup",
+    "zsh command resolution"
+  ],
+  "not_repeated": [
+    "full crash matrix",
+    "large-history benchmarks",
+    "external model calls"
+  ],
+  "source_sha256": {
+    "provider_migrate_rs/Cargo.toml": "a2ae30ce45699a58a141685b2349dd9a3622d85f6706ac7fe7ddd455a8eb486d",
+    "provider_migrate_rs/Cargo.lock": "6fb3c52d82015f69a2bbcc817640610b6d6640a33ae2de1fef8916e22115103b",
+    "provider_migrate_rs/src/app.rs": "e6a5ecc65678e1b8966bf337957c6c04f4a01591ca1f876f20a0bab54dd4462c",
+    "provider_migrate_rs/src/engine.rs": "388cc6a01d843803abde34bdbe25fb681655947faadb8c4b51dd5ed1ce486ef2",
+    "provider_migrate_rs/src/main.rs": "627c7437b17e41923e35b9f2e6934a78e15cea5b675d2a57bf546e4304c4fd95",
+    "provider_migrate_rs/src/migrate.rs": "ec5fbaece37d1d03286211d5286b08d23a04a589a6043b2cd668253e2d93df40",
+    "provider_migrate_rs/src/platform.rs": "8a00de7c850a319e9f2352cf83e4a94a7ce37619b09d577aa755a996d9b93b73",
+    "provider_migrate_rs/src/tui.rs": "bab856dd116e9870727ba03957663c8cda43edd42475b16e6e9d4e16f6ad19d7",
+    "provider_migrate_rs/src/platform/macos.rs": "eabb692bf18ceece4c5b2bc53826ec61579e479af517f766747024c0a35e920f",
+    "provider_migrate_rs/src/platform/windows.rs": "914eac4931e6e762bce1e5f516bce29e7effe16c06ed3c24c66c32d87ee3134b"
+  },
+  "artifacts_sha256": {
+    "Codex Provider Switcher.exe": "5b7b93a414f070edf46968c7840de9b709656fe97cec2c8e52bc6d44d6a35923",
+    "codex-provider-switcher": "2a81d4aca862ef604bec7b10a085fce864b157e3659fbdbcf05d846c7b552e89",
+    "provider-switcher-macos-universal.tar.gz": "9f65462d4896f6c41f8e7a3c509b404daebb86d7d2c23c97d66911b944e407d1"
+  }
+}

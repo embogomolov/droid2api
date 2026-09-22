@@ -1,0 +1,47 @@
+{
+  "scope": "Provider picker and custom-provider setup UX",
+  "targets": {
+    "windows": {
+      "unit_tests_passed": 11,
+      "fault_recovery_cases": 36,
+      "native_codex_acceptance": "passed, 10 local mock requests"
+    },
+    "macos_arm64": {
+      "unit_tests_passed": 12,
+      "fault_recovery_cases": 36,
+      "terminal_interactions": "passed"
+    },
+    "macos_x86_64_rosetta": {
+      "fault_recovery_cases": 36,
+      "terminal_interactions": "passed"
+    }
+  },
+  "terminal_checks": [
+    "Ctrl+A select all then clear",
+    "Russian task search",
+    "custom provider invalid URL and correction",
+    "bracketed paste",
+    "cancel without writes",
+    "writer lock failure then explicit retry",
+    "atomic provider creation and task migration",
+    "saved provider selectable after reload"
+  ],
+  "network_tests": "No external model requests; LAN TCP reachability checked separately",
+  "source_sha256": {
+    "provider_migrate_rs/Cargo.toml": "a2ae30ce45699a58a141685b2349dd9a3622d85f6706ac7fe7ddd455a8eb486d",
+    "provider_migrate_rs/Cargo.lock": "6fb3c52d82015f69a2bbcc817640610b6d6640a33ae2de1fef8916e22115103b",
+    "provider_migrate_rs/src/app.rs": "5bef115c7fa255173d5de9a75c80a8d7014e75877d6872d3b4b187d141ede259",
+    "provider_migrate_rs/src/engine.rs": "388cc6a01d843803abde34bdbe25fb681655947faadb8c4b51dd5ed1ce486ef2",
+    "provider_migrate_rs/src/main.rs": "627c7437b17e41923e35b9f2e6934a78e15cea5b675d2a57bf546e4304c4fd95",
+    "provider_migrate_rs/src/migrate.rs": "5e1f89688efdb8e94096b22923e5fe9733a1a6cde4a08eba50079654a459cbcb",
+    "provider_migrate_rs/src/platform.rs": "8a00de7c850a319e9f2352cf83e4a94a7ce37619b09d577aa755a996d9b93b73",
+    "provider_migrate_rs/src/tui.rs": "84117a0d1cf3d5a06ab62a3f91c447225b26b634f2a83a2df8a66366ab30183c",
+    "provider_migrate_rs/src/platform/macos.rs": "eabb692bf18ceece4c5b2bc53826ec61579e479af517f766747024c0a35e920f",
+    "provider_migrate_rs/src/platform/windows.rs": "914eac4931e6e762bce1e5f516bce29e7effe16c06ed3c24c66c32d87ee3134b"
+  },
+  "artifacts_sha256": {
+    "Codex Provider Switcher.exe": "3eb73431d3b25c6be8c2b77ffa0c3ded7866e2e844e169c86bb5cccc4d2a0e89",
+    "Codex Provider Switcher": "5bc5b77db00491ca979fb75d8e67a9c5a1d7442f1a390469384548a10b0330e9",
+    "provider-switcher-macos-universal.tar.gz": "66935529e55d4e751022568f558ec4d18fcaae8ee22e5809cf977e2dd8078f4a"
+  }
+}

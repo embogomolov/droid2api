@@ -1,0 +1,32 @@
+{
+  "scope": "Normalized multiword search and matched family labels; recursive family and image preservation audit",
+  "checks": [
+    "search normalization and label-selection unit checks",
+    "clippy all targets and features",
+    "Windows and macOS native fixture: leaf to ancestor and sibling closure; archived and edited histories; inline images; attachment bytes and SQL ownership; exact index round trip; missing connected history guard",
+    "macOS 80x24 search result label and related-count interaction",
+    "Apple Silicon and Intel startup; installed zsh command"
+  ],
+  "model_requests": 0,
+  "real_conversation_writes": 0,
+  "source_sha256": {
+    "provider_migrate_rs/Cargo.toml": "a2ae30ce45699a58a141685b2349dd9a3622d85f6706ac7fe7ddd455a8eb486d",
+    "provider_migrate_rs/Cargo.lock": "6fb3c52d82015f69a2bbcc817640610b6d6640a33ae2de1fef8916e22115103b",
+    "test_provider_family.py": "d721b90dc4ee988eb6c3348a5f3931cc434a436d5f5bf0bb8d4d68ded82a4e65",
+    "test_provider_ui.py": "5f655374800d895b76e572eadf86c3b2695c5952479b1bc67545a18ce136d9bc",
+    "PROVIDER_SWITCH.md": "cddd04efcf435b8411c694a354d96962528286a11ff4d3d4bb6feae774be7858",
+    "provider_migrate_rs/src/app.rs": "d52e6823c6d2f032472f119190c2e795f6ae97626285797e996c9da969c58b0b",
+    "provider_migrate_rs/src/engine.rs": "388cc6a01d843803abde34bdbe25fb681655947faadb8c4b51dd5ed1ce486ef2",
+    "provider_migrate_rs/src/main.rs": "627c7437b17e41923e35b9f2e6934a78e15cea5b675d2a57bf546e4304c4fd95",
+    "provider_migrate_rs/src/migrate.rs": "ec5fbaece37d1d03286211d5286b08d23a04a589a6043b2cd668253e2d93df40",
+    "provider_migrate_rs/src/platform.rs": "8a00de7c850a319e9f2352cf83e4a94a7ce37619b09d577aa755a996d9b93b73",
+    "provider_migrate_rs/src/tui.rs": "1e0931fdc3ee0b33f42b7dd5ab82c653321706dfc954f94b993b0768401930c3",
+    "provider_migrate_rs/src/platform/macos.rs": "eabb692bf18ceece4c5b2bc53826ec61579e479af517f766747024c0a35e920f",
+    "provider_migrate_rs/src/platform/windows.rs": "914eac4931e6e762bce1e5f516bce29e7effe16c06ed3c24c66c32d87ee3134b"
+  },
+  "artifacts_sha256": {
+    "provider_migrate_rs/target/release/provider-migrate.exe": "d1e25e66834ec66a615375e3c8c87fc3bada1f4d2fca16c5b98b74de9f4c1dc6",
+    "codex-provider-switcher": "28307560a1b852eacc720972552b839719def3fd4cc1af5d2b2c53468c55e3c7",
+    "provider-switcher-macos-universal.tar.gz": "5df28dc0eef00c39587aaf70a37c4046bb81f1bd07ec1ba0f242dd8bee229ae5"
+  }
+}
