@@ -98,6 +98,12 @@
       "id": "glm-5.3-flash",
       "type": "common",
       "api_provider": "fireworks"
+    },
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5",
+      "type": "anthropic",
+      "reasoning": "auto"
     }
   ],
   "dev_mode": false,
