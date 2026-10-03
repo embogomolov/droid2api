@@ -11,6 +11,7 @@ import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
 import { QuotaAware, observeQuota } from './utils/quota-aware.js';
+import { GROUPS, normalizeWindowSync } from './utils/window-settings.js';
 import {
   selectKeyByTimeWindow
 } from './utils/advanced-algorithms.js';
@@ -751,10 +752,29 @@ class KeyPoolManager {
     }
 
     const key = this.keys[index];
-    this.keys.splice(index, 1);
-    this.saveKeyPool();
+    this.deleteKeys([key]);
     logInfo(`Deleted key: ${keyId}`);
     return key;
+  }
+
+  deleteKeys(keys) {
+    if (!keys.length) return;
+    const removed = new Set(keys.map(key => key.id));
+    const settings = normalizeWindowSync(getConfig().window_sync);
+    let changed = false;
+    for (const group of GROUPS) {
+      const selection = settings.groups[group];
+      const remaining = selection.keyIds.filter(id => !removed.has(id));
+      if (remaining.length !== selection.keyIds.length) {
+        selection.keyIds = remaining;
+        if (!remaining.length) selection.enabled = false;
+        changed = true;
+      }
+    }
+    if (changed) updateFullConfig({ window_sync: settings });
+    this.keys = this.keys.filter(key => !removed.has(key.id));
+    this.saveKeyPool();
+    this.windowSync?.wake();
   }
 
   async setKeyExclusion(keyId, excluded) {
@@ -1137,8 +1157,7 @@ class KeyPoolManager {
     const disabledKeys = (this.keys || []).filter(k => k.status === 'disabled');
     const count = disabledKeys.length;
 
-    this.keys = (this.keys || []).filter(k => k.status !== 'disabled');
-    this.saveKeyPool();
+    this.deleteKeys(disabledKeys);
 
     logInfo(`Deleted ${count} disabled keys`);
     return count;
@@ -1148,8 +1167,7 @@ class KeyPoolManager {
     const bannedKeys = (this.keys || []).filter(k => k.status === 'banned');
     const count = bannedKeys.length;
 
-    this.keys = (this.keys || []).filter(k => k.status !== 'banned');
-    this.saveKeyPool();
+    this.deleteKeys(bannedKeys);
 
     logInfo(`Deleted ${count} banned keys`);
     return count;

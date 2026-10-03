@@ -328,6 +328,35 @@ router.delete('/keys/banned', wrapSync((req, res) => {
 }, 'delete banned keys'));
 
 /**
+ * DELETE /admin/keys/batch-delete
+ * Delete keys in bulk
+ * Body: { keyIds: ["key1", "key2", ...] }
+ */
+router.delete('/keys/batch-delete', wrapSync((req, res) => {
+  const { keyIds } = req.body;
+
+  if (!keyIds || !Array.isArray(keyIds) || keyIds.length === 0) {
+    return sendBadRequest(res, 'keyIds array is required and must not be empty');
+  }
+
+  let count = 0;
+  const errors = [];
+
+  keyIds.forEach(keyId => {
+    try {
+      keyPoolManager.deleteKey(keyId);
+      count++;
+    } catch (err) {
+      errors.push(`Key ${keyId}: ${err.message}`);
+    }
+  });
+
+  logInfo(`Admin batch deleted: ${count} keys`);
+
+  sendSuccessResponse(res, { count, errors }, `Successfully deleted ${count} keys`);
+}, 'batch delete keys'));
+
+/**
  * DELETE /admin/keys/:id
  * Delete a single key
  * BaSui: Place this parameterized route after specific routes to follow Express matching order!
@@ -766,33 +795,6 @@ router.patch('/keys/batch-toggle-status', wrapSync((req, res) => {
   sendSuccessResponse(res, { count, errors }, `Successfully ${action} ${count} keys`);
 }, 'batch toggle status'));
 
-/**
- * DELETE /admin/keys/batch-delete
- * Delete keys in bulk
- * Body: { keyIds: ["key1", "key2", ...] }
- */
-router.delete('/keys/batch-delete', wrapSync((req, res) => {
-  const { keyIds } = req.body;
 
-  if (!keyIds || !Array.isArray(keyIds) || keyIds.length === 0) {
-    return sendBadRequest(res, 'keyIds array is required and must not be empty');
-  }
-
-  let count = 0;
-  const errors = [];
-
-  keyIds.forEach(keyId => {
-    try {
-      keyPoolManager.deleteKey(keyId);
-      count++;
-    } catch (err) {
-      errors.push(`Key ${keyId}: ${err.message}`);
-    }
-  });
-
-  logInfo(`Admin batch deleted: ${count} keys`);
-
-  sendSuccessResponse(res, { count, errors }, `Successfully deleted ${count} keys`);
-}, 'batch delete keys'));
 
 export default router;
