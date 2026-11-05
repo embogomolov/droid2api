@@ -287,6 +287,7 @@ export function getKeyPoolConfig() {
   return {
     // Selection algorithm (env > config.json > default)
     algorithm: process.env.KEY_POOL_ALGORITHM || keyPoolCfg.algorithm || 'round-robin',
+    waitForQuota: keyPoolCfg.waitForQuota === true,
 
     // Retry settings
     retry: {

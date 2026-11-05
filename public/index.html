@@ -20,16 +20,17 @@
         <p class="footnote">Factory usage, not local token estimates. Excluded accounts cannot be selected. Unknown data is never treated as an empty quota.</p>
       </section>
       <section id="windows" hidden>
-        <div class="heading"><div><h1>Five-hour windows</h1><p>Start selected Standard windows together. Factory controls when Core allowance is used.</p></div><button id="reloadWindows">Reload saved settings</button></div>
+        <div class="heading"><div><h1>Five-hour windows</h1><p>Start the selected accounts’ windows together.</p></div><button id="reloadWindows">Reload saved settings</button></div>
+        <div class="toolbar"><div class="segmented" aria-label="Window pool"><button type="button" data-sync-group="standard" aria-pressed="true">Standard</button><button type="button" data-sync-group="core" aria-pressed="false">Droid Core</button></div></div>
+        <p id="coreSyncHint" class="hint" hidden>Core is used only after Standard is exhausted.</p>
         <div class="split"><form id="windowForm" class="panel stack">
           <label class="check"><input id="syncEnabled" type="checkbox">Enable automatic starts</label>
           <fieldset><legend>Accounts</legend><div id="syncKeys" class="stack tight"></div></fieldset>
-          <label>Start model<select id="syncModel"></select></label><p class="hint">Each start sends a short request and uses quota. Failed checks retry automatically.</p>
-          <label>Stop new requests before reset (seconds)<input id="stopBeforeResetSeconds" type="number" min="0" max="17999" step="1" value="30" required></label>
+          <label><span id="syncModelLabel">Start / test model</span><select id="syncModel"></select></label><p class="hint">Each start sends a short request and uses quota. Failed checks retry automatically.</p>
+          <label>Stop new requests before reset (seconds, both pools)<input id="stopBeforeResetSeconds" type="number" min="0" max="17999" step="1" value="30" required></label>
           <details id="syncOptions"><summary>Working hours (optional)</summary><div class="details-body">          <label class="check"><input id="hoursEnabled" type="checkbox">Only start new cycles during working hours</label>
           <div id="hoursFields" class="two-columns" hidden><label>From<input id="hoursStart" type="time" value="09:00" required></label><label>Until<input id="hoursEnd" type="time" value="18:00" required></label></div>
           <small id="syncTimezone"></small></div></details>
-          <details><summary>Core model tests</summary><div class="details-body"><label>Test model<select id="coreTestModel"></select></label><p class="hint">Used by Test on the Core tab. Standard is consumed first. A test cannot force a Core window; its reset time appears only when Factory reports it.</p></div></details>
           <div class="actions"><button class="primary">Save settings</button><span id="windowSaved" class="muted" role="status"></span></div>
         </form><div class="panel"><h2 id="syncPoolTitle">Standard automatic start</h2><div id="syncStatus" aria-live="polite">Loading…</div></div></div>
         <details class="below"><summary>Checks and attempts</summary><div id="syncMembers" class="table-wrap below"></div></details>
@@ -41,7 +42,7 @@
       </section>
       <section id="settings" hidden>
         <div class="heading"><div><h1>Settings</h1><p>Changes are saved explicitly. Refreshing data does not overwrite your edits.</p></div></div>
-        <form id="routingForm" class="panel narrow"><h2>Balancing</h2><label>Choose the next eligible account<select id="algorithm"></select></label><p id="algorithmHelp" class="hint"></p><button class="primary">Save balancing</button></form>
+        <form id="routingForm" class="panel narrow"><h2>Balancing</h2><label>Choose the next eligible account<select id="algorithm"></select></label><p id="algorithmHelp" class="hint"></p><label class="check"><input id="waitForQuota" type="checkbox">Wait for available quota</label><p class="hint">Hold requests until accounts are ready, respecting synchronized windows. Client timeouts must cover the wait.</p><button class="primary">Save balancing</button></form>
         <div class="panel below"><h2>Client endpoints</h2><dl class="endpoints"><dt>OpenAI base URL</dt><dd><code id="openaiUrl"></code></dd><dt>Anthropic base URL</dt><dd><code id="anthropicUrl"></code></dd></dl><p class="hint">Use the proxy API key configured on the server, not a Factory account key.</p></div>
         <details class="panel below"><summary>Models and advanced settings</summary><div class="details-body"><p class="hint">Edit one section at a time. Object fields merge with saved settings; arrays replace the saved list. Transport and listener changes may require a proxy restart.</p><label>Section<select id="configSection"></select></label><form id="configEditor" class="stack"><label>JSON<textarea id="configJson" class="code" rows="12" spellcheck="false" required></textarea></label><div class="actions"><button class="primary">Save section</button><button type="button" id="reloadSection">Reload section</button></div></form></div></details>
         <details class="panel below"><summary>Account groups</summary><div class="details-body"><div id="poolRows"></div><form id="poolForm" class="inline-form"><label>ID<input name="id" required pattern="[a-zA-Z0-9_-]+"></label><label>Name<input name="name" required></label><label>Priority<input name="priority" type="number" min="1" value="1" required></label><button>Add group</button></form></div></details>

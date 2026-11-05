@@ -10,6 +10,8 @@ import keyPoolManager from '../auth.js';
 import fetchWithPool, { retryUnsentRequest } from './http-client.js';
 import { logRequest, logError, logInfo, logWarn } from '../logger.js';
 import { quotaProfile } from './quota-aware.js';
+import { getRequestQuota, classifyFactoryRejection, rejectionDiagnostic } from './factory-limits.js';
+import { setTimeout as wait } from 'node:timers/promises';
 
 // Keep every original SSE byte. An EOF without a terminal event is a failure,
 // never a completed answer and never a reason to replay an already-started turn.
@@ -117,9 +119,13 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
   };
   const suppliedAuth = req.headers.authorization;
   const fixedAuth = process.env.FACTORY_API_KEY ? `Bearer ${process.env.FACTORY_API_KEY.trim()}` : suppliedAuth;
+  const waitEnabled = () => !fixedAuth && manager.config?.waitForQuota === true;
+  let quotaRetry = false, waitingSince;
   const count = fixedAuth ? 1 : manager.keys.length;
   const quotaWorkload = !fixedAuth && manager.config?.algorithm === 'quota-aware' ? quotaProfile(req.body.model, req.body) : 'unclassified';
-  for (let attempt = 0; attempt < count; attempt++) {
+  for (let attempt = 0; attempt < count || (quotaRetry && waitEnabled()); attempt++) {
+    if (attempt >= count) { attempted.clear(); attempt = 0; quotaRetry = false; }
+    clearTimeout(timer);
     finishRequest?.();finishRequest=null;
     quotaReservation?.release(); quotaReservation = null;
     if (controller.signal.aborted) return null;
@@ -130,8 +136,31 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       if (controller.signal.aborted || res.destroyed) { quotaReservation?.release(); return null; }
     } catch (error) {
       if (controller.signal.aborted) return null;
+      // Rejections can exhaust this request's exclusion set. Re-evaluate the pool
+      // after recorded quota cooldowns, never replay an ambiguous transport failure.
+      if (waitEnabled() && quotaRetry && attempted.size) {
+        attempted.clear(); attempt = -1; quotaRetry = false; continue;
+      }
+      if (waitEnabled() && error.code === 'QUOTA_WAIT') {
+        if (!waitingSince) {
+          waitingSince = Date.now(); phase = 'waiting_for_quota';
+          req.socket?.setKeepAlive(true, 30_000);
+          res.locals.onQuotaWait?.(true);
+          logInfo(`Factory request ${requestId}: waiting for quota`, { source:'proxy',model:req.body.model,reason:error.message,
+            accounts:manager.keys.map(k=>({accountId:k.id,accountName:k.notes||null,keySuffix:k.key?.slice(-9),excluded:!!k.excluded,
+              reason:k.excluded?'Excluded':manager.windowSync?.routingBlock(k,req.body.model)||getRequestQuota(k,req.body.model).reason||k.status})) });
+        }
+        // Keep headers unsent: Droid's stream-idle timer starts with the response.
+        // Short checks observe exclusion/settings changes; billing reads are shared
+        // and cached by the pool. The existing scheduler alone starts group windows.
+        try { await wait(1000, undefined, { signal: controller.signal }); }
+        catch { return null; }
+        attempted.clear(); attempt = -1; quotaRetry = false; lastResponse = null;
+        continue;
+      }
       if (lastResponse) return sendError(lastResponse);
       if (error.retryAfter) res.setHeader('Retry-After', String(error.retryAfter));
+      logWarn(`Factory request ${requestId}: proxy rejected`,{source:'proxy',model:req.body.model,status:error.status||503,reason:error.message});
       res.status(error.status || 503).json({ error: { type: 'account_unavailable', message: error.message } });
       return null;
     }
@@ -145,7 +174,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     }
     const selectedAccount = manager.keys.find(item => item.id === keyId || fixedAuth === `Bearer ${item.key}`);
     const hold = selectedAccount && manager.windowSync?.routingBlock(selectedAccount, req.body.model);
-    if (hold) { if (!fixedAuth) continue; res.setHeader('Retry-After', '5'); res.status(503).json({ error: { type: 'window_sync_wait', message: hold } }); return null; }
+    if (hold) { if (!fixedAuth) { quotaRetry = true; continue; } res.setHeader('Retry-After', '5'); res.status(503).json({ error: { type: 'window_sync_wait', message: hold } }); return null; }
     const { url, headers, body } = makeRequest(fixedAuth || `Bearer ${key.key}`);
     if (session) headers['x-session-id'] = session.identity;
     logRequest('POST', url, headers, body);
@@ -215,8 +244,14 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       }
       const serializedBody=usingWebSocket?null:JSON.stringify(httpBody);
       const beforeSend = () => {
-        const blocked=selectedAccount&&(selectedAccount.excluded?'Account excluded':manager.windowSync?.routingBlock(selectedAccount,req.body.model));
+        const quota=selectedAccount&&getRequestQuota(selectedAccount,req.body.model);
+        const blocked=selectedAccount&&(selectedAccount.excluded?'Account excluded':manager.windowSync?.routingBlock(selectedAccount,req.body.model)||(!quota.available&&quota.reason));
         if(blocked)throw Object.assign(new Error(blocked),{code:'WINDOW_SYNC_WAIT',factoryRequestNotSent:true});
+        if (waitingSince) {
+          logInfo(`Factory request ${requestId}: quota available`, { waitedMs: Date.now() - waitingSince });
+          waitingSince = null;
+          res.locals.onQuotaWait?.(false);
+        }
         if(selectedAccount&&!counting)finishRequest ||= manager.windowSync?.trackRequest(selectedAccount);
         quotaReservation?.sent();
       };
@@ -233,7 +268,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       clearTimeout(timer);
       if(error.code==='WINDOW_SYNC_WAIT'){
         quotaReservation?.release(true);finishRequest?.();finishRequest=null;
-        if(!fixedAuth)continue;
+        if(!fixedAuth){quotaRetry=true;continue;}
         res.setHeader('Retry-After','5');res.status(503).json({error:{type:'window_sync_wait',message:error.message}});return null;
       }
       if (error.factoryRequestNotSent === true || ['connect', 'getaddrinfo'].includes(error.erroredSysCall || error.syscall)) quotaReservation?.release(true);
@@ -266,9 +301,21 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       for (const [name, value] of response.headers) {
         if (/^(anthropic-|request-id$|x-request-id$|retry-after$)/i.test(name)) res.setHeader(name, value);
       }
+      let rejectionRecorded=false, pendingRejection;
+      const recordEventRejection = event => {
+        if(rejectionRecorded)return;
+        rejectionRecorded=true;
+        const error=event.response?.error??event.error??event;
+        logWarn(`Factory request ${requestId}: upstream rejected`,{
+          ...rejectionDiagnostic(selectedAccount,req.body.model,response.status,response.headers.get('retry-after'),error),eventType:event.type||null});
+        const status=error?.status??error?.status_code;
+        if(keyId&&[401,402,429].includes(status))pendingRejection=manager.recordUpstreamFailure(keyId,status,response.headers.get('retry-after'),req.body.model,{error},key.key)
+          .catch(error=>logError('Could not save upstream rejection',{accountId:keyId,message:error.message}));
+      };
       const outcome = { onTerminal: observeHTTP, onEvent: event => {
         observeEvent?.(event);
-        if (event.type === 'error' || event.type === 'response.failed') {
+        if (event.type === 'error' || event.type === 'response.failed' || event.error) {
+          recordEventRejection(event);
           const error = upstreamEventError(event);
           res.locals.factoryRequest.upstreamError = error;
           diagnose('upstream_error_event', error);
@@ -293,22 +340,34 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
               session.wsDisabled = session.wsFailures >= 2;
             }
             throw error;
-          } finally { clearTimeout(timer); observeHTTP?.(null); }
+          } finally { clearTimeout(timer); observeHTTP?.(null); await pendingRejection; }
         };
         response = new Response(Readable.from(monitored()), { status: response.status, headers: response.headers });
-      } else if (observeHTTP && usageRecorded) {
-        const result = await response.json();
-        if (result.error || result.status === 'failed') diagnose('upstream_error_event', upstreamEventError({ type: result.status === 'failed' ? 'response.failed' : 'error', response: result }));
-        observeHTTP(result, !result.error && result.status !== 'failed');
-        response = new Response(JSON.stringify(result), { status: response.status, headers: response.headers });
+      } else {
+        const raw=await response.text();
+        let result;try{result=JSON.parse(raw);}catch{}
+        if(result?.error||result?.status==='failed'){
+          recordEventRejection(result);
+          diagnose('upstream_error_event',upstreamEventError(result));
+          await pendingRejection;
+        }
+        observeHTTP?.(result,!!result&&!result.error&&result.status!=='failed');
+        response = new Response(raw, { status: response.status, headers: response.headers });
       }
       return { response, currentKeyId: keyId, outcome, usageRecorded };
     }
     observeHTTP?.(null);
+    const errorBody=await response.text();
+    let parsed;try{parsed=JSON.parse(errorBody);}catch{parsed={message:errorBody};}
+    const rejection=classifyFactoryRejection(response.status,parsed,req.body.model);
+    logWarn(`Factory request ${requestId}: upstream rejected`,{...rejectionDiagnostic(selectedAccount,req.body.model,response.status,response.headers.get('retry-after'),errorBody),classification:rejection});
+    response=Object.assign(new Response(errorBody,{status:response.status,headers:response.headers}),{
+      factoryRequestAccepted:response.factoryRequestAccepted,factoryRequestNotSent:response.factoryRequestNotSent});
     if ([401, 402, 403, 429].includes(response.status) || response.factoryRequestNotSent) quotaReservation?.release(true);
     const retryable = [401, 402, 429].includes(response.status) || (response.factoryRequestNotSent && response.status >= 500);
+    if(keyId&&[401,402,429].includes(response.status))await manager.recordUpstreamFailure(keyId,response.status,response.headers.get('retry-after'),req.body.model,parsed,key.key);
     if (!retryable || fixedAuth || response.factoryRequestAccepted) return sendError(response);
-    await manager.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), req.body.model, key?.quotaGroup);
+    if (rejection.kind==='quota'||response.status===429) quotaRetry = true;
     // Consume each rejection before releasing the connection and changing accounts.
     lastResponse = new Response(await response.text(), { status: response.status, headers: response.headers });
   }

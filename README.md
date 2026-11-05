@@ -185,7 +185,7 @@ request. The Core tab offers **Test**, never a forced Core start. Factory consum
 Standard first, so a Core model test may consume Standard. It does not guarantee
 that a Core window will start. Unavailable actions show the reason.
 
-The Standard start model and Core test model are selected in **Five-hour windows**.
+The Standard and Core start/test models are selected in **Five-hour windows**.
 Defaults are Luna and GLM-5.3-Flash respectively; saved model choices are preserved.
 A manual Standard start leaves synchronization enabled for subsequent cycles.
 Attempts survive restarts; accepted requests are checked through telemetry and are
@@ -193,15 +193,29 @@ not replayed. Tests with unknown outcomes are not automatically replayed.
 
 ### Automatic five-hour starts
 
-Select Standard accounts and a start model, enable **Enable automatic starts**,
-and save. Working hours are optional and off by default. Selected accounts whose
-Standard windows have ended wait until all included participants are ready and
-have weekly/monthly allowance. Active windows remain usable.
+Choose **Standard** or **Droid Core**, select accounts and a start model, enable
+**Enable automatic starts**, and save. Each pool has its own switch, selection,
+model, and optional working hours. Both switches are off by default. Selected
+accounts wait until all included participants' windows have ended and they have
+weekly/monthly allowance. Active windows remain usable.
+
+Billing percentages guide balancing; they do not prohibit generation. Upstream
+rejections are logged with account ID/name/key suffix, model, status, Retry-After
+and bounded error text with credentials removed. Proxy waits/rejections have a
+separate source. HTTP 200 stream errors are recorded without replaying the request.
+
+**Wait for available quota** in Settings holds pool-routed requests while quota is
+exhausted or synchronized windows are not ready. The current account selection and
+window rules still apply. No response headers or placeholder model events are sent
+while waiting. Cancellation or a proxy restart discards the pending request; it is
+not stored on disk. The option is off by default and can be disabled while waiting.
+For Droid, set `llmRequestTimeout` and, when using subagents,
+`subagentInactivityTimeout` longer than the expected wait and response time.
 
 **Stop new requests before reset (seconds)** defaults to **30**; **0** disables the
 advance cutoff. Selected accounts stop receiving requests, tests and retries during
 this interval. Existing requests finish, then Factory limits are refreshed before
-the next group start. The interval is saved and changes apply immediately. It is
+the next group start. This interval applies to both pools. Changes are saved and apply immediately. It is
 a safety margin, not a guarantee about Factory's processing time.
 
 - Removing an account from the selection or excluding it takes effect immediately.
@@ -213,13 +227,37 @@ a safety margin, not a guarantee about Factory's processing time.
   another generation. Ambiguous transport failures are checked before a retry;
   exactly simultaneous or exactly-once starts cannot be guaranteed.
 - Working hours limit new cycles, in the server timezone. In-progress cycles finish
-  outside those hours. Starting the proxy may activate ready Standard windows.
+  outside those hours. Starting the proxy may activate ready windows in enabled pools.
 
-Factory controls Core fallback; selecting a Core model does not select a billing
-pool. Independent and joint Core starts are unsupported. Saved Core automatic-start
-settings are ignored, while model choices are preserved. Obsolete manual Core-start
-records are removed without replay. Standard starts and Core tests retain their
-recovery records.
+Core synchronization starts only when enabled and every included participant has
+received a recognized Standard quota rejection from Factory, with Droid Core
+fallback enabled and fresh billing data. A displayed 100% or a rate-limit cooldown
+does not prove Standard is exhausted. Confirmed restrictions survive restarts and
+expire at Retry-After or the first possible reported reset; an unknown reset uses
+a short retry interval. Quota refusals without a known allowance and ordinary
+rate limits restrict only that model. Unknown billing errors are returned to the client.
+Factory's monthly Standard refusal in `detail` is recognized without `UserOverQuota`;
+its restriction uses `standard.monthly.windowEnd`, not the five-hour reset.
+When Core synchronization is enabled and Standard reports 100%, the scheduler
+checks unconfirmed accounts with the selected Standard start/test model (32 output
+tokens, at most once per minute per account). These checks obey working hours,
+Standard synchronization, cooldowns and in-flight requests. Their retry deadlines
+survive restarts. A successful check keeps Standard available; only a recognized
+refusal confirms exhaustion. Active Core windows do not trigger these checks.
+
+The status shows the blocking account and reason. The proxy never changes Factory's
+fallback setting or silently removes a participant.
+
+If Standard becomes available again, new Core start requests pause; confirmed Core
+windows are preserved. Standard requests follow the Standard group's own settings.
+Factory still chooses the billed allowance: Standard can reset between a quota
+check and dispatch. Such a response does not confirm Core without a Core reset date.
+Core tests obey the same routing barrier as ordinary requests.
+
+Settings from before this feature keep Core automatic starts off; model choices
+are preserved. Enable Core explicitly in the new controls. Obsolete experimental
+Core start records are discarded; current Core cycles, Standard starts, and manual
+tests retain their recovery records.
 
 Core reset times come only from `limits.core.fiveHour.windowEnd` in Factory's
 billing response. A missing date remains unknown; HTTP 200 never invents a reset.

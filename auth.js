@@ -6,7 +6,7 @@ import { logDebug, logError, logInfo, logWarning } from './logger.js';
 import { transformToAnthropic, getAnthropicHeaders } from './transformers/request-anthropic.js';
 import { getKeyPoolConfig, getConfig, getModelById, getEndpointByType, updateConfig as updateFullConfig } from './config.js';
 import { transformToOpenAI, getOpenAIHeaders } from './transformers/request-openai.js';
-import { fetchBillingLimits, getRequestQuota, retryAfterTime, LIMIT_CACHE_MS } from './utils/factory-limits.js';
+import { fetchBillingLimits, getRequestQuota, recordQuotaRejection, rejectionDiagnostic, LIMIT_CACHE_MS } from './utils/factory-limits.js';
 import fetchWithPool from './utils/http-client.js';
 import fileWriterManager from './utils/async-file-writer.js';
 import redisCache from './utils/redis-cache.js';
@@ -23,7 +23,7 @@ const __dirname = path.dirname(__filename);
 /**
  * Key pool management system
  * Supports round-robin use of large FACTORY_API_KEY pools (no key count limit)
- * Automatically bans keys that return HTTP 402
+ * Tracks confirmed quota restrictions separately from credential failures.
  */
 class KeyPoolManager {
   constructor() {
@@ -143,25 +143,21 @@ class KeyPoolManager {
     return pending;
   }
 
-  async recordUpstreamFailure(keyId, status, retryAfter, model, quotaGroup) {
+  async recordUpstreamFailure(keyId, status, retryAfter, model, body, credential) {
     const key = this.keys.find(k => k.id === keyId);
-    if (!key) return;
-    const group = quotaGroup || getRequestQuota(key, model).group;
+    if (!key || credential && key.key!==credential) return;
     if (status === 401) {
       key.status = 'disabled';
       key.last_test_result = 'failed';
       key.last_error = '401: Factory rejected this credential; retest after replacing or restoring it';
     } else if (status === 402 || status === 429) {
-      key.cooldowns ||= {};
-      // ponytail: no reset hint means one-minute probes, not a guessed permanent ban.
-      const retryAt = retryAfterTime(retryAfter);
-      key.cooldowns[group] = { status, until: Math.max(key.cooldowns[group]?.until || 0, retryAt || Date.now() + LIMIT_CACHE_MS) };
-      await this.refreshBillingLimits(key, true);
-      if (!retryAt && key.billing_limits?.limits?.[group]) {
-        const resets = Object.values(key.billing_limits.limits[group])
-          .filter(w => w.usedPercent >= 100 && Date.parse(w.windowEnd) > Date.now())
-          .map(w => Date.parse(w.windowEnd));
-        if (resets.length) key.cooldowns[group].until = Math.min(key.cooldowns[group].until, Math.max(...resets));
+      const credential=key.key, observedAt=Date.now();
+      const rejection=recordQuotaRejection(key,status,retryAfter,model,body,observedAt);
+      if(rejection.kind==='quota'){
+        await this.saveKeyPoolImmediately();
+        await this.refreshBillingLimits(key, true);
+        if(key.key!==credential||!this.keys.includes(key))return;
+        recordQuotaRejection(key,status,retryAfter,model,body,observedAt);
       }
     }
     key.error_count = (key.error_count || 0) + 1;
@@ -185,8 +181,8 @@ class KeyPoolManager {
 
     if (activeKeys.length === 0) {
       // No successfully tested keys are available; fail immediately!
-      const held = this.keys.filter(k => !k.excluded && k.status === 'active' && this.windowSync?.routingBlock(k, model));
-      if (held.length) throw Object.assign(new Error('Selected accounts are waiting for synchronized five-hour window starts; see the admin dashboard'), { status: 503, retryAfter: 5 });
+      const held = this.keys.filter(k => !k.excluded && k.status === 'active' && k.last_test_result === 'success' && this.windowSync?.routingBlock(k, model));
+      if (held.length) throw Object.assign(new Error('Selected accounts are waiting for synchronized five-hour window starts; see the admin dashboard'), { status: 503, retryAfter: 5, code: 'QUOTA_WAIT' });
       const totalKeys = this.keys.length;
       const activeButUntestedKeys = (this.keys || []).filter(k => k.status === 'active' && !k.excluded && k.last_test_result !== 'success').length;
 
@@ -203,10 +199,11 @@ class KeyPoolManager {
     activeKeys = states.filter(({ key, state }) => !key.excluded && key.status === 'active' && state.available && !this.windowSync?.routingBlock(key, model)).map(({ key }) => key);
     if (!activeKeys.length) {
       const held = states.some(({key,state}) => state.available && this.windowSync?.routingBlock(key,model));
-      if(held)throw Object.assign(new Error('Selected accounts are waiting for synchronized Standard windows; see the admin dashboard'),{status:503,retryAfter:5});
+      if(held)throw Object.assign(new Error('Selected accounts are waiting for synchronized windows; see the admin dashboard'),{status:503,retryAfter:5,code:'QUOTA_WAIT'});
       const retryAt = Math.min(...states.map(({ state }) => state.retryAt).filter(Number.isFinite));
       const error = new Error('All eligible accounts are waiting for a usage reset or Retry-After');
       error.status = 429;
+      error.code = 'QUOTA_WAIT';
       error.retryAfter = Number.isFinite(retryAt) ? Math.max(1, Math.ceil((retryAt - Date.now()) / 1000)) : 60;
       throw error;
     }
@@ -920,8 +917,9 @@ class KeyPoolManager {
           responseBody = { raw: responseText };
         }
 
+        if(!response.ok)logWarning('Key test rejected by Factory',rejectionDiagnostic(key,modelId,response.status,response.headers.get('retry-after'),responseText));
         if (response.status === 402 || response.status === 429) {
-          await this.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), modelId);
+          await this.recordUpstreamFailure(keyId, response.status, response.headers.get('retry-after'), modelId,responseBody);
           return { success: false, status: response.status, message: 'Account temporarily rate limited', key_status: key.status };
         }
 
@@ -933,13 +931,6 @@ class KeyPoolManager {
           key.error_count = (key.error_count || 0) + 1;
           key.last_error = `401: ${errorMsg}`;
           this.saveKeyPool();
-
-          logError(`Key test failed (401): ${keyId}`, {
-            message: errorMsg,
-            fullResponse: responseBody,
-            statusCode: response.status,
-            statusText: response.statusText
-          });
 
           return {
             success: false,
@@ -957,6 +948,7 @@ class KeyPoolManager {
           key.banned_reason = null;
           key.last_error = null;
           if (key.cooldowns) delete key.cooldowns[getRequestQuota(key,modelId).group];
+          if (key.model_cooldowns) delete key.model_cooldowns[modelId];
           key.last_test_result = 'success';
           await this.saveKeyPoolImmediately();
 
@@ -978,13 +970,6 @@ class KeyPoolManager {
           key.error_count = (key.error_count || 0) + 1;
           key.last_error = `${response.status}: ${errorMsg}`;
           this.saveKeyPool();
-
-          logError(`Key test failed (${response.status}): ${keyId}`, {
-            message: errorMsg,
-            fullResponse: responseBody,
-            statusCode: response.status,
-            statusText: response.statusText
-          });
 
           return {
             success: false,
@@ -1182,6 +1167,9 @@ class KeyPoolManager {
     if (!newConfig || typeof newConfig !== 'object' || Array.isArray(newConfig)) {
       throw new Error('Key pool settings must be an object');
     }
+    if (newConfig.waitForQuota !== undefined && typeof newConfig.waitForQuota !== 'boolean') {
+      throw new Error('waitForQuota must be a boolean');
+    }
     // BaSui: Validate the configuration
     const validAlgorithms = [
       'round-robin',
@@ -1227,6 +1215,7 @@ class KeyPoolManager {
     // BaSui: Reset to defaults
     return this.updateConfig({
       algorithm: 'round-robin',
+      waitForQuota: false,
       retry: {
         enabled: true,
         maxRetries: 3,

@@ -200,7 +200,8 @@ function calculateSummary(keysData) {
 
 router.get('/limits', wrapAsync(async (req, res) => {
   const keys = keyPoolManager.keys;
-  await Promise.all(keys.map(key => keyPoolManager.refreshBillingLimits(key, req.query.forceRefresh === 'true')));
+  if (req.query.cachedOnly !== 'true' || req.query.forceRefresh === 'true')
+    await Promise.all(keys.map(key => keyPoolManager.refreshBillingLimits(key, req.query.forceRefresh === 'true')));
   sendSuccessResponse(res, { keys: Object.fromEntries(keys.map(key => [key.id, {
     status: key.status, excluded: key.excluded === true, tested: key.last_test_result === 'success',
     standard: getLimitState(key, 'standard'), core: getLimitState(key, 'core'),

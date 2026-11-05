@@ -78,16 +78,28 @@ export function logCollectorMiddleware(req, res, next) {
   if ((req.originalUrl || req.url).startsWith('/admin')) return next();
   if (req.method === 'POST' && /^\/v1\/(responses|messages|chat\/completions)\/?$/.test(req.path || req.url)) {
     let recorded = false;
+    let pending;
+    res.locals.onQuotaWait = waiting => {
+      if (!waiting && !pending) return;
+      const report = res.locals.factoryRequest || {};
+      const entry = { type: 'generation', url: req.path, timestamp: getTimestamp(), level: 'info',
+        summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
+          elapsedMs: Date.now() - startTime, outcome: waiting ? 'Waiting for quota' : 'In progress' } };
+      if (pending) { Object.assign(pending, entry); logEmitter.emit('log', pending); }
+      else { pending = entry; addLogToBuffer(pending); }
+    };
     const complete = () => {
       if (recorded) return;
       recorded = true;
       const report = res.locals?.factoryRequest || {};
       const failed = !res.writableFinished || res.statusCode >= 400 || report.success === false;
-      addLogToBuffer({ type: 'generation', url: req.path, timestamp: getTimestamp(), level: failed ? 'error' : 'info',
+      const entry = { type: 'generation', url: req.path, timestamp: getTimestamp(), level: failed ? 'error' : 'info',
         summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
           elapsedMs: Date.now() - startTime, usage: report.usage || null,
           outcome: !res.writableFinished ? 'Disconnected' : res.statusCode >= 400 ? `HTTP ${res.statusCode}` : report.success === false ? 'Stream failed' : 'Completed',
-          error: report.error || null, upstreamError: report.upstreamError || null } });
+          error: report.error || null, upstreamError: report.upstreamError || null } };
+      if (pending) { Object.assign(pending, entry); logEmitter.emit('log', pending); }
+      else addLogToBuffer(entry);
     };
     res.once('finish', complete); res.once('close', complete);
     return next();

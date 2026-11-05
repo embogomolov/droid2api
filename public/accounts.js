@@ -11,6 +11,8 @@ export function accountStatus(key, limits) {
   limits=key.routing?.[state.group]?.allowance||limits;
   if(key.excluded)return ['Excluded','dim','Not used by routing or automatic starts'];
   if(key.status!=='active')return [key.status==='banned'?'Blocked':'Disabled','bad',key.banned_reason||'Not eligible for routing'];
+  const pending=Object.values(key.routing||{}).find(r=>r.action?.pending);
+  if(pending)return [pending.action.label,'warn',pending.action.reason];
   if(key.last_test_result!=='success')return [key.last_test_result==='failed'?'Test failed':'Needs test','warn','A successful test is required'];
   if(state.group==='core' && limits?.group==='standard' && limits.known && !limits.stale && !key.limits_error &&
     limits.available===false && limits.reason==='Factory usage limit reached' &&

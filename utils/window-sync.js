@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHash } from 'node:crypto';
-import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS, getRequestQuota } from './factory-limits.js';
+import { fetchBillingLimits, limitGroup, retryAfterTime, WINDOWS, getRequestQuota, getLimitState, quotaExhausted, recordQuotaRejection, rejectionDiagnostic } from './factory-limits.js';
 import { getEndpointByType } from '../config.js';
 import { prepareDirectAnthropic, getAnthropicHeaders } from '../transformers/request-anthropic.js';
 import { transformToOpenAI, getOpenAIHeaders } from '../transformers/request-openai.js';
@@ -14,10 +14,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 import { GROUPS, normalizeWindowSync, nextWindowStart, withinWorkingHours } from './window-settings.js';
 export { DEFAULT_WINDOW_SYNC, validateWindowSync, withinWorkingHours } from './window-settings.js';
 const freshGroup = () => ({ phase: 'waiting', members: {}, nextCheckAt: 0 });
-const freshState = () => ({ version: 2, groups: Object.fromEntries(GROUPS.map(g => [g, freshGroup()])) });
+const freshState = () => ({ version: 3, groups: Object.fromEntries(GROUPS.map(g => [g, freshGroup()])) });
 const backoff = attempt => Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
 const identity = key => createHash('sha256').update(key.key).digest('hex');
 const equal = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+const confirmationDelay = 30_000;
+const standardCheckInterval = 60_000;
 
 // One short physical request; the scheduler owns retries and verifies the window first.
 export async function sendWindowStart(key, model, signal, fetchImpl = fetchWithPool) {
@@ -40,13 +42,20 @@ export async function sendWindowStart(key, model, signal, fetchImpl = fetchWithP
     response = await fetchImpl(getEndpointByType(model.type).base_url, { method: 'POST', headers, body: JSON.stringify(body), retry: false,
       signal: AbortSignal.any([signal, timeout.signal]), redirect: 'error' });
     const retryAt = retryAfterTime(response.headers.get('retry-after'));
-    if (!response.ok) { response.body?.destroy(); return { accepted: false, status: response.status, retryAt, error: `HTTP ${response.status}` }; }
+    if (!response.ok) {
+      const raw=await response.text();let body;try{body=JSON.parse(raw);}catch{body={message:raw};}
+      logWarn('Window start rejected by Factory',rejectionDiagnostic(key,model.id,response.status,response.headers.get('retry-after'),raw));
+      return {accepted:false,status:response.status,retryAt,retryAfter:response.headers.get('retry-after'),rejectionBody:body,error:`HTTP ${response.status}`};
+    }
     const data = await response.json();
-    if (!data.id || data.error || data.status === 'failed') return { accepted: false, error: 'No successful generation confirmed', ambiguous: true };
-    return { accepted: true, status: response.status, responseId: data.id, usage: data.usage };
+    if(data.error||data.status==='failed')logWarn('Window start rejected by Factory',rejectionDiagnostic(key,model.id,response.status,response.headers.get('retry-after'),data.error||{status:data.status}));
+    const result = { status: response.status, responseId: data.id, responseStatus: data.status, usage: data.usage };
+    if (!data.id || data.error || data.status === 'failed' || (model.type === 'openai' && data.status !== 'completed'))
+      return { ...result, accepted: false, error: 'No completed generation confirmed', ambiguous: true };
+    return { ...result, accepted: true };
   } catch (error) {
     return { accepted: false, ambiguous: true, error: timeout.signal.aborted ? 'Probe timed out; checking the window before retry' : error.code || error.name };
-  } finally { clearTimeout(timer); response?.body?.destroy(); }
+  } finally { clearTimeout(timer); response?.body?.destroy?.(); }
 }
 
 export class WindowSync {
@@ -61,12 +70,13 @@ export class WindowSync {
     const saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
     if (saved.version === 1 && saved.members && !Array.isArray(saved.members) && typeof saved.members === 'object' && ['waiting','starting','active'].includes(saved.phase)) {
       const state = freshState(), group = limitGroup(saved.modelId || this.readConfig().window_sync?.modelId);
-      state.groups[group] = { ...saved, cycleKeyIds: Object.keys(saved.members), partners: [group] };
+      if(group==='standard')state.groups[group] = { ...saved, cycleKeyIds: Object.keys(saved.members), partners: [group] };
       delete state.groups[group].version;
       return this.discardCoreStarts(state);
     }
-    if (saved.version !== 2 || !GROUPS.every(g => saved.groups?.[g]?.members && typeof saved.groups[g].members==='object' && !Array.isArray(saved.groups[g].members) && ['waiting','starting','active'].includes(saved.groups[g].phase) && (saved.groups[g].phase!=='starting'||Array.isArray(saved.groups[g].cycleKeyIds))))
+    if (![2,3].includes(saved.version) || !GROUPS.every(g => saved.groups?.[g]?.members && typeof saved.groups[g].members==='object' && !Array.isArray(saved.groups[g].members) && ['waiting','starting','active'].includes(saved.groups[g].phase) && (saved.groups[g].phase!=='starting'||Array.isArray(saved.groups[g].cycleKeyIds))))
       throw new Error('Invalid saved window-sync state; refusing to discard previous attempts');
+    if(saved.version===2){saved.groups.core=freshGroup();saved.version=3;}
     return this.discardCoreStarts(saved);
   }
   discardCoreStarts(state) {
@@ -95,6 +105,58 @@ export class WindowSync {
     const cfg = this.settings().groups[getRequestQuota(key,model,this.now()).group];
     return cfg.enabled && !key.excluded && cfg.keyIds.includes(key.id);
   }
+  coreStartBlock(key, model) {
+    const standard=getLimitState(key,'standard',this.now());
+    if(!standard.known||standard.stale||key.limits_error||!WINDOWS.every(n=>Number.isFinite(standard.windows[n].usedPercent)&&standard.windows[n].usedPercent>=0))return 'Refresh Standard limits';
+    if(key.billing_limits.overagePreference!=='droidCore')return 'Enable Droid Core fallback in Factory';
+    return quotaExhausted(key,'standard',this.now())?null:'Standard exhaustion has not been confirmed by Factory';
+  }
+  async checkStandardForCore(ctx, state, signal) {
+    const {s,keys}=ctx, cfg=this.settings();
+    const continuing=s.phase==='starting'&&keys.some(k=>s.members[k.id]?.submittedAt);
+    if(!cfg.groups.core.enabled||!equal(cfg.groups.core,ctx.cfg)||
+      (!continuing&&!withinWorkingHours(cfg.groups.core.workingHours,this.now()))||
+      !keys.every(k=>{const m=s.members[k.id];return k.status==='active'&&k.last_test_result==='success'&&!m.refreshError&&m.quotaReady&&
+        (m.ready||(s.phase==='starting'&&m.confirmedEnd>this.now()))&&!this.requests.get(k.id)?.count;}))return false;
+    const model=this.readConfig().models.find(m=>m.id===cfg.groups.standard.modelId);
+    if(!model||limitGroup(model.id)!=='standard'||!['anthropic','openai','common'].includes(model.type)){
+      for(const k of keys)if(s.members[k.id].allowanceReason)s.members[k.id].allowanceReason='Choose a Standard start / test model';
+      return false;
+    }
+    let sent=false;
+    const checks=await Promise.allSettled(keys.map(async key=>{
+      const m=s.members[key.id], fresh=this.settings(), now=this.now();
+      if(signal.aborted||this.journalFailure||!this.ownsLock()||!fresh.groups.core.enabled||!equal(fresh.groups.core,ctx.cfg)||
+        fresh.groups.standard.modelId!==model.id||key.excluded||!this.manager.keys.includes(key)||identity(key)!==m.credential||
+        key.status!=='active'||key.last_test_result!=='success'||this.requests.get(key.id)?.count)return;
+      if(this.coreStartBlock(key,ctx.model.id)!=='Standard exhaustion has not been confirmed by Factory')return;
+      const standard=getRequestQuota(key,model.id,now);
+      if(!standard.available||!Object.values(standard.windows||{}).some(w=>w.usedPercent>=100)||this.routingBlock(key,model.id)||
+        GROUPS.some(g=>this.manualPending(state,g,key.id)))return;
+      const previous=m.standardCheck;
+      if(previous?.nextAttemptAt>now)return;
+      // Save before sending so a restart cannot turn the readiness check into a retry loop.
+      const check=m.standardCheck={modelId:model.id,submittedAt:now,nextAttemptAt:now+standardCheckInterval,error:'Checking Standard availability'};
+      this.save(state);sent=true;
+      const finish=this.trackRequest(key);
+      try {
+        let result;try{result=await this.send({...key},model,signal);}catch(error){result={ambiguous:true,error:error.code||error.name};}
+        if(!this.manager.keys.includes(key)||identity(key)!==m.credential||s.members[key.id]!==m)return;
+        if([401,402,429].includes(result.status)){
+          if(this.manager.recordUpstreamFailure)await this.manager.recordUpstreamFailure(key.id,result.status,result.retryAfter,model.id,result.rejectionBody,key.key);
+          else recordQuotaRejection(key,result.status,result.retryAfter,model.id,result.rejectionBody,this.now());
+        }
+        if(identity(key)!==m.credential)return;
+        Object.assign(check,{httpStatus:result.status||null,error:result.error||null,responseId:result.responseId||null,usage:result.usage||null,
+          nextAttemptAt:Math.max(this.now()+standardCheckInterval,result.retryAt||0)});
+        m.allowanceReason=this.coreStartBlock(key,ctx.model.id);
+        this.save(state);
+        logInfo('Core readiness: Standard check',{accountId:key.id,model:model.id,status:result.status||null,confirmed:quotaExhausted(key,'standard',this.now()),nextAttemptAt:check.nextAttemptAt});
+      }finally{finish();}
+    }));
+    const failure=checks.find(r=>r.status==='rejected');if(failure)throw failure.reason;
+    return sent;
+  }
   closingBlock(key, model, end) {
     const remaining=end-this.now();
     return this.manages(key,model)&&remaining>0&&remaining<=this.settings().stopBeforeResetSeconds*1000 ? 'Window ending' : null;
@@ -121,11 +183,13 @@ export class WindowSync {
     return (s.partners || [group]).filter(g=>this.participates(cfg,g)&&state.groups[g].cycleId===s.cycleId);
   }
   routingBlock(key, model) {
+    const core=this.settings().groups.core;
+    if(core.enabled&&!key.excluded&&core.keyIds.includes(key.id)&&limitGroup(model)==='core'&&this.coreStartBlock(key,model)==='Refresh Standard limits')return 'Waiting for current Standard quota data';
     const group=getRequestQuota(key,model,this.now()).group, managed=this.manages(key,model);
-    let state;try{state=this.load();}catch(error){if(managed)throw error;return null;}
+    if(!managed)return null;
+    const state=this.load();
     const pending=GROUPS.map(g=>this.manualPending(state,g,key.id)).find(m=>m?.credential===identity(key));
     if(pending?.credential===identity(key))return 'Manual request is being verified';
-    if(!managed)return null;
     const cfg=this.settings(), s=state.groups[group];
     if (this.peers(state,cfg,group).some(g=>state.groups[g].phase==='starting')) return 'Waiting for all participants of the current start';
     const member=s.members[key.id];
@@ -147,7 +211,7 @@ export class WindowSync {
     const active=Date.parse(limits.windows?.fiveHour?.windowEnd)>this.now();
     const kind=group==='core'||active?'test':'start';
     let reason='';
-    if(pending&&pending.credential===identity(key))return {kind:pending.kind,label:pending.kind==='test'?'Testing…':'Starting…',disabled:true,reason:pending.error||'Checking the window',modelId:pending.modelId};
+    if(pending&&pending.credential===identity(key))return {kind:pending.kind,label:pending.kind==='test'?'Testing…':'Starting…',pending:true,disabled:true,reason:pending.error||'Checking the window',modelId:pending.modelId};
     if(GROUPS.some(g=>this.manualPending(state,g,key.id)?.credential===identity(key)))reason='Another request for this account is being verified';
     else if(key.excluded)reason='Enable usage first';
     else if(key.status!=='active')reason='Account is disabled';
@@ -157,7 +221,7 @@ export class WindowSync {
     else if(kind==='start'&&!active&&limits.windows.fiveHour.usedPercent!==0)reason='Factory has not reported the window reset';
     else if(this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))reason='An automatic start is already in progress';
     else if(this.closingBlock(key,model.id,Date.parse(limits.windows?.fiveHour?.windowEnd)))reason='Window ending';
-    else if(kind==='test'&&this.manages(key,model.id)&&!active)reason='Waiting for the synchronized Standard window start';
+    else if(kind==='test'&&this.manages(key,model.id)&&!active)reason='Waiting for the synchronized '+(limits.group==='core'?'Core':'Standard')+' window start';
     const previous=state.manual?.[group]?.[key.id];
     return {kind,label:kind==='start'?'Start now':'Test',disabled:!!reason,reason:reason||(group==='core'?'Tests a Core model. Factory consumes Standard first; this does not force a Core window.':`Uses ${model.name||model.id} in Standard`),modelId:model?.id,quotaGroup:limits.group,
       error:previous?.credential===identity(key)&&['failed','unconfirmed','cancelled'].includes(previous.phase)?previous.error:null};
@@ -195,9 +259,10 @@ export class WindowSync {
       if(!model||!['anthropic','openai','common'].includes(model.type)||limitGroup(model.id)!==group)return fail('Start model is no longer available');
       if(m.kind==='start'&&this.requests.get(id)?.count){m.nextAttemptAt=this.now()+2000;this.save(state);return;}
       try {
+        const checkedAt=this.now();
         const snapshot=await this.refresh(key.key,{signal});
         if(!valid()||signal.aborted)return;
-        const limits=getRequestQuota({billing_limits:snapshot,cooldowns:key.cooldowns},model.id,this.now());
+        const limits=getRequestQuota({billing_limits:snapshot,cooldowns:key.cooldowns,model_cooldowns:key.model_cooldowns},model.id,this.now());
         if(!limits.known||limits.stale||!WINDOWS.every(n=>Number.isFinite(limits.windows[n].usedPercent)&&limits.windows[n].usedPercent>=0))throw new Error('Incomplete or stale quota data');
         if(!key.billing_limits||snapshot.fetchedAt>=key.billing_limits.fetchedAt){key.billing_limits=snapshot;delete key.limits_error;this.manager.observeBillingLimits?.(key);}
         const end=Date.parse(limits.windows.fiveHour.windowEnd);
@@ -205,21 +270,33 @@ export class WindowSync {
           m.phase='done';m.confirmedEnd=end;m.error=null;state.groups[group].nextCheckAt=0;
           await this.manager.saveKeyPoolImmediately?.();this.save(state);return;
         }
-        if(m.acceptedAt) {
-          if(this.now()-m.acceptedAt>=5*3600000)return fail('Accepted request could not be confirmed before its window expired; refresh and start again');
-          m.nextAttemptAt=this.now()+2000;this.save(state);return;
-        }
         if(!limits.available)return fail(limits.reason);
+        if(m.acceptedAt) {
+          // A completed generation is not proof that Factory opened a billing window.
+          // Retry only after fresh telemetry still reports an unused, inactive window.
+          if(this.now()-m.acceptedAt<confirmationDelay||limits.windows.fiveHour.usedPercent!==0){
+            m.nextAttemptAt=this.now()+2000;this.save(state);return;
+          }
+          m.acceptedAt=null;
+        }
         if(m.kind==='test'&&this.closingBlock(key,model.id,end))return fail('Window ending');
         if(m.kind==='test'&&m.submittedAt)return fail('Previous test outcome is unknown; it was not replayed');
-        if(m.kind==='test'&&this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))return fail('An automatic Standard start is already in progress');
-        if(m.kind==='test'&&!(end>this.now())&&(group==='standard'||this.manages(key,model.id)))return fail('Waiting for the Standard window start');
+        if(m.kind==='test'&&this.peers(state,this.settings(),limits.group).some(g=>state.groups[g].phase==='starting'))return fail('An automatic start is already in progress');
+        if(m.kind==='test'&&!(end>this.now())&&(group==='standard'||this.manages(key,model.id)))return fail('Waiting for the '+(limits.group==='core'?'Core':'Standard')+' window start');
         if(m.kind==='start'&&limits.windows.fiveHour.usedPercent!==0)return fail('Factory has not reported the window reset');
+        const requests=this.requests.get(id);
+        if(m.kind==='start'&&(requests?.count||requests?.finishedAt>checkedAt)){m.nextAttemptAt=this.now()+2000;this.save(state);return;}
         // Persist before the physical send; a crash resumes with telemetry, not a blind replay.
         m.phase='starting';m.attempts++;m.submittedAt=this.now();m.nextAttemptAt=this.now()+30000;this.save(state);
         const result=await this.send({...key},model,signal);
         if(!valid())return fail('Account removed, disabled or changed after dispatch');
+        if(signal.aborted)return;
+        if([401,402,429].includes(result.status)){
+          if(this.manager.recordUpstreamFailure)await this.manager.recordUpstreamFailure(key.id,result.status,result.retryAfter,model.id,result.rejectionBody);
+          else recordQuotaRejection(key,result.status,result.retryAfter,model.id,result.rejectionBody,this.now());
+        }
         m.error=result.error||null;m.httpStatus=result.status||null;
+        m.responseId=result.responseId||null;m.responseStatus=result.responseStatus||null;m.usage=result.usage||null;
         if(result.accepted) {
           m.acceptedAt=this.now();m.responseId=result.responseId;m.phase=m.kind==='test'?'done':'starting';m.nextAttemptAt=this.now()+2000;
           key.last_test_result='success';key.last_test_at=new Date(this.now()).toISOString();key.last_error=null;
@@ -229,6 +306,7 @@ export class WindowSync {
         this.save(state);
       }catch(error){
         if(this.journalFailure)throw error;
+        if(signal.aborted)return;
         if(m.kind==='test'&&m.submittedAt&&!m.acceptedAt)return fail('Test outcome is unknown; refresh before retrying');
         m.error=error.message;m.nextAttemptAt=Math.max(this.now()+30000,error.retryAt||0);this.save(state);
       }
@@ -301,10 +379,12 @@ export class WindowSync {
         if(s.phase==='starting')s.cycleKeyIds=s.cycleKeyIds.filter(id=>id!==key.id);
       } else (s.members[key.id] ||= {}).credential=credential;
     }
+    if(s.phase==='starting'&&!keys.some(k=>s.cycleKeyIds.includes(k.id)))Object.assign(s,{phase:'waiting',cycleId:null,cycleKeyIds:[],partners:[group]});
     const participants=s.phase==='starting'?keys.filter(k=>s.cycleKeyIds.includes(k.id)):keys;
     if(s.phase==='active')s.phase='waiting';
     const model=this.readConfig().models.find(m=>m.id===cfg.modelId);
     const ctx={group,cfg,s,keys:participants,model,ready:false,valid:false};
+    s.blockedKeyId=null;s.blockReason=null;
     s.nextCheckAt=now+30000;
     if(!model || limitGroup(model.id)!==group || !['anthropic','openai','common'].includes(model.type)) {
       s.message='Configured start model is missing or belongs to another pool';return ctx;
@@ -326,24 +406,30 @@ export class WindowSync {
         const end=Date.parse(windows.fiveHour.windowEnd);
         Object.assign(m,{observedAt:this.now(),windowEnd:windows.fiveHour.windowEnd,usedPercent:windows.fiveHour.usedPercent,
           ready:(Number.isFinite(end)&&end<=this.now())||(!windows.fiveHour.windowEnd&&windows.fiveHour.usedPercent===0),
-          quotaReady:['weekly','monthly'].every(n=>windows[n].usedPercent<100||Date.parse(windows[n].windowEnd)<=this.now())&&(key.cooldowns?.[group]?.until||0)<=this.now(),
           refreshError:null,refreshFailures:0,refreshAfter:0});
         const requests=this.requests.get(key.id);
         if(requests?.count||requests?.finishedAt>checkedAt)m.ready=false;
         if(!key.billing_limits || snapshot.fetchedAt>=key.billing_limits.fetchedAt) {
           key.billing_limits=snapshot;delete key.limits_error;this.manager.observeBillingLimits?.(key);
         }
+        m.allowanceReason=group==='core'?this.coreStartBlock(key,model.id):null;
+        m.quotaReady=getLimitState(key,group,this.now()).available&&(key.model_cooldowns?.[model.id]?.until||0)<=this.now();
         const previousEnd=m.confirmedEnd;
         // Fresh telemetry supersedes a migrated or previously confirmed window.
         if(s.phase==='starting')m.confirmedEnd=m.attempts&&end>this.now()&&end!==m.baselineEnd?end:null;
         // An expired participant must be able to rejoin a partially started cycle.
-        if(s.phase==='starting'&&m.ready&&((previousEnd&&previousEnd<=this.now())||(m.acceptedAt&&m.acceptedAt+5*3600000<=this.now())))
+        if(s.phase==='starting'&&m.ready&&((previousEnd&&previousEnd<=this.now())||
+          (m.acceptedAt&&m.acceptedAt+confirmationDelay<=this.now()&&windows.fiveHour.usedPercent===0)))
           Object.assign(m,{acceptedAt:null,confirmedEnd:null,baselineEnd:end||null,nextAttemptAt:0});
       }catch(error){m.refreshError=error.message;m.ready=false;m.refreshAfter=Math.max(this.now()+backoff(m.refreshFailures=(m.refreshFailures||0)+1),error.retryAt||0);}
     }));
-    ctx.ready=participants.length>0&&participants.every(k=>{const m=s.members[k.id];return k.status==='active'&&k.last_test_result==='success'&&m.ready&&m.quotaReady&&!m.refreshError&&m.observedAt>=now;});
+    ctx.checkedStandard=group==='core'&&await this.checkStandardForCore(ctx,state,signal);
+    ctx.ready=participants.length>0&&participants.every(k=>{const m=s.members[k.id];return k.status==='active'&&k.last_test_result==='success'&&m.ready&&m.quotaReady&&!m.refreshError&&!m.allowanceReason&&m.observedAt>=now;});
+    const blocker=participants.find(k=>{const m=s.members[k.id];return k.status!=='active'||k.last_test_result!=='success'||m.refreshError||m.allowanceReason||!m.quotaReady||this.requests.get(k.id)?.count||!m.ready&&!(s.phase==='starting'&&m.confirmedEnd>this.now());});
+    if(blocker){const m=s.members[blocker.id];s.blockedKeyId=blocker.id;s.blockReason=blocker.status!=='active'?'Account is disabled':blocker.last_test_result!=='success'?'Account needs a successful test':m.refreshError||m.allowanceReason||(!m.quotaReady?'Waiting for quota or cooldown':this.requests.get(blocker.id)?.count?'Request still running':'Current window is still running');}
     s.message=participants.some(k=>k.status!=='active'||k.last_test_result!=='success')?'Selected accounts must be enabled and tested':'Waiting for current windows and available quota';
     s.nextCheckAt=Math.min(this.now()+(s.phase==='starting'?2000:30000),...participants.map(k=>Date.parse(s.members[k.id].windowEnd)).filter(end=>end>this.now()));
+    if(ctx.checkedStandard)s.nextCheckAt=this.now()+2000;
     return ctx;
   }
   async run(signal) {
@@ -354,8 +440,9 @@ export class WindowSync {
       const s=state.groups[group];
       const signature=JSON.stringify([cfg,this.manager.keys.map(k=>[k.id,k.excluded,k.status,k.last_test_result,identity(k)])]);
       if(s.selection!==signature){s.selection=signature;s.nextCheckAt=0;}
-      if(Object.entries(state.manual?.[group]||{}).some(([id])=>this.manualPending(state,group,id)))continue;
       if(!this.participates(cfg,group)){s.message=cfg.groups[group].enabled?'No included accounts':'Automatic starts are off';continue;}
+      const manual=Object.keys(state.manual?.[group]||{}).map(id=>this.manualPending(state,group,id)).filter(Boolean);
+      if(manual.length){s.message='Waiting for manual requests to finish';s.nextCheckAt=Math.min(...manual.map(m=>m.nextAttemptAt||this.now()));continue;}
       if(s.phase==='starting'&&!taken.has(group)) {
         const peers=this.peers(state,cfg,group);batches.push(peers);peers.forEach(g=>taken.add(g));
       }
@@ -374,7 +461,8 @@ export class WindowSync {
       const contexts=prepared.map(r=>r.value);
       const latest=this.settings();
       if(signal.aborted || !groups.every(g=>latest.groups[g].enabled&&equal(latest.groups[g],cfg.groups[g]))) {this.save(state);return;}
-      if(contexts.some(c=>!c.valid)){this.save(state);return;}
+      // A Standard check can change billing windows; refresh before dispatching Core starts.
+      if(contexts.some(c=>!c.valid||c.checkedStandard)){this.save(state);return;}
       const starting=contexts.some(c=>c.s.phase==='starting');
       if(!starting) {
         if(groups.some(g=>Object.entries(state.manual?.[g]||{}).some(([id])=>this.manualPending(state,g,id))))return;
@@ -391,13 +479,20 @@ export class WindowSync {
       const sends=await Promise.allSettled(contexts.flatMap(c=>c.keys.map(async key=>{
         const m=c.s.members[key.id], current=this.now(), fresh=this.settings();
         if(this.journalFailure||signal.aborted||!this.ownsLock())return;
-        if(!fresh.groups[c.group].enabled||!fresh.groups[c.group].keyIds.includes(key.id)||key.excluded||!this.manager.keys.includes(key)||key.status!=='active'||key.last_test_result!=='success'||identity(key)!==m.credential)return;
+        if(!fresh.groups[c.group].enabled||!equal(fresh.groups[c.group],c.cfg)||!fresh.groups[c.group].keyIds.includes(key.id)||key.excluded||!this.manager.keys.includes(key)||key.status!=='active'||key.last_test_result!=='success'||identity(key)!==m.credential)return;
         if(!hadDispatch()&&!groups.every(g=>withinWorkingHours(fresh.groups[g].workingHours,current)))return;
+        if(c.group==='core'&&c.keys.some(k=>{const member=c.s.members[k.id];return k.status!=='active'||k.last_test_result!=='success'||member.refreshError||member.observedAt<current-60000||!member.quotaReady||this.coreStartBlock(k,c.model.id)||this.requests.get(k.id)?.count;}))return;
         if(fresh.groups[c.group].modelId!==c.cfg.modelId||m.confirmedEnd>current||m.acceptedAt||m.refreshError||m.observedAt<this.now()-60000||!m.quotaReady||!m.ready||m.nextAttemptAt>current)return;
         m.attempts++;m.submittedAt=current;m.nextAttemptAt=current+30000;m.error='Request sent; awaiting confirmation';this.save(state);
         let result;try{result=await this.send({...key},c.model,signal);}catch(error){result={ambiguous:true,error:error.code||error.name};}
+        if(identity(key)!==m.credential || c.s.members[key.id]!==m || !this.manager.keys.includes(key))return;
+        if([401,402,429].includes(result.status)){
+          if(this.manager.recordUpstreamFailure)await this.manager.recordUpstreamFailure(key.id,result.status,result.retryAfter,c.model.id,result.rejectionBody);
+          else recordQuotaRejection(key,result.status,result.retryAfter,c.model.id,result.rejectionBody,this.now());
+        }
         if(identity(key)!==m.credential || c.s.members[key.id]!==m)return;
         m.error=result.error||null;m.httpStatus=result.status||null;
+        m.responseId=result.responseId||null;m.responseStatus=result.responseStatus||null;m.usage=result.usage||null;
         if(result.accepted){m.acceptedAt=this.now();m.responseId=result.responseId;}
         else m.nextAttemptAt=Math.max(this.now()+(result.ambiguous?30000:backoff(m.attempts)),result.retryAt||0);
         this.save(state);
@@ -405,11 +500,11 @@ export class WindowSync {
       })));
       const failure=sends.find(r=>r.status==='rejected');if(failure)throw failure.reason;
       const activeContexts=contexts.filter(c=>this.participates(this.settings(),c.group));
-      const participants=c=>c.keys.filter(k=>this.manages(k,c.cfg.modelId)&&this.manager.keys.includes(k));
-      const complete=activeContexts.every(c=>!this.settings().groups[c.group].keyIds.some(id=>!this.manager.keys.some(k=>k.id===id))&&participants(c).every(k=>k.status==='active'&&k.last_test_result==='success'&&c.s.members[k.id]?.credential===identity(k)&&c.s.members[k.id]?.confirmedEnd>this.now()));
+      const participants=c=>c.keys.filter(k=>!k.excluded&&this.settings().groups[c.group].keyIds.includes(k.id)&&this.manager.keys.includes(k));
+      const complete=activeContexts.every(c=>participants(c).length>0&&!this.settings().groups[c.group].keyIds.some(id=>!this.manager.keys.some(k=>k.id===id))&&participants(c).every(k=>k.status==='active'&&k.last_test_result==='success'&&c.s.members[k.id]?.credential===identity(k)&&c.s.members[k.id]?.confirmedEnd>this.now()));
       for(const c of activeContexts) {
-        if(complete){const ends=participants(c).map(k=>c.s.members[k.id].confirmedEnd);Object.assign(c.s,{phase:'active',completedAt:this.now(),message:'All selected windows confirmed',spreadMs:ends.length?Math.max(...ends)-Math.min(...ends):0,nextCheckAt:ends.length?Math.min(...ends):this.now()+30000});}
-        else {c.s.message='Verifying the current start; accepted requests are not replayed';c.s.nextCheckAt=this.now()+2000;}
+        if(complete){const ends=participants(c).map(k=>c.s.members[k.id].confirmedEnd);Object.assign(c.s,{phase:'active',completedAt:this.now(),message:'All selected windows confirmed',blockedKeyId:null,blockReason:null,spreadMs:ends.length?Math.max(...ends)-Math.min(...ends):0,nextCheckAt:ends.length?Math.min(...ends):this.now()+30000});}
+        else {c.s.message='Waiting for Factory to confirm the selected windows';c.s.nextCheckAt=this.now()+2000;}
       }
       this.save(state);
     }));

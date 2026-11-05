@@ -1,7 +1,7 @@
 import {$,state,api,escape as e,algorithms,action,notify,confirmAction} from './ui.js';
 const sectionNames={models:'Models',system_prompt:'System prompt',key_pool:'Advanced balancing, retries and groups',reasoning:'Reasoning',reasoning_tokens:'Reasoning token budgets',endpoint:'Upstream endpoints',port:'Listen port',redis:'Redis',cluster:'Cluster',token_sync:'Usage synchronization',limits:'Size limits'};
 let ready=false;
-function sectionValue(){ const field=$('configSection').value; const value=structuredClone(state.config[field]); if(field==='key_pool'&&value)delete value.algorithm; $('configJson').value=JSON.stringify(value,null,2); }
+function sectionValue(){ const field=$('configSection').value; const value=structuredClone(state.config[field]); if(field==='key_pool'&&value){delete value.algorithm;delete value.waitForQuota;} $('configJson').value=JSON.stringify(value,null,2); }
 function describe(){ $('algorithmHelp').textContent=(algorithms[$('algorithm').value]?.[1]||'Server-specific policy.')+' Excluded, untested and unavailable accounts are skipped.'; }
 export function renderSettings(force=false) {
   if(!ready||force){
@@ -9,6 +9,7 @@ export function renderSettings(force=false) {
     const selected=state.config.key_pool?.algorithm==='weighted-usage'?'max-remaining':state.config.key_pool?.algorithm;
     if(selected&&!algorithms[selected])$('algorithm').add(new Option(selected,selected));
     $('algorithm').value=selected||'round-robin';describe();
+    $('waitForQuota').checked=state.config.key_pool?.waitForQuota===true;
     // Window selection has its own validated endpoint and must not be overwritten by the generic editor.
     $('configSection').innerHTML=Object.keys(state.config).filter(key=>key!=='window_sync'&&!/secret|password|access_key|api_key/i.test(key)).map(key=>'<option value="'+e(key)+'">'+e(sectionNames[key]||key)+'</option>').join('');
     $('configSection').value=state.config.models?'models':$('configSection').value;sectionValue();ready=true;
@@ -19,14 +20,14 @@ export function renderSettings(force=false) {
 export function initSettings(refresh) {
   $('algorithm').onchange=describe;
   $('routingForm').onsubmit=event=>{event.preventDefault();action(event.submitter,async()=>{
-    await api('/config','PUT',{key_pool:{algorithm:$('algorithm').value}});state.config=await api('/config');await refresh();notify('Balancing saved.');
+    await api('/config','PUT',{key_pool:{algorithm:$('algorithm').value,waitForQuota:$('waitForQuota').checked}});state.config=await api('/config');await refresh();notify('Balancing saved.');
   });};
   $('configSection').onchange=sectionValue;
   $('reloadSection').onclick=event=>action(event.currentTarget,async()=>{state.config=await api('/config');sectionValue();notify('Saved section reloaded.');});
   $('configEditor').onsubmit=event=>{event.preventDefault();action(event.submitter,async()=>{
     const field=$('configSection').value;let value;
     try{value=JSON.parse($('configJson').value);}catch{throw new Error('Invalid JSON. Nothing was saved.');}
-    if(field==='key_pool'&&Object.hasOwn(value||{},'algorithm'))throw new Error('Change the algorithm with Save balancing above.');
+    if(field==='key_pool'&&['algorithm','waitForQuota'].some(key=>Object.hasOwn(value||{},key)))throw new Error('Change balancing with Save balancing above.');
     if(field==='models'&&(!Array.isArray(value)||value.some(m=>!m.id||!m.type)))throw new Error('Models must be an array with id and type for each model.');
     const previous=state.config[field];
     if(previous!==null&&(Array.isArray(previous)!==Array.isArray(value)||typeof previous!==typeof value||value===null))throw new Error('Keep the section’s original JSON type.');

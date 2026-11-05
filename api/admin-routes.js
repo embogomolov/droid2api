@@ -454,6 +454,8 @@ router.put('/keys/:id', wrapSync((req, res) => {
     delete existingKey.quota_balance;
     delete existingKey.billing_limits;
     delete existingKey.limits_error;
+    delete existingKey.cooldowns;
+    delete existingKey.model_cooldowns;
     existingKey.last_test_result = 'pending';
     existingKey.status = 'disabled';
   }

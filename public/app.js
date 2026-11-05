@@ -5,6 +5,7 @@ import {initSettings,renderSettings} from './settings.js';
 import {initRequests,refreshRequests} from './requests.js';
 const storage='droid2api_admin_key';
 let signedIn=false, refreshing=null, lastLimits=0, timer;
+const manualPending=()=>state.keys.some(key=>Object.values(key.routing||{}).some(route=>route.action?.pending));
 function signOut(){
   signedIn=false;setCredential('');sessionStorage.removeItem(storage);localStorage.removeItem(storage);localStorage.removeItem('droid2api_login_time');
   $('workspace').hidden=true;$('logout').hidden=true;$('login').hidden=false;$('connection').textContent='Local proxy';clearTimeout(timer);
@@ -26,9 +27,10 @@ export async function refresh(force=false){
   while(refreshing)await refreshing;
   refreshing=(async()=>{
     const previous=JSON.stringify(state.keys.map(k=>[k.id,k.excluded,k.status,k.last_test_result,k.notes]));
-    const limits=force||Date.now()-lastLimits>60000
-      ? api('/token/limits'+(force?'?forceRefresh=true':''),'GET',undefined,45000).then(data=>{state.limits=data.keys;lastLimits=Date.now();})
-      : Promise.resolve();
+    // Read the scheduler's latest snapshot on every poll, without extra Factory calls.
+    const updateLimits=force||(!manualPending()&&Date.now()-lastLimits>60000);
+    const limits=api('/token/limits'+(force?'?forceRefresh=true':updateLimits?'':'?cachedOnly=true'),'GET',undefined,updateLimits?45000:15000)
+      .then(data=>{state.limits=data.keys;if(updateLimits)lastLimits=Date.now();});
     // Routing status must observe the completed quota refresh, including failures.
     const jobs=[limits,limits.then(loadKeys,loadKeys),api('/window-sync').then(data=>state.sync=data),api('/pool-groups').then(data=>state.pools=Array.isArray(data)?data:data.groups||data.poolGroups||[])];
     const results=await Promise.allSettled(jobs);if(!signedIn)return;
@@ -37,22 +39,25 @@ export async function refresh(force=false){
     $('connection').textContent=errors.length?'Refresh incomplete':'Connected · '+new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
     renderAccounts();renderWindows();renderSettings();
     if(JSON.stringify(state.keys.map(k=>[k.id,k.excluded,k.status,k.last_test_result,k.notes]))!==previous)document.dispatchEvent(new Event('accounts-changed'));
-  })().finally(()=>refreshing=null);
+  })().finally(()=>{refreshing=null;if(signedIn)schedule();});
   return refreshing;
 }
 async function signIn(key){
   setCredential(key);state.config=await api('/config');signedIn=true;sessionStorage.setItem(storage,key);
   localStorage.removeItem(storage);localStorage.removeItem('droid2api_login_time');
   $('login').hidden=true;$('workspace').hidden=false;$('logout').hidden=false;$('adminKey').value='';
-  showTab();await refresh();schedule();
+  showTab();await refresh();
 }
-function schedule(){clearTimeout(timer);timer=setTimeout(async()=>{
+async function poll(){
   if(!signedIn)return;
-  if(!document.hidden){await refresh();if(state.tab==='requests')await refreshRequests();}
-  schedule();
-},10000);}
+  try{if(!document.hidden){await refresh();if(state.tab==='requests')await refreshRequests();}}
+  catch(error){notify(error.message,true);}
+  finally{if(signedIn)schedule();}
+}
+function schedule(){clearTimeout(timer);timer=setTimeout(poll,manualPending()?2000:10000);}
 wireUI();initAccounts(refresh);initWindows(refresh);initSettings(refresh);initRequests();
 window.addEventListener('hashchange',showTab);document.addEventListener('auth-expired',signOut);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void poll();});
 $('logout').onclick=signOut;
 $('login').onsubmit=event=>{event.preventDefault();action(event.submitter,async()=>{try{await signIn($('adminKey').value.trim());$('loginError').textContent='';}catch(error){$('loginError').textContent=error.message;}});};
 showTab();

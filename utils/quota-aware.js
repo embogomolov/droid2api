@@ -124,10 +124,7 @@ function commonReset(keys, settings, group, now) {
   const groups=cfg.startTogether?GROUPS.filter(g=>cfg.groups[g].enabled):[group];
   for (const pool of groups) for (const key of keys.filter(k=>!k.excluded&&cfg.groups[pool].keyIds.includes(k.id))) {
     const windows = getLimitState(key,pool,now).windows;
-    for (const name of WINDOWS) {
-      const w = windows?.[name];
-      if (name === 'fiveHour' || w?.usedPercent >= 100) end = Math.max(end,Date.parse(w?.windowEnd)||now);
-    }
+    end = Math.max(end,Date.parse(windows?.fiveHour?.windowEnd)||now);
     end = Math.max(end,key.cooldowns?.[pool]?.until||now);
   }
   return { ids:new Set(members.map(k=>k.id)), end };
@@ -193,7 +190,7 @@ export class QuotaAware {
       r.weight=r.limiting.relative;
       r.mode=r.budgets.some(b=>!b.fresh)?'partial':r.budgets.some(b=>b.confidence>0)?'measured':'adaptive';
     }
-    // Prepaid exhausted accounts are used only when no included allowance is available.
+    // At 100% telemetry, eligible accounts still get requests until Factory rejects them.
     if (rows.length&&!rows.some(r=>r.weight>0)) for (const r of rows) r.weight=1;
     const sum=rows.reduce((n,r)=>n+r.weight,0);
     for (const r of rows) r.share=r.weight/sum;
