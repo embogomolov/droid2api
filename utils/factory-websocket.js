@@ -17,7 +17,7 @@ export function factoryWebSocketUrl(address) {
 }
 
 // A caller holding the task lock can reuse its socket. Stateless callers remain isolated.
-export function fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout = 15_000, session, onUsage = () => {}, beforeSend = () => {} }) {
+export function fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout = 15_000, session, onUsage = () => {}, beforeSend = () => {}, onEvent }) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason || new Error('Request aborted')); return; }
     const wsHeaders = Object.fromEntries(Object.entries(headers).filter(([name]) =>
@@ -196,7 +196,7 @@ export function fetchFactoryWebSocket(address, { headers, body, signal, handshak
         // Recover only an explicit rejection of our own chain ID, once, using
         // full client history. Ambiguous disconnects are never replayed.
         finish(); resetConnection(session);
-        fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout, session, onUsage, beforeSend }).then(resolve, reject);
+        fetchFactoryWebSocket(address, { headers, body, signal, handshakeTimeout, session, onUsage, beforeSend, onEvent }).then(resolve, reject);
         return;
       }
       terminal = ['response.completed', 'response.incomplete', 'response.failed', 'error'].includes(event.type);
@@ -204,6 +204,7 @@ export function fetchFactoryWebSocket(address, { headers, body, signal, handshak
       if (failed && !settled) {
         reply(errorResponse(event)); finish(); return;
       }
+      onEvent?.(event);
       if (event.type.startsWith('response.')) accepted = true;
       if (stream === true) {
         if (!settled) reply(new Response(output, { headers: { 'content-type': 'text/event-stream' } }));

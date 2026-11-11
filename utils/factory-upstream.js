@@ -1,4 +1,5 @@
 import { factoryWebSocketUrl, fetchFactoryWebSocket } from './factory-websocket.js';
+import { getModelRefusal } from './model-refusal.js';
 import { getFactorySession, lockSession } from './factory-sessions.js';
 import { recordRequest } from './request-stats.js';
 import { prepareFactoryRequest, prepareAnthropicImages } from './factory-images.js';
@@ -186,7 +187,11 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     const idleTimeout = anthropic ? 240_000 : 120_000; // Native Droid Anthropic stream idle timeout.
     phase = 'waiting_for_response';
     timer = setTimeout(() => abort('upstream_response_timeout'), anthropic ? 600_000 : 120_000);
-    let response, usageRecorded = false, usingWebSocket = false, observeHTTP, observeEvent;
+    let response, usageRecorded = false, usingWebSocket = false, observeHTTP, observeEvent, refusal;
+    const observeRefusal = payload => {
+      const next = getModelRefusal(payload);
+      if (next && (!refusal || next.category)) refusal = next;
+    };
     const accountUsage = report => {
       const usage = report.usage;
       const cacheReadTokens = anthropic ? usage?.cache_read_input_tokens ?? 0 : usage?.input_tokens_details?.cached_tokens ?? 0;
@@ -259,7 +264,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
         if(!usingWebSocket)beforeSend();
         return usingWebSocket
         ? fetchFactoryWebSocket(websocketUrl, { headers, body, signal: controller.signal, session,
-          onUsage: accountUsage, beforeSend })
+          onUsage: accountUsage, beforeSend, onEvent: req.body.stream === true ? undefined : observeRefusal })
         : fetchWithPool(httpUrl, {
           method: 'POST', headers, body: serializedBody, retry: false,
           signal: controller.signal, redirect: 'error'
@@ -314,6 +319,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
       };
       const outcome = { onTerminal: observeHTTP, onEvent: event => {
         observeEvent?.(event);
+        observeRefusal(event);
         if (event.type === 'error' || event.type === 'response.failed' || event.error) {
           recordEventRejection(event);
           const error = upstreamEventError(event);
@@ -333,6 +339,7 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
               timer = setTimeout(() => abort('upstream_stream_idle_timeout'), idleTimeout);
               yield chunk;
             }
+            if (!outcome.failed && refusal) res.locals.factoryRequest.refusal = refusal;
           } catch (error) {
             diagnose(failureReason || 'upstream_stream_interrupted', error);
             if (session && usingWebSocket && !controller.signal.aborted) {
@@ -351,7 +358,12 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
           diagnose('upstream_error_event',upstreamEventError(result));
           await pendingRejection;
         }
-        observeHTTP?.(result,!!result&&!result.error&&result.status!=='failed');
+        const success = !!result && !result.error && result.status !== 'failed';
+        if (success) {
+          observeRefusal(result);
+          if (refusal) res.locals.factoryRequest.refusal = refusal;
+        }
+        observeHTTP?.(result, success);
         response = new Response(raw, { status: response.status, headers: response.headers });
       }
       return { response, currentKeyId: keyId, outcome, usageRecorded };

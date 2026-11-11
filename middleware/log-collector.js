@@ -92,11 +92,17 @@ export function logCollectorMiddleware(req, res, next) {
       if (recorded) return;
       recorded = true;
       const report = res.locals?.factoryRequest || {};
-      const failed = !res.writableFinished || res.statusCode >= 400 || report.success === false;
-      const entry = { type: 'generation', url: req.path, timestamp: getTimestamp(), level: failed ? 'error' : 'info',
+      const refusal = res.writableFinished && res.statusCode < 400 && !report.error && !report.upstreamError && report.refusal;
+      const outcome = !res.writableFinished ? 'Disconnected'
+        : res.statusCode >= 400 ? `HTTP ${res.statusCode}`
+        : refusal ? 'Refused'
+        : report.success === false || report.upstreamError ? 'Stream failed'
+        : 'Completed';
+      const entry = { type: 'generation', url: req.path, timestamp: getTimestamp(), level: refusal ? 'warn' : outcome === 'Completed' ? 'info' : 'error',
         summary: { model: report.model || req.body?.model || null, keyId: report.keyId || null,
           elapsedMs: Date.now() - startTime, usage: report.usage || null,
-          outcome: !res.writableFinished ? 'Disconnected' : res.statusCode >= 400 ? `HTTP ${res.statusCode}` : report.success === false ? 'Stream failed' : 'Completed',
+          outcome,
+          ...(refusal ? { refusalCategory: refusal.category } : {}),
           error: report.error || null, upstreamError: report.upstreamError || null } };
       if (pending) { Object.assign(pending, entry); logEmitter.emit('log', pending); }
       else addLogToBuffer(entry);
