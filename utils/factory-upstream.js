@@ -16,6 +16,14 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 // Keep every original SSE byte. An EOF without a terminal event is a failure,
 // never a completed answer and never a reason to replay an already-started turn.
+function observeSSEEvent(event, outcome, terminal = false) {
+  outcome.onEvent?.(event);
+  terminal ||= ['response.completed', 'response.done', 'response.incomplete', 'response.failed', 'message_stop', 'error'].includes(event.type);
+  if (event.type === 'response.failed' || event.type === 'error' || event.error) outcome.failed = true;
+  if (terminal) outcome.onTerminal?.(event.response, !outcome.failed);
+  return terminal;
+}
+
 export async function* checkedSSE(body, outcome = {}) {
   const decoder = new StringDecoder('utf8');
   let buffer = '', data = [], terminal = false, messageStopped = false;
@@ -26,11 +34,8 @@ export async function* checkedSSE(body, outcome = {}) {
     if (text === '[DONE]') { terminal = true; return; }
     let event;
     try { event = JSON.parse(text); } catch { return; }
-    outcome.onEvent?.(event);
-    if (['response.completed', 'response.done', 'response.incomplete', 'response.failed', 'message_stop', 'error'].includes(event.type)) terminal = true;
-    if (event.type === 'response.failed' || event.type === 'error' || event.error) outcome.failed = true;
+    terminal = observeSSEEvent(event, outcome, terminal);
     if (event.type === 'message_stop' || event.type === 'error') messageStopped = true;
-    if (terminal) outcome.onTerminal?.(event.response, !outcome.failed);
   };
   try {
     for await (const chunk of body) {
@@ -176,9 +181,9 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
     const selectedAccount = manager.keys.find(item => item.id === keyId || fixedAuth === `Bearer ${item.key}`);
     const hold = selectedAccount && manager.windowSync?.routingBlock(selectedAccount, req.body.model);
     if (hold) { if (!fixedAuth) { quotaRetry = true; continue; } res.setHeader('Retry-After', '5'); res.status(503).json({ error: { type: 'window_sync_wait', message: hold } }); return null; }
-    const { url, headers, body } = makeRequest(fixedAuth || `Bearer ${key.key}`);
+    const { url, headers, body, adaptStream, logBody = body } = makeRequest(fixedAuth || `Bearer ${key.key}`);
     if (session) headers['x-session-id'] = session.identity;
-    logRequest('POST', url, headers, body);
+    logRequest('POST', url, headers, logBody);
     // Header timeout and later stream idle timeout; client disconnect cancels upstream.
     clearTimeout(timer);
     const anthropic = headers['x-api-provider'] === 'anthropic';
@@ -331,13 +336,27 @@ export async function requestWithFailover(req, res, makeRequest, manager = keyPo
         const original = response;
         const monitored = async function* () {
           phase = 'streaming';
-          clearTimeout(timer);
-          timer = setTimeout(() => abort('upstream_stream_idle_timeout'), idleTimeout);
+          const resetIdleTimer = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => abort('upstream_stream_idle_timeout'), idleTimeout);
+          };
+          resetIdleTimer();
           try {
-            for await (const chunk of checkedSSE(original.body, outcome)) {
-              clearTimeout(timer);
-              timer = setTimeout(() => abort('upstream_stream_idle_timeout'), idleTimeout);
-              yield chunk;
+            if (adaptStream) {
+              const input = async function* () {
+                try {
+                  for await (const chunk of original.body) {
+                    resetIdleTimer();
+                    yield chunk;
+                  }
+                } finally { original.body.destroy(); }
+              };
+              yield* adaptStream(input(), event => observeSSEEvent(event, outcome), usageRecorded);
+            } else {
+              for await (const chunk of checkedSSE(original.body, outcome)) {
+                resetIdleTimer();
+                yield chunk;
+              }
             }
             if (!outcome.failed && refusal) res.locals.factoryRequest.refusal = refusal;
           } catch (error) {

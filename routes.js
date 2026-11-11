@@ -7,6 +7,7 @@ import { transformToAnthropic, getAnthropicHeaders, prepareDirectAnthropic } fro
 import { transformToOpenAI, getOpenAIHeaders, prepareOpenAIInstructions, prepareOpenAIInput } from './transformers/request-openai.js';
 import { transformToCommon, getCommonHeaders } from './transformers/request-common.js';
 import { AnthropicResponseTransformer } from './transformers/response-anthropic.js';
+import { prepareAnthropicToolHistory } from './transformers/anthropic-tool-history.js';
 import { OpenAIResponseTransformer } from './transformers/response-openai.js';
 import keyPoolManager from './auth.js';
 import fetchWithPool, { FetchRetryError } from './utils/http-client.js';
@@ -251,20 +252,34 @@ async function handleChatCompletions(req, res) {
       return res.status(500).json({ error: `Unknown model type: ${model.type}` });
     }
 
+    const isStreaming = transformedRequest.stream === true;
+    let logBody, rememberToolTurn;
+    if (model.type === 'anthropic' && transformedRequest.tools?.length) {
+      logBody = { ...transformedRequest };
+      const thread = req.headers['thread-id'] || req.headers['session-id'] ||
+        req.headers['x-session-id'] || req.headers['x-claude-code-session-id'];
+      rememberToolTurn = prepareAnthropicToolHistory(transformedRequest, endpoint.base_url,
+        [thread, req.headers['x-claude-code-agent-id']]);
+    }
+    const tokenStats = createTokenStats();
+    let adaptStream;
+    if (isStreaming && model.type !== 'common') {
+      const Transformer = model.type === 'anthropic' ? AnthropicResponseTransformer : OpenAIResponseTransformer;
+      const extractUsage = model.type === 'anthropic' ? extractAnthropicTokens : extractOpenAITokens;
+      adaptStream = (source, observe, usageRecorded) => new Transformer(modelId, undefined, rememberToolTurn).transformStream(source, event => {
+        observe(event);
+        if (!usageRecorded) extractUsage(event, tokenStats);
+      });
+    }
     const upstream = await requestWithFailover(req, res, authHeader => ({
-      url: endpoint.base_url, headers: { ...headers, authorization: authHeader }, body: transformedRequest
+      url: endpoint.base_url, headers: { ...headers, authorization: authHeader }, body: transformedRequest, adaptStream, logBody
     }));
     if (!upstream) return;
     const { response, currentKeyId } = upstream;
 
-    const isStreaming = transformedRequest.stream === true;
-
     if (isStreaming) {
       // 🔧 Optimization: use the shared function to set streaming response headers
       setStreamingHeaders(res);
-
-      // BaSui: Collect token statistics from streaming responses (including thinking and cache tokens)
-      const tokenStats = createTokenStats();
 
       // common type is forwarded directly without using transformer
       if (model.type === 'common') {
@@ -299,91 +314,14 @@ async function handleChatCompletions(req, res) {
           res.destroy(streamError);
         }
       } else {
-        // anthropic and openai types use transformer
-        let transformer;
-        let buffer = '';
-
-        if (model.type === 'anthropic') {
-          transformer = new AnthropicResponseTransformer(modelId, `chatcmpl-${Date.now()}`);
-        } else if (model.type === 'openai') {
-          transformer = new OpenAIResponseTransformer(modelId, `chatcmpl-${Date.now()}`);
-        }
-
         try {
-          // BaSui: 🔧 Fix memory leaks: stream data with a maximum buffer size
-          const MAX_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB maximum buffer
-          let bufferSize = 0;
-          const rawChunks = [];
-          let isOversized = false;
-
-          // Stream data, converting and sending as it arrives
-          for await (const chunk of response.body) {
-            // Check buffer size
-            bufferSize += chunk.length;
-            if (bufferSize > MAX_BUFFER_SIZE) {
-              logError(`Response too large: ${bufferSize} bytes (max: ${MAX_BUFFER_SIZE})`);
-              isOversized = true;
-              // Forward oversized responses directly without further accumulation
-              if (transformer) {
-                const chunkStream = (async function* () { yield chunk; })();
-                for await (const transformed of transformer.transformStream(chunkStream)) {
-                  await writeResponseChunk(res, transformed);
-                }
-              } else {
-                await writeResponseChunk(res, chunk);
-              }
-            } else {
-              // Accumulate normal-sized responses for token statistics
-              rawChunks.push(chunk);
-            }
-          }
-
-          if (!isOversized) {
-            // Calculate token statistics only for normal-sized responses
-            let buffer = '';  // 🔧 Fix: declare the buffer variable
-            for (const chunk of rawChunks) {
-              buffer += chunk.toString();
-              const lines = buffer.split('\n');
-              buffer = lines.pop() || '';
-
-              for (const line of lines) {
-                if (line.startsWith('data:')) {
-                  try {
-                    const dataStr = line.slice(5).trim();
-                    if (dataStr === '[DONE]') continue;
-
-                    const data = JSON.parse(dataStr);
-
-                    if (model.type === 'anthropic') {
-                      extractAnthropicTokens(data, tokenStats);
-                    } else {
-                      extractOpenAITokens(data, tokenStats);
-                    }
-                  } catch (e) {
-                    // Ignore non-JSON lines
-                  }
-                }
-              }
-            }
-
-            // Convert and forward accumulated chunks
-            const rawStream = (async function* () {
-              for (const chunk of rawChunks) {
-                yield chunk;
-              }
-            })();
-
-            for await (const chunk of transformer.transformStream(rawStream)) {
-              await writeResponseChunk(res, chunk);
-            }
-          }
-          
+          for await (const chunk of response.body) await writeResponseChunk(res, chunk);
           res.end();
-          logInfo('Stream completed');
+          if (!upstream.outcome.failed) logInfo('Stream completed');
         } catch (streamError) {
           logError('Stream error', streamError);
           if (!res.headersSent) {
-            res.status(502).json({ error: 'Stream processing error' });
+            res.status(502).type('json').json({ error: 'Stream processing error' });
           } else {
             res.destroy(streamError);
           }
@@ -392,7 +330,8 @@ async function handleChatCompletions(req, res) {
 
       // BaSui: Record token usage statistics (all supported token types)
       try {
-        if (!upstream.usageRecorded && (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0)) {
+        if (!upstream.usageRecorded && res.writableEnded && res.statusCode < 400 && !upstream.outcome.failed &&
+            (tokenStats.inputTokens > 0 || tokenStats.outputTokens > 0)) {
           const { recordRequest } = await import('./utils/request-stats.js');
           recordRequest({
             inputTokens: tokenStats.inputTokens,
@@ -429,6 +368,7 @@ async function handleChatCompletions(req, res) {
       if (model.type === 'anthropic') {
         // BaSui: Convert the Anthropic response to OpenAI format
         try {
+          if (data.stop_reason === 'tool_use' && Array.isArray(data.content)) rememberToolTurn?.(data.content);
           const converted = convertAnthropicToChatCompletion(data);
           logResponse(200, null, converted);
           res.json(converted);

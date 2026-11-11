@@ -68,9 +68,17 @@ export function transformToOpenAI(openaiRequest) {
     targetRequest.max_output_tokens = filteredRequest.max_completion_tokens;
   }
 
-  // Transform messages to input
-  if (filteredRequest.messages && Array.isArray(filteredRequest.messages)) {
+  const customCalls = new Set();
+  if (Array.isArray(filteredRequest.messages)) {
     for (const msg of filteredRequest.messages) {
+      if (msg.role === 'tool') {
+        const type = customCalls.has(msg.tool_call_id) ? 'custom_tool_call_output' : 'function_call_output';
+        const output = Array.isArray(msg.content)
+          ? msg.content.map(part => ({ type: 'input_text', text: part.text }))
+          : msg.content;
+        targetRequest.input.push({ type, call_id: msg.tool_call_id, output });
+        continue;
+      }
       const inputMsg = {
         role: msg.role,
         content: []
@@ -105,16 +113,30 @@ export function transformToOpenAI(openaiRequest) {
         }
       }
 
-      targetRequest.input.push(inputMsg);
+      const calls = msg.role === 'assistant' && Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+      if (!calls.length || (Array.isArray(msg.content) ? inputMsg.content.length : msg.content)) targetRequest.input.push(inputMsg);
+      for (const call of calls) {
+        if (call.type === 'custom') {
+          customCalls.add(call.id);
+          targetRequest.input.push({ type: 'custom_tool_call', call_id: call.id, name: call.custom.name, input: call.custom.input });
+        } else if (call.type === 'function') {
+          targetRequest.input.push({ type: 'function_call', call_id: call.id, name: call.function.name, arguments: call.function.arguments });
+        }
+      }
     }
   }
 
-  // Transform tools if present
-  if (filteredRequest.tools && Array.isArray(filteredRequest.tools)) {
-    targetRequest.tools = filteredRequest.tools.map(tool => ({
-      ...tool,
-      strict: false
-    }));
+  if (Array.isArray(filteredRequest.tools)) {
+    targetRequest.tools = filteredRequest.tools.map(tool => {
+      if (tool.type === 'function' && tool.function) return { type: 'function', strict: false, ...tool.function };
+      if (tool.type === 'custom' && tool.custom) return { type: 'custom', ...tool.custom };
+      return { ...tool, strict: false };
+    });
+  }
+  const toolChoice = filteredRequest.tool_choice;
+  if (toolChoice !== undefined) {
+    const name = toolChoice?.[toolChoice.type]?.name;
+    targetRequest.tool_choice = name ? { type: toolChoice.type, name } : toolChoice;
   }
 
   // Extract system message as instructions and prepend system prompt
