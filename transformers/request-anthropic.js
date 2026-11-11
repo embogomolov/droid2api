@@ -45,6 +45,10 @@ export function prepareDirectAnthropic(request) {
   return result;
 }
 
+function cacheControl({ cache_control }) {
+  return cache_control === undefined ? {} : { cache_control };
+}
+
 export function transformToAnthropic(openaiRequest, targetModel = null) {
   logDebug('Transforming OpenAI request to Anthropic format');
   
@@ -62,7 +66,8 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
   
   const anthropicRequest = {
     model: modelId,
-    messages: []
+    messages: [],
+    ...cacheControl(filteredRequest)
   };
 
   // Only add stream parameter if explicitly provided by client
@@ -96,7 +101,8 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
             if (part.type === 'text') {
               systemContent.push({
                 type: 'text',
-                text: part.text
+                text: part.text,
+                ...cacheControl(part)
               });
             } else {
               systemContent.push(part);
@@ -115,7 +121,8 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
           content: [{
             type: 'tool_result',
             tool_use_id: msg.tool_call_id || `toolu_${Date.now()}`,
-            content: msg.content || ''
+            content: msg.content || '',
+            ...cacheControl(msg)
           }]
         };
         anthropicRequest.messages.push(toolResultMsg);
@@ -137,12 +144,14 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
           if (part.type === 'text') {
             anthropicMsg.content.push({
               type: 'text',
-              text: part.text
+              text: part.text,
+              ...cacheControl(part)
             });
           } else if (part.type === 'image_url') {
             anthropicMsg.content.push({
               type: 'image',
-              source: part.image_url
+              source: part.image_url,
+              ...cacheControl(part)
             });
           } else {
             anthropicMsg.content.push(part);
@@ -160,7 +169,8 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
               name: toolCall.function.name,
               input: typeof toolCall.function.arguments === 'string' 
                 ? JSON.parse(toolCall.function.arguments) 
-                : toolCall.function.arguments
+                : toolCall.function.arguments,
+              ...cacheControl(toolCall)
             });
           }
         }
@@ -192,7 +202,9 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
         return {
           name: tool.function.name,
           description: tool.function.description,
-          input_schema: tool.function.parameters || {}
+          input_schema: tool.function.parameters || {},
+          ...cacheControl(tool.function),
+          ...cacheControl(tool)
         };
       }
       return tool;
