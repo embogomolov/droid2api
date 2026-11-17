@@ -1,5 +1,6 @@
 // Offline integration test; never sends requests or credentials to Factory.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import express from 'express';
 import fetch, { Response } from 'node-fetch';
@@ -9,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import pool, { KeyPoolManager } from '../auth.js';
 import router from '../routes.js';
 import { getConfig } from '../config.js';
-import { getLimitState, fetchBillingLimits, retryAfterTime } from '../utils/factory-limits.js';
+import { getLimitState, fetchBillingLimits, retryAfterTime, recordQuotaRejection } from '../utils/factory-limits.js';
 import { checkedSSE } from '../utils/factory-upstream.js';
 import fetchWithPool, { destroyPool } from '../utils/http-client.js';
 
@@ -18,6 +19,7 @@ const savedPool = { ...pool };
 const oldFixedKey = process.env.FACTORY_API_KEY;
 delete process.env.FACTORY_API_KEY;
 let scenario = 'ok', calls = [], refreshes = 0, saved = 0, disconnected = false;
+const monthlyBody=JSON.parse(fs.readFileSync(new URL('./fixtures/factory-monthly-standard-limit.json',import.meta.url)));
 const now = Date.now();
 const windows = (percent = 0, end = now + 60_000) => Object.fromEntries(
   ['fiveHour', 'weekly', 'monthly'].map(name => [name, { usedPercent: percent, windowEnd: new Date(end).toISOString() }]));
@@ -39,11 +41,13 @@ const upstream = http.createServer(async (req, res) => {
   calls.push({ id, path: req.url, body, provider: req.headers['x-api-provider'] });
   if (scenario === 'disconnect') { req.socket.destroy(); return; }
   if (scenario === 'wait') { res.once('close', () => { disconnected = true; }); return; }
-  const status = scenario.startsWith('all-') ? Number(scenario.slice(4))
+  const quotaScenario=['first-quota','first-monthly'].includes(scenario);
+  const status = quotaScenario&&id==='a'?402:quotaScenario?200:scenario.startsWith('all-') ? Number(scenario.slice(4))
     : scenario.startsWith('first-') && id === 'a' ? Number(scenario.slice(6)) : 200;
   if (status !== 200) {
+    if(scenario==='first-monthly'){res.writeHead(402,{'content-type':'application/json'}).end(JSON.stringify(monthlyBody));return;}
     res.writeHead(status, { 'content-type': 'application/json', 'retry-after': '2' });
-    res.end(JSON.stringify({ error: { message: `simulated ${status}` } })); return;
+    res.end(JSON.stringify({ error: { message: `simulated ${status}`, ...(scenario==='first-quota'?{reason:'UserOverQuota',displayToUser:true,detail:'Quota limit'}:{}) } })); return;
   }
   const result = { id: 'resp_test', status: 'completed', model: body.model, instructions: body.instructions,
     output: [{ type: 'message', content: [{ type: 'output_text', text: 'OK' }] }] };
@@ -52,6 +56,7 @@ const upstream = http.createServer(async (req, res) => {
     res.write('event: response.created\ndata: {"type":"response.created"}\n\n');
     if (scenario === 'idle') return;
     if (scenario === 'broken') { res.end(); return; }
+    if (scenario === 'quota-event') {res.end('event: error\ndata: {"type":"error","error":{"status":429,"reason":"UserOverQuota","message":"quota event"}}\n\n');return;}
     if (scenario === 'failed-event') { res.end('event: response.failed\ndata: {"type":"response.failed","response":{"status":"failed"}}\n\n'); return; }
     res.end(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: result })}\n\n`);
   } else res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));
@@ -70,10 +75,13 @@ try {
   for (const name of ['fiveHour', 'weekly', 'monthly']) {
     pool.keys[0].billing_limits.limits.standard = windows();
     pool.keys[0].billing_limits.limits.standard[name].usedPercent = 100;
-    assert.equal((await pool.getNextKey({ model: 'gpt-6-astra' })).keyId, 'b');
+    pool.stats={};
+    assert.equal((await pool.getNextKey({ model: 'gpt-6-astra' })).keyId, 'a', '100% alone cannot prohibit generation');
   }
   pool.keys[1].billing_limits.limits.standard = windows(100);
+  for(const k of pool.keys)recordQuotaRejection(k,402,null,'gpt-6-astra',{reason:'UserOverQuota'},now);
   await assert.rejects(pool.getNextKey({ model: 'gpt-6-astra' }), e => e.status === 429 && e.retryAfter > 0);
+  pool.keys[0].cooldowns.standard.until=now-1;
   pool.keys[0].billing_limits.limits.standard = windows(100, now - 1);
   assert.equal((await pool.getNextKey({ model: 'gpt-6-astra' })).keyId, 'a');
   const effective = getLimitState(pool.keys[0]);
@@ -90,7 +98,7 @@ try {
   assert.equal((await pool.getNextKey()).keyId, 'a', 'missing telemetry is not zero quota');
   assert.equal(getLimitState(pool.keys[0]).known, false);
   const prepaid = key('prepaid'); prepaid.billing_limits.limits.standard = windows(100);
-  assert.equal(getLimitState(prepaid).available, false);
+  assert.equal(getLimitState(prepaid).available, true, 'Rounded percentages are not a refusal');
   prepaid.billing_limits.extraUsageEnabled = true;
   assert.equal(getLimitState(prepaid).available, true);
   prepaid.cooldowns = { standard: { status: 429, until: now + 60_000 } };
@@ -105,6 +113,8 @@ try {
   pool.poolGroups = [{ id: 'primary', priority: 0 }, { id: 'backup', priority: 1 }];
   pool.config.multiTier.enabled = true; pool.keys[0].poolGroup = 'primary'; pool.keys[1].poolGroup = 'backup';
   pool.keys[0].billing_limits.limits.standard = windows(100);
+  assert.equal((await pool.getNextKey()).keyId, 'a', 'Primary tier remains usable until rejected');
+  recordQuotaRejection(pool.keys[0],402,null,'gpt-6-astra',{reason:'UserOverQuota'},now);
   assert.equal((await pool.getNextKey()).keyId, 'b');
   assert.equal(retryAfterTime('2', now), now + 2000);
   assert.equal(retryAfterTime(new Date(now + 10_000).toUTCString(), now), Math.floor((now + 10_000) / 1000) * 1000);
@@ -127,13 +137,27 @@ try {
       assert.equal(response.status, 200, `${path} ${status}`); await response.text();
       assert.deepEqual(calls.map(c => c.id), ['a', 'b']);
       assert.equal(pool.keys[0].status, status === 401 ? 'disabled' : 'active');
-      if (status === 429 || status === 402) {
-        assert.ok(pool.keys[0].cooldowns.standard.until > Date.now());
-        pool.keys[0].cooldowns.standard.until = Date.now() - 1; pool.stats = {};
+      if (status === 429) {
+        assert.ok(pool.keys[0].model_cooldowns[calls[0].body.model].until > Date.now());
+        pool.keys[0].model_cooldowns[calls[0].body.model].until = Date.now() - 1; pool.stats = {};
         assert.equal((await pool.getNextKey()).keyId, 'a', 'account returns automatically');
       }
     }
   }
+  reset();scenario='first-quota';
+  assert.equal((await call()).status,200);
+  assert.deepEqual(calls.map(c=>c.id),['a','b']);
+  assert.equal(pool.keys[0].cooldowns.standard.kind,'quota');
+  assert.equal(pool.keys[0].cooldowns.standard.status,402);
+  reset();scenario='first-monthly';
+  pool.keys[0].billing_limits.limits.standard.monthly.windowEnd=new Date(now+86400000).toISOString();
+  assert.equal((await call()).status,200);
+  assert.deepEqual(calls.map(c=>c.id),['a','b'],'Observed Factory response triggers failover');
+  assert.equal(pool.keys[0].cooldowns.standard.window,'monthly');
+  assert.equal(pool.keys[0].cooldowns.standard.until,now+86400000);
+  reset();scenario='all-402';pool.config.waitForQuota=true;
+  assert.equal((await call()).status,402,'Unknown billing errors must return even with quota waiting enabled');
+  assert.equal(pool.keys[0].cooldowns,undefined);assert.equal(pool.keys[0].model_cooldowns,undefined);
   for (const status of [400, 403, 413, 422, 429, 500]) {
     reset(); scenario = `all-${status}`;
     const response = await call();
@@ -143,27 +167,27 @@ try {
     assert.equal(pool.keys[0].status, 'active');
   }
   reset();
-  cfg.models = [...cfg.models.filter(m => m.id !== 'kimi-k3'), { id: 'kimi-k3', type: 'common', api_provider: 'fireworks' }];
+  cfg.models = [...cfg.models.filter(m => m.id !== 'kimi-k3.1-pro'), { id: 'kimi-k3.1-pro', type: 'common', api_provider: 'fireworks' }];
   pool.keys[0].billing_limits.limits.standard = windows(100);
-  const kimi = await call('/v1/chat/completions', { model: 'kimi-k3', messages: [{ role: 'user', content: 'OK' }], reasoning_effort: 'high', reasoning_history: 'preserved', max_tokens: 65536 });
+  const kimi = await call('/v1/chat/completions', { model: 'kimi-k3.1-pro', messages: [{ role: 'user', content: 'OK' }], reasoning_effort: 'high', reasoning_history: 'preserved', max_tokens: 65536 });
   assert.equal(kimi.status, 200); await kimi.text();
-  assert.equal(calls[0].id, 'a', 'Kimi uses available Core quota despite exhausted Standard quota');
+  assert.equal(calls[0].id, 'a', 'Kimi is not blocked by the Standard percentage');
   assert.equal(calls[0].provider, 'fireworks');
-  assert.equal(calls[0].body.model, 'kimi-k3');
+  assert.equal(calls[0].body.model, 'kimi-k3.1-pro');
   assert.equal(calls[0].body.reasoning_history, 'preserved');
   assert.equal(calls[0].body.max_tokens, 65536);
   reset();pool.keys[0].billing_limits.limits.core=windows(100);
-  await (await call('/v1/chat/completions',{model:'kimi-k3',messages:[{role:'user',content:'OK'}]})).text();
+  await (await call('/v1/chat/completions',{model:'kimi-k3.1-pro',messages:[{role:'user',content:'OK'}]})).text();
   assert.equal(calls[0].id,'a','Available Standard serves the selected Core model even when Core is exhausted');
-  assert.equal(calls[0].body.model,'kimi-k3');
+  assert.equal(calls[0].body.model,'kimi-k3.1-pro');
   for(const group of ['standard','core']){
     reset();scenario='first-429';
     if(group==='core')pool.keys[0].billing_limits.limits.standard=windows(100);
-    await (await call('/v1/chat/completions',{model:'kimi-k3',messages:[{role:'user',content:'OK'}]})).text();
+    await (await call('/v1/chat/completions',{model:'kimi-k3.1-pro',messages:[{role:'user',content:'OK'}]})).text();
     assert.deepEqual(calls.map(c=>c.id),['a','b']);
-    assert.ok(pool.keys[0].cooldowns[group].until>Date.now(),'Cooldown belongs to the selected allowance');
-    assert.equal(pool.keys[0].cooldowns[group==='core'?'standard':'core'],undefined);
-    assert.ok(calls.every(c=>c.body.model==='kimi-k3'),'Failover never substitutes a model');
+    assert.ok(pool.keys[0].model_cooldowns['kimi-k3.1-pro'].until>Date.now(),'Unknown 429 restricts only the rejected model');
+    assert.equal(pool.keys[0].cooldowns,undefined);
+    assert.ok(calls.every(c=>c.body.model==='kimi-k3.1-pro'),'Failover never substitutes a model');
   }
   reset(); scenario = 'all-429';
   await (await call()).text(); calls = [];
@@ -191,6 +215,16 @@ try {
   reset(); scenario = 'broken';
   await assert.rejects(async () => { const response = await call('/v1/responses', { stream: true }); await response.text(); });
   assert.equal(calls.length, 1, 'broken streams are never replayed');
+  reset();scenario='quota-event';
+  const eventFailure=await call('/v1/responses',{stream:true});
+  assert.match(await eventFailure.text(),/quota event/);
+  assert.equal(calls.length,1,'Never replay an already-started stream');
+  assert.equal(pool.keys[0].cooldowns.standard.kind,'quota','Explicit stream status updates future routing');
+  const log=fs.readFileSync(new URL('../logs/droid2api_'+new Date().toISOString().slice(0,10)+'.log',import.meta.url),'utf8');
+  const rejected=[...log.matchAll(/upstream rejected\n(\{[\s\S]*?\})\n\n/g)].map(m=>JSON.parse(m[1]));
+  assert.ok(rejected.some(r=>r.source==='factory'&&r.accountId==='a'&&r.status===402&&r.retryAfter==='2'&&r.body.includes('UserOverQuota')));
+  assert.ok(rejected.some(r=>r.accountId==='a'&&r.status===200&&r.eventType==='error'&&r.body.includes('quota event')));
+  assert.match(log,/"source": "proxy"/);
   reset(); scenario = 'failed-event';
   const failed = await call('/v1/responses', { stream: true }); assert.match(await failed.text(), /response.failed/);
   assert.equal(calls.length, 1);

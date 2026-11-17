@@ -45,6 +45,12 @@ try {
  assert.equal((await pool.getNextKey({model:'claude-fable-5.1'})).keyId,'fake-1');
  assert.equal((await call('PUT','/config',{key_pool:{algorithm:'max-remaining'}})).status,200);
  assert.equal(pool.config.algorithm,'max-remaining');
+ assert.equal(pool.config.waitForQuota,false);
+ assert.equal((await call('PUT','/config',{key_pool:{waitForQuota:true}})).status,200);
+ assert.equal(pool.config.waitForQuota,true);
+ assert.equal((await call('PUT','/config',{key_pool:{algorithm:'max-remaining'}})).status,200);
+ assert.equal(pool.config.waitForQuota,true,'Partial updates preserve waiting');
+ assert.notEqual((await call('PUT','/config',{key_pool:{waitForQuota:'true'}})).status,200);
  const before=fs.readFileSync(configPath,'utf8'),runtime=JSON.stringify(pool.config);
  assert.notEqual((await call('PUT','/config',{system_prompt:'must-not-save',key_pool:{algorithm:'invalid'}})).status,200);
  assert.equal(fs.readFileSync(configPath,'utf8'),before);assert.equal(JSON.stringify(pool.config),runtime);
@@ -54,11 +60,11 @@ try {
  assert.equal(JSON.stringify(pool.config),runtime);assert.equal(getConfig().system_prompt,'changed');
  fs.rmdirSync(configPath);fs.renameSync(configPath+'.saved',configPath);
  assert.equal((await call('POST','/config/reset',{})).status,200);
- assert.equal(pool.config.algorithm,'round-robin');assert.equal(getConfig().key_pool.algorithm,'round-robin');
- await call('PUT','/config',{system_prompt:'changed',key_pool:{algorithm:'max-remaining',retry:{maxRetries:0,retryDelay:0}}});
+ assert.equal(pool.config.algorithm,'round-robin');assert.equal(getConfig().key_pool.algorithm,'round-robin');assert.equal(pool.config.waitForQuota,false);
+ await call('PUT','/config',{system_prompt:'changed',key_pool:{algorithm:'max-remaining',waitForQuota:true,retry:{maxRetries:0,retryDelay:0}}});
  const child=spawnSync(process.execPath,['--input-type=module','-e',`import fs from 'node:fs';import pool from './auth.js';fs.writeFileSync('restarted.json',JSON.stringify(pool.config));`],{cwd:dir,env:process.env,encoding:'utf8',timeout:10000,windowsHide:true});
  assert.equal(child.status,0,child.stderr);const restarted=JSON.parse(fs.readFileSync(path.join(dir,'restarted.json')));
- assert.equal(restarted.algorithm,'max-remaining');assert.equal(restarted.retry.maxRetries,0);assert.equal(restarted.retry.retryDelay,0);
+ assert.equal(restarted.waitForQuota,true);assert.equal(restarted.algorithm,'max-remaining');assert.equal(restarted.retry.maxRetries,0);assert.equal(restarted.retry.retryDelay,0);
  assert.equal(JSON.parse(fs.readFileSync(poolPath)).config.algorithm,'round-robin','Test must retain a conflicting old snapshot');
  console.log('PASS: full form, partial updates, real selection, reset, invalid input, failed write and fresh-process restart.');
 }finally{server.closeAllConnections();server.close();}

@@ -35,11 +35,34 @@ try {
   f.advance(5*H);await restored.tick();assert.deepEqual(f.calls,['standard:a','standard:a','standard:b']);
 
   const lag=await fixture(), l=await lag.scheduler();
-  lag.options.send=async()=>{lag.calls.push('sent');return {accepted:true};};
+  const start=lag.options.send;
+  lag.options.send=async(...args)=>{if(!lag.calls.length){lag.calls.push('unconfirmed');return {accepted:true};}return start(...args);};
   // Construct after overriding the transport.
   const ls=await lag.scheduler();ls.requestAction('a','standard','start');await ls.tick();
-  lag.advance(31000);await (await lag.scheduler()).tick();assert.equal(lag.calls.length,1);
-  assert.equal(ls.load().manual.standard.a.phase,'starting','Accepted requests only poll telemetry');
+  lag.advance(2001);await (await lag.scheduler()).tick();assert.equal(lag.calls.length,1,'Allow telemetry to catch up before another probe');
+  lag.advance(30000);await (await lag.scheduler()).tick();assert.equal(lag.calls.length,2,'Fresh empty window permits another start after restart');
+  lag.advance(2001);await ls.tick();assert.equal(ls.load().manual.standard.a.phase,'done');
+  assert.equal(lag.calls.length,2,'Confirmed window never sends another probe');
+
+  const off=await fixture();Object.assign(off.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});
+  off.keys[0].last_test_result='pending';
+  off.options.send=async()=>{off.calls.push('sent');return {accepted:true,responseStatus:'completed',usage:{input_tokens:100,output_tokens:5}};};
+  const o=await off.scheduler();o.requestAction('a','standard','start');await o.tick();
+  assert.equal(o.load().groups.standard.message,'Waiting for manual requests to finish');
+  assert.equal(o.accountAction(off.keys[0],'standard').pending,true);
+  assert.ok(o.routingBlock(off.keys[0],'gpt-5.6-luna'));
+  off.cfg.window_sync.groups.standard.enabled=false;
+  assert.equal((await off.scheduler()).routingBlock(off.keys[0],'gpt-5.6-luna'),null,'Disabling sync releases routing without deleting the manual journal');
+  assert.equal(o.load().manual.standard.a.responseStatus,'completed');
+  assert.deepEqual(o.load().manual.standard.a.usage,{input_tokens:100,output_tokens:5});
+  const read=o.refresh;o.refresh=async()=>{throw new Error('offline');};
+  off.advance(31000);await o.tick();assert.equal(off.calls.length,1,'No retry without fresh telemetry');
+  assert.equal(o.load().groups.standard.message,'Automatic starts are off');
+  off.advance(31000);o.refresh=read;
+  const finish=o.trackRequest(off.keys[0]);await o.tick();assert.equal(off.calls.length,1,'No probe over an ordinary request');finish();
+  off.advance(2001);off.ends.a.standard=off.now()+H;await o.tick();
+  assert.equal(o.load().manual.standard.a.phase,'done','Normal traffic can confirm the manual start');
+  assert.equal(off.calls.length,1);
 
   const ambiguous=await fixture(), original=ambiguous.options.send;
   ambiguous.options.send=async(...args)=>{await original(...args);return {accepted:false,ambiguous:true};};
@@ -67,6 +90,8 @@ try {
   guards.keys[0].excluded=false;delete guards.keys[0].billing_limits;assert.throws(()=>g.requestAction('a','standard','start'),/Refresh limits/);
   assert.throws(()=>g.requestAction('a','wrong','start'),/pool/);
   await guards.fresh();guards.keys[0].billing_limits.limits.standard.weekly.usedPercent=100;
+  assert.equal(g.accountAction(guards.keys[0],'standard').disabled,false,'A displayed 100% cannot disable a manual start');
+  guards.keys[0].cooldowns={standard:{kind:'quota',status:402,until:guards.now()+H}};
   assert.throws(()=>g.requestAction('a','standard','start'),/limit/);
 
   const concurrent=await fixture();Object.assign(concurrent.cfg.window_sync.groups.standard,{enabled:true,keyIds:['a','b']});

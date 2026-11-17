@@ -1,0 +1,12 @@
+{
+  "detail": "You've reached your monthly standard usage limit (resets in 1 day).\nSwitch to Droid Core or enable Extra Usage to continue.",
+  "status": 402,
+  "title": "Payment Required",
+  "displayToUser": true,
+  "error": {
+    "detail": "You've reached your monthly standard usage limit (resets in 1 day).\nSwitch to Droid Core or enable Extra Usage to continue.",
+    "status": 402,
+    "title": "Payment Required",
+    "displayToUser": true
+  }
+}

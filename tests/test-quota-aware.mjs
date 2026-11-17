@@ -122,12 +122,13 @@ assert.equal(rows[0].mode,'partial');assert.ok(rows[0].share<=rows[1].share);
 // Group changes apply on the next choice. A weekly-blocked member postpones the collective
 // boundary until removed, without turning removal from sync into an account exclusion.
 now=start;keys=[key('a'),key('b'),key('blocked',[0,100,0],[5,48,720])];
+keys[2].cooldowns={standard:{kind:'quota',status:402,until:start+48*HOUR}};
 const settings={enabled:true,keyIds:['a','b','blocked'],modelId:'claude-haiku-4-5'};q=make(keys,settings);
 assert.equal(q.plan(ready(keys),'standard')[0].budgets[0].resetAt,start+48*HOUR);
 settings.keyIds=['a','b'];assert.equal(q.plan(ready(keys),'standard')[0].budgets[0].resetAt,start+5*HOUR);
 settings.keyIds.push('blocked');keys[2].excluded=true;
 assert.equal(q.plan(ready(keys),'standard')[0].budgets[0].resetAt,start+5*HOUR);
-keys[2].excluded=false;keys[2].billing_limits.limits.standard.weekly.usedPercent=10;
+keys[2].excluded=false;delete keys[2].cooldowns;keys[2].billing_limits.limits.standard.weekly.usedPercent=10;
 settings.keyIds=['a','b'];assert.ok(ready(keys).includes(keys[2]));
 q.nextStart=at=>at+HOUR;assert.equal(q.plan(ready(keys),'standard')[0].budgets[0].resetAt,start+6*HOUR);
 settings.enabled=false;assert.equal(q.plan(ready(keys),'standard')[0].budgets[0].resetAt,start+5*HOUR);
@@ -165,6 +166,8 @@ for(const synchronized of [false,true]) {
         if(Date.parse(w.windowEnd)<=now) {w.usedPercent=0;w.windowEnd=new Date(now+[5,168,720][i]*HOUR).toISOString();resets++;}
       }
       refresh(account);
+      const exhausted=names.map(n=>account.billing_limits.limits.standard[n]).filter(w=>w.usedPercent>=100);
+      if(exhausted.length)account.cooldowns={standard:{kind:'quota',status:402,until:Math.min(...exhausted.map(w=>Date.parse(w.windowEnd)))}};
     }
     const candidates=ready(accounts);
     if(!candidates.length)continue;
@@ -183,8 +186,15 @@ console.log('PASS: independent windows, cold/partial data, rounded/rare/unfinish
 const now=Date.parse('2026-09-22T08:00:00Z'),H=3600000,cfg=structuredClone(DEFAULT_WINDOW_SYNC);
 const make=(id,group,h,week=1)=>({id,status:'active',last_test_result:'success',billing_limits:{fetchedAt:now,limits:{[group]:Object.fromEntries(['fiveHour','weekly','monthly'].map((n,i)=>[n,{usedPercent:i===1?week:1,windowEnd:new Date(now+(i===0?h:i===1?48:720)*H).toISOString()}]))}}});
 const keys=[make('a','standard',2),make('b','core',4,100)];for(const [g,id]of [['standard','a'],['core','b']])Object.assign(cfg.groups[g],{enabled:true,keyIds:[id]});
+keys[1].cooldowns={core:{kind:'quota',status:402,until:now+48*H}};
 const q=new QuotaAware({keys:()=>keys,sync:()=>cfg,nextStart:(at,g)=>nextWindowStart(cfg,g,at),now:()=>now});
 assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
+assert.equal(q.plan([keys[1]],'core')[0].budgets[0].resetAt,now+48*H,'Enabled Core group uses its own exhausted weekly horizon');
+const peer=make('c','core',6);keys.push(peer);cfg.groups.core.keyIds.push('c');
+assert.equal(q.plan([peer],'core')[0].budgets[0].resetAt,now+48*H,'Selected exhausted participant holds the Core horizon');
+keys[1].excluded=true;
+assert.equal(q.plan([peer],'core')[0].budgets[0].resetAt,now+6*H,'Excluding the participant recalculates Core immediately');
+keys[1].excluded=false;
 cfg.startTogether=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
 keys[1].excluded=true;assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);
 keys[1].excluded=false;cfg.groups.core.keyIds=[];assert.equal(q.plan([keys[0]],'standard')[0].budgets[0].resetAt,now+2*H);

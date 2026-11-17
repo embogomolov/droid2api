@@ -69,6 +69,17 @@ try {
   assert.equal(accepted.calls.length, 1, 'Accepted generation is never replayed while verification retries');
   delete accepted.windows['fake-a'].error; accepted.advance(60_001); await accepted.scheduler().tick();
   assert.equal(accepted.scheduler().load().groups.standard.phase, 'active');
+
+  const missing=fixture();let first=true;
+  missing.options.send=async key=>{missing.calls.push(key.id);if(key.id==='b'||!first)missing.windows[key.key].end=new Date(missing.time+FIVE_HOURS).toISOString();if(key.id==='a')first=false;return {accepted:true};};
+  await missing.scheduler().tick();missing.advance(2001);await missing.scheduler().tick();
+  assert.deepEqual(missing.calls,['a','b']);
+  assert.ok(missing.scheduler().routingBlock(missing.keys[1],missing.cfg.window_sync.groups.standard.modelId),'Confirmed participant waits for the rest of the group');
+  missing.advance(30000);await missing.scheduler().tick();
+  assert.deepEqual(missing.calls,['a','b','a'],'Retry only the still-empty window');
+  missing.advance(2001);await missing.scheduler().tick();
+  assert.equal(missing.scheduler().load().groups.standard.phase,'active');
+  assert.equal(missing.scheduler().routingBlock(missing.keys[1],missing.cfg.window_sync.groups.standard.modelId),null);
   const stopping = fixture(); let began;
   const beganPromise = new Promise(resolve => { began = resolve; });
   stopping.options.send = async (key, model, signal) => { began(); return new Promise(resolve => signal.addEventListener('abort', () => resolve({ ambiguous: true, error: 'cancelled' }), { once: true })); };
@@ -78,6 +89,7 @@ try {
   const stale = fixture(); stale.windows['fake-a'].incomplete = true;
   await stale.scheduler().tick(); assert.equal(stale.calls.length, 0, 'Partial telemetry cannot start a group');
   const exhausted = fixture(); exhausted.windows['fake-a'].weekly = 100;
+  exhausted.keys[0].cooldowns={standard:{kind:'quota',status:402,until:exhausted.time+FIVE_HOURS*10}};
   await exhausted.scheduler().tick(); assert.equal(exhausted.calls.length, 0, 'No prepaid probe when weekly exhausted');
   exhausted.cfg.window_sync.groups.standard.keyIds = ['b'];
   await exhausted.scheduler().tick(); assert.deepEqual(exhausted.calls, ['b'], 'Saving membership releases remaining members without restart');
@@ -121,12 +133,19 @@ try {
   for (const model of [{ id: 'claude-haiku-4-5-20251001', type: 'anthropic' }, { id: 'gpt-5.6-luna', type: 'openai' }, { id: 'kimi-k3', type: 'common', api_provider: 'fireworks' }]) {
     let request;
     const result = await sendWindowStart(f.keys[0], model, new AbortController().signal, async (url, options) => {
-      request = options; return new Response('{"id":"simulated"}', { status: 200 });
+      request = options; return new Response('{"id":"simulated","status":"completed"}', { status: 200 });
     });
     assert.equal(result.accepted, true); assert.equal(request.retry, false);
     const body = JSON.parse(request.body); assert.equal(body.max_tokens || body.max_output_tokens, 32); assert.equal(body.stream, false);
     if (model.type === 'common') assert.equal(request.headers['x-api-provider'], 'fireworks');
     if (model.type === 'anthropic') assert.equal(body.thinking, undefined);
   }
+  const luna={id:'gpt-5.6-luna',type:'openai'};
+  for(const status of ['incomplete','failed','in_progress']){
+    const result=await sendWindowStart(f.keys[0],luna,new AbortController().signal,async()=>new Response(JSON.stringify({id:'simulated',status}),{status:200}));
+    assert.equal(result.accepted,false,'HTTP 200 alone is not a successful test');assert.equal(result.responseStatus,status);
+  }
+  const native=await sendWindowStart(f.keys[0],luna,new AbortController().signal,async()=>new globalThis.Response('{"id":"simulated","status":"completed"}',{status:200}));
+  assert.equal(native.accepted,true,'Response cleanup supports both node-fetch and native fetch');
   console.log('PASS: group barrier, exclusions, repeats, durable retry, restart, ambiguous acceptance, clocks, lock, incomplete telemetry, quota guards and bounded wire requests');
 } finally { destroyPool(); }

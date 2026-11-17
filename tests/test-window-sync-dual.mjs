@@ -13,6 +13,7 @@ const now=Date.now(),H=3600000;
 const windows=used=>Object.fromEntries(['fiveHour','weekly','monthly'].map(n=>[n,{usedPercent:used,windowEnd:new Date(now+5*H).toISOString()}]));
 const make=(id,standard,core)=>({id,key:'fake-'+id,status:'active',last_test_result:'success',billing_limits:{fetchedAt:now,overagePreference:'droidCore',limits:{standard:windows(standard),core:windows(core)}}});
 const keys=[make('a',20,100),make('b',100,20)];
+keys[1].cooldowns={standard:{kind:'quota',status:402,until:now+24*3600000}};
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'core-fallback-'));
 try{
  assert.equal(getRequestQuota(keys[0],'kimi-k3',now).group,'standard');
@@ -22,10 +23,12 @@ try{
  const cfg={window_sync:structuredClone(DEFAULT_WINDOW_SYNC),models:[{id:'gpt-5.6-luna',type:'openai'},{id:'glm-5.3-flash',type:'common'}]};
  for(const g of ['standard','core'])Object.assign(cfg.window_sync.groups[g],{enabled:true,keyIds:['a','b']});
  cfg.window_sync.startTogether=true;
+ cfg.window_sync.version=2;
  const migrated=normalizeWindowSync(cfg.window_sync);
  assert.equal(migrated.groups.standard.enabled,true);assert.equal(migrated.groups.core.enabled,false);assert.equal(migrated.startTogether,false);
  assert.equal(migrated.groups.core.modelId,'glm-5.3-flash');
- assert.throws(()=>validateWindowSync(cfg.window_sync,keys,cfg.models),/Factory controls Core/);
+ assert.throws(()=>validateWindowSync(cfg.window_sync,keys,cfg.models),/Reload/);
+ cfg.window_sync=migrated;
  const s=new WindowSync({directory,manager:{keys},readConfig:()=>cfg,now:()=>now,refresh:async secret=>keys.find(k=>k.key===secret).billing_limits,send:async()=>{throw new Error('Must not send any generation');}});
  await s.stop();
  const credential=createHash('sha256').update(keys[0].key).digest('hex');
@@ -57,8 +60,9 @@ try{
  assert.equal(keys[1].quota_balance.core.ledger['glm:0:low'].uncertain,1);
  keys[1].billing_limits.overagePreference='none';assert.equal(getRequestQuota(keys[1],'kimi-k3',now).available,false);
  keys[1].billing_limits.overagePreference='extraUsage';keys[1].billing_limits.extraUsageEnabled=true;
- assert.equal(getRequestQuota(keys[1],'kimi-k3',now).group,'standard');assert.equal(getRequestQuota(keys[1],'kimi-k3',now).available,true);
+ assert.equal(getRequestQuota(keys[1],'kimi-k3',now).group,'standard');assert.equal(getRequestQuota(keys[1],'kimi-k3',now).available,false,'A saved Factory rejection still applies when billing policy changes');
  keys[1].billing_limits.extraUsageEnabled=false;keys[1].billing_limits.overagePreference='droidCore';
+ keys[1].cooldowns.standard.until=now-1;
  for(const w of Object.values(keys[1].billing_limits.limits.standard))w.windowEnd=new Date(now-1).toISOString();
  assert.equal(getRequestQuota(keys[1],'kimi-k3',now).group,'standard','Standard reset resumes Standard use');
  console.log('PASS: Standard-first routing, mixed fair shares, obsolete start cleanup, no unconfirmed calibration, fallback policy and resets');

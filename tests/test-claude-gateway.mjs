@@ -104,7 +104,7 @@ try {
   scenario='quota'; const migrated=await call(); assert.equal(migrated.status,200);await migrated.json();assert.equal(calls.at(-1).headers.authorization,'Bearer fake-b');
   scenario='ok'; await (await call()).json(); assert.equal(calls.at(-1).headers.authorization,'Bearer fake-b','exhausted account remains on cooldown');
   pool.keys[0].billing_limits=structuredClone(limits);
-  pool.keys[0].cooldowns={};
+  for(const cooldown of Object.values(pool.keys[0].model_cooldowns))cooldown.until=Date.now()-1;
   pool.stats.last_rotation_index=0;
   await (await call()).json();assert.equal(calls.at(-1).headers.authorization,'Bearer fake-a','same session can return to a recovered account');
   const parent=getFactorySession({headers,body});
