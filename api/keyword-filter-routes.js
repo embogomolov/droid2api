@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { isDeepStrictEqual } from 'node:util';
 import keywordFilter from '../utils/keyword-filter.js';
 import { sendSuccessResponse, sendErrorResponse, wrapAsync } from './admin-error-handlers.js';
 import { logInfo, logWarn } from '../logger.js';
@@ -259,10 +260,7 @@ function readKeywordConfig({ autoMigrate = true } = {}) {
   }
 
   const sanitized = sanitizeConfig(parsed);
-  const normalizedOriginal = JSON.stringify(parsed);
-  const normalizedSanitized = JSON.stringify(sanitized);
-
-  if (normalizedOriginal !== normalizedSanitized) {
+  if (!isDeepStrictEqual(parsed, sanitized)) {
     logWarn('[KeywordFilter] Invalid configuration detected; automatically corrected and saved');
     writeKeywordConfig(sanitized, { reload: false });
     keywordFilter.reloadConfig();

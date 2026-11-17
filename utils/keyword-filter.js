@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { isDeepStrictEqual } from 'node:util';
 import { logInfo, logWarn, logError, logDebug } from '../logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -218,10 +219,7 @@ class KeywordFilter {
 
   persistNormalizedConfig(original, normalized) {
     try {
-      const originalPayload = JSON.stringify(original);
-      const normalizedPayload = JSON.stringify(normalized);
-
-      if (originalPayload !== normalizedPayload) {
+      if (!isDeepStrictEqual(original, normalized)) {
         fs.writeFileSync(KEYWORD_CONFIG_PATH, JSON.stringify(normalized, null, 2), 'utf-8');
         logWarn('[KeywordFilter] Detected config anomalies, auto-fixed and saved');
       }
