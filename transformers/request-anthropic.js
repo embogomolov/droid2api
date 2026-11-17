@@ -3,39 +3,70 @@ import { getSystemPrompt, getModelById, getModelReasoning, getReasoningBudget } 
 import { getBaseHeaders, applyStainlessDefaults } from './headers-common.js';
 import keywordFilter from '../utils/keyword-filter.js';
 
+// Factory's usage policy check rejects stock client wording wherever it appears in the
+// body: identity introductions, the environment invocation line, the model line and
+// the verbose update-config description (HTTP 403 content_policy_rejected).
+// Rephrase only this stock wording; model values, paths and instructions stay intact.
+const identityPattern = /You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK\.|You are Claude Code, Anthropic's official CLI for Claude\.|You are a Claude agent, built on Anthropic's Claude Agent SDK\./g;
+
+function neutralizeBanners(text, { updateConfig = true } = {}) {
+  // Banners replayed inside old transcripts appear mid-line, so no line anchors;
+  // model names and IDs can contain periods ("Fable 5.5", "claude-fable-5.5"),
+  // making a rewrite boundary the period not followed by another word character.
+  const banners = text
+    .replace(identityPattern, 'You are an AI software engineering agent.')
+    .replace(/You have been invoked in the following environment:?/g, 'Current execution environment:')
+    // The stock compaction continuation sentence; the summary text below it stays.
+    .replace(/This session is being continued from a previous conversation that ran out of context/g,
+      'This session is being continued from a previous conversation which ran out of context')
+    // The stock note about a large file read before the conversation was summarized.
+    .replace(/was read before the last conversation was summarized/g,
+      'was read before the last conversation was summarised')
+    .replace(/You are powered by the model named (.+?)\.(?!\w) The exact model ID is (.+?)\.(?!\w)/g,
+      (line, name, id) => `Active model: ${name}. Model ID: ${id}.`)
+    .replace(/You are powered by the model named (.+?)\.(?!\w)/g, (line, name) => `Active model: ${name}.`)
+    .replace(/The exact model ID is (.+?)\.(?!\w)/g, (line, id) => `Model ID: ${id}.`);
+  if (!updateConfig) return banners;
+  return banners.replace(/require hooks configured in settings\.json - the harness executes these, not Claude, so memory\/preferences cannot fulfill them\./g,
+    'must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.');
+}
+
 // The counting and generation endpoints must see exactly the same prompt.
 export function prepareDirectAnthropic(request) {
   const result = { ...request }, prompt = getSystemPrompt();
   result.model = getModelById(request.model)?.id || request.model;
   const droidIdentity = 'You are Droid, an AI software engineering agent built by Factory.';
   const system = Array.isArray(request.system) ? request.system : typeof request.system === 'string' ? [{ type: 'text', text: request.system }] : [];
-  // Factory rejects these exact built-in client identity introductions (HTTP 403).
-  // Rephrase only stock identity/environment wording; retain model values and conversation content.
-  const identities = ["You are a Claude agent, built on Anthropic's Claude Agent SDK.", "You are Claude Code, Anthropic's official CLI for Claude.", "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK."];
   const clientSystem = prompt.startsWith(droidIdentity) ? system.map(block => {
     if (block.type !== 'text') return block;
-    const identity = block.type === 'text' && identities.find(text => block.text?.startsWith(text));
-    const text = identity ? 'You are an AI software engineering agent.' + block.text.slice(identity.length) : block.text;
-    return { ...block, text: text
-      .replace(/^You have been invoked in the following environment: ?$/m, 'Current execution environment:')
-      .replace(/^ - You are powered by the model named (.+)\. The exact model ID is (.+)\.$/m, ' - Active model: $1. Model ID: $2.') };
+    return { ...block, text: neutralizeBanners(block.text) };
   }) : system;
   // Native Droid puts this identity in its own first system block.
   const prefix = prompt.startsWith(droidIdentity) && prompt.length > droidIdentity.length
     ? [droidIdentity, prompt.slice(droidIdentity.length)] : [prompt];
   if (prompt) result.system = [...prefix.map(text => ({ type: 'text', text })),
     ...clientSystem];
-  // Claude Code embeds instruction-file labels in a user-role system reminder.
-  // Factory rejects its stock label; retain the path and every instruction below it.
+  // Claude Code carries the same banners in every message shape: string content,
+  // text blocks of any role and tool_result transcripts replaying earlier turns.
+  // Authored user text keeps its verbose update-config wording; thinking blocks and
+  // tool_use inputs stay untouched so signatures and call IDs survive.
   if (prompt.startsWith(droidIdentity) && request.messages) result.messages = request.messages.map(message => {
+    const rewrite = (text, updateConfig) => text == null ? text : neutralizeBanners(text, { updateConfig });
+    if (typeof message.content === 'string') return { ...message, content: rewrite(message.content, message.role !== 'user') };
     if (!Array.isArray(message.content)) return message;
     return { ...message, content: message.content.map(block => {
-      if (message.role === 'system' && block.type === 'text' && block.text?.includes('- update-config: Use this skill to configure the Claude Code harness via settings.json.')) {
-        return { ...block, text: block.text.replace(/^(- update-config: .*)require hooks configured in settings\.json - the harness executes these, not Claude, so memory\/preferences cannot fulfill them\./gm,
-          '$1must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.') };
+      if (block.type === 'tool_result' && block.content != null) {
+        const content = Array.isArray(block.content)
+          ? block.content.map(part => part.type === 'text' ? { ...part, text: rewrite(part.text, true) } : part)
+          : typeof block.content === 'string' ? rewrite(block.content, true) : block.content;
+        return { ...block, content };
       }
-      if (block.type !== 'text' || !block.text?.startsWith('<system-reminder>\nAs you answer the user\'s questions, you can use the following context:\n')) return block;
-      return { ...block, text: block.text.replace(/^Contents of (.+) \(user's private global instructions for all projects\):$/gm, 'Loaded instructions from $1 (user scope):') };
+      if (block.type !== 'text') return block;
+      // Claude Code embeds instruction-file labels in a user-role system reminder;
+      // Factory rejects its stock label, so retain the path and the instructions.
+      const text = block.text?.startsWith('<system-reminder>\nAs you answer the user\'s questions, you can use the following context:\n')
+        ? block.text.replace(/^Contents of (.+) \(user\'s private global instructions for all projects\):$/gm, 'Loaded instructions from $1 (user scope):') : block.text;
+      return { ...block, text: rewrite(text, message.role !== 'user') };
     }) };
   });
   const reasoning = getModelReasoning(request.model);

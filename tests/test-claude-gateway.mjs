@@ -67,8 +67,8 @@ try {
   assert.equal(JSON.stringify(identityRequest),identitySaved);
   assert.equal(compatible.system[1].text,'You are an AI software engineering agent.');
   assert.deepEqual(compatible.system[1].cache_control,identityRequest.system[0].cache_control);
-  assert.equal(compatible.system[2].text,'Current execution environment:\n - Active model: Fable 5. Model ID: claude-fable-5.1.\nKeep all security rules and tool descriptions.');
-  assert.deepEqual(compatible.messages,identityRequest.messages,'user messages are never filtered');
+  assert.equal(compatible.system[2].text,'Current execution environment: \n - Active model: Fable 5. Model ID: claude-fable-5.1.\nKeep all security rules and tool descriptions.');
+  assert.equal(compatible.messages[0].content,'You are an AI software engineering agent.','stock identity is rephrased even in string user content');
   assert.deepEqual(prepareDirectAnthropic(identityRequest),compatible,'stable cache prefix');
   assert.equal(prepareDirectAnthropic({...body,model:'claude-fable-5-1'}).model,'claude-fable-5.1');
   const reminder="<system-reminder>\nAs you answer the user's questions, you can use the following context:\nContents of C:\\Users\\Example\\.claude\\CLAUDE.md (user's private global instructions for all projects):\nKEEP THESE INSTRUCTIONS\n</system-reminder>";
@@ -81,6 +81,30 @@ try {
   assert.deepEqual(preparedMetadata.messages[0].content[0].cache_control,metadata.messages[0].content[0].cache_control);
   assert.equal(preparedMetadata.messages[0].content[1].text,skill,'authored user text is untouched');
   assert.equal(preparedMetadata.messages[1].content[0].text,skill.replace('require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them.','must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.'));
+  // Claude Code 2.1.326 sends the same banners as string message content and inside
+  // tool_result transcripts; authored user text keeps the verbose update-config wording.
+  const envBanner='# Environment\nYou have been invoked in the following environment: \n - Platform: win32\nYou are powered by the model named Fable 5.5. The exact model ID is claude-fable-5.5. Assistant knowledge cutoff is June 2026.\n';
+  const turnShapes={...body,messages:[{role:'system',content:envBanner},
+    {role:'user',content:[{type:'text',text:envBanner+skill,cache_control:{type:'ephemeral'}}]},
+    {role:'assistant',content:[{type:'thinking',thinking:'intact',signature:'signed-proof'},{type:'tool_use',id:'toolu_2',name:'Read',input:{path:'a'}}]},
+    {role:'user',content:[{type:'tool_result',tool_use_id:'toolu_2',content:[{type:'text',text:envBanner}],cache_control:{type:'ephemeral'}}]}]};
+  const savedShapes=structuredClone(turnShapes), preparedShapes=prepareDirectAnthropic(turnShapes);
+  assert.deepEqual(turnShapes,savedShapes);
+  assert.equal(preparedShapes.messages[0].content,'# Environment\nCurrent execution environment: \n - Platform: win32\nActive model: Fable 5.5. Model ID: claude-fable-5.5. Assistant knowledge cutoff is June 2026.\n','string system content is rephrased');
+  const replayed='Earlier transcript noted: You have been invoked in the following environment: something. Also You are powered by the model named Fable 5.5. The exact model ID is claude-fable-5.5. Trailing words.';
+  assert.equal(prepareDirectAnthropic({...body,messages:[{role:'user',content:[{type:'tool_result',tool_use_id:'toolu_3',content:replayed}]}]}).messages[0].content[0].content,
+    'Earlier transcript noted: Current execution environment: something. Also Active model: Fable 5.5. Model ID: claude-fable-5.5. Trailing words.','mid-line banner replays inside tool_result are rephrased');
+  const continuation='This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\nSummary:\n- Created calc.js.';
+  assert.equal(prepareDirectAnthropic({...body,messages:[{role:'user',content:[{type:'text',text:continuation}]}]}).messages[0].content[0].text,
+    continuation.replace('conversation that ran','conversation which ran'),'compaction continuation sentence is rephrased, summary text kept');
+  const fileNote='Note: C:\\tmp\\big1.txt was read before the last conversation was summarized, but the contents are too large to include. Use Read tool if you need to access it.';
+  assert.equal(prepareDirectAnthropic({...body,messages:[{role:'system',content:fileNote}]}).messages[0].content,
+    fileNote.replace('was summarized','was summarised'),'post-compaction file note is rephrased');
+  assert.equal(preparedShapes.messages[1].content[0].text,preparedShapes.messages[0].content+skill,'user banners rephrased, authored update-config kept');
+  assert.deepEqual(preparedShapes.messages[1].content[0].cache_control,turnShapes.messages[1].content[0].cache_control);
+  assert.deepEqual(preparedShapes.messages[2].content,turnShapes.messages[2].content,'thinking signatures and tool_use inputs are never touched');
+  assert.equal(preparedShapes.messages[3].content[0].content[0].text,preparedShapes.messages[0].content,'tool_result transcripts are rephrased');
+  assert.deepEqual(preparedShapes.messages[3].content[0].cache_control,turnShapes.messages[3].content[0].cache_control);
   assert.equal((await call({},undefined,{authorization:'Bearer wrong'})).status,401); assert.equal(calls.length,0);
   const first=await call(); assert.equal(first.status,200); assert.equal(first.headers.get('request-id'),'test-request'); await first.json();
   assert.equal(calls[0].headers.authorization,'Bearer fake-a');
