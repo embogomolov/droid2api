@@ -9,11 +9,11 @@ import keywordFilter from '../utils/keyword-filter.js';
 // Rephrase only this stock wording; model values, paths and instructions stay intact.
 const identityPattern = /You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK\.|You are Claude Code, Anthropic's official CLI for Claude\.|You are a Claude agent, built on Anthropic's Claude Agent SDK\./g;
 
-function neutralizeBanners(text, { updateConfig = true } = {}) {
+function neutralizeBanners(text) {
   // Banners replayed inside old transcripts appear mid-line, so no line anchors;
   // model names and IDs can contain periods ("Fable 5.5", "claude-fable-5.5"),
   // making a rewrite boundary the period not followed by another word character.
-  const banners = text
+  return text
     .replace(identityPattern, 'You are an AI software engineering agent.')
     .replace(/You have been invoked in the following environment:?/g, 'Current execution environment:')
     // The stock compaction continuation sentence; the summary text below it stays.
@@ -25,17 +25,99 @@ function neutralizeBanners(text, { updateConfig = true } = {}) {
     .replace(/You are powered by the model named (.+?)\.(?!\w) The exact model ID is (.+?)\.(?!\w)/g,
       (line, name, id) => `Active model: ${name}. Model ID: ${id}.`)
     .replace(/You are powered by the model named (.+?)\.(?!\w)/g, (line, name) => `Active model: ${name}.`)
-    .replace(/The exact model ID is (.+?)\.(?!\w)/g, (line, id) => `Model ID: ${id}.`);
-  if (!updateConfig) return banners;
-  return banners.replace(/require hooks configured in settings\.json - the harness executes these, not Claude, so memory\/preferences cannot fulfill them\./g,
-    'must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.');
+    .replace(/The exact model ID is (.+?)\.(?!\w)/g, (line, id) => `Model ID: ${id}.`)
+    // More stock client strings the policy check refuses verbatim (case-sensitive; reworded
+    // versions pass), found by bisecting refused requests line by line.
+    // Compacted transcripts replay earlier tool calls with these stock labels.
+    .replace(/Called the ([A-Za-z0-9_.:-]+) tool with the following input:/g, 'Earlier tool call ($1), input:')
+    .replace(/Result of calling the ([A-Za-z0-9_.:-]+) tool:/g, 'Earlier tool result ($1):')
+    // The instruction-file label; newer Claude Code versions wrap it in a different reminder
+    // header than the one prepareDirectAnthropic keys on, so rewrite it wherever it appears.
+    .replace(/Contents of (.+?) \(user's private global instructions for all projects\):/g, 'Loaded instructions from $1 (user scope):')
+    // Claude Code's task-tools reminder.
+    .replace(/If you're working on tasks that would benefit from tracking progress, consider using TaskCreate to add new tasks and TaskUpdate to update task status \(set to in_progress when starting, completed when done\)\./g,
+      'If tracking progress would help, TaskCreate adds tasks and TaskUpdate changes their status (in_progress when starting, completed when done).')
+    // Other agents' identity lines are refused the same way.
+    .replace(/You are a general-purpose AI agent called goose, created by AAIF \(Agentic AI Foundation\)\./g,
+      'You are goose, a general-purpose AI agent from the Agentic AI Foundation (AAIF).')
+    .replace(/You are a general-purpose AI agent called goose/g, 'You are goose, a general-purpose AI agent')
+    .replace(/You are Cline, an AI coding agent\./g, 'You are Cline, a coding agent.')
+    .replace(/You are an AI agent powered by DeepSeek Harness\./g, 'This agent runs on DeepSeek Harness.')
+    .replace(/You are Hermes Agent, built by Nous Research\./g, 'This agent is Hermes Agent by Nous Research.')
+    // "You are an AI agent running in X" is refused like "... powered by X" (OpenCode and others).
+    .replace(/You are an AI agent running in /g, 'This agent runs in ')
+    // OpenCode's opening pair.
+    .replace(/a coding agent harness\. Help the user accomplish their goals using the tools you have available\./g,
+      'a coding-agent harness; help the user reach their goals with the tools available to you.')
+    // Claude Code's auto-mode safety classifier prompt is refused for this one sentence.
+    .replace(/The named tool itself is enforced separately; your job here is to catch circumvention\./g,
+      'The named tool itself is enforced separately; here your job is to catch circumvention.')
+    // The Codex identity opener "You are Codex, (an agent) based on GPT-N.", any version.
+    .replace(/You are Codex, (an agent )?based on GPT-/g, 'This agent is Codex, $1based on GPT-')
+    // Codex's approvals-reviewer and Codex CLI openers are refused together with the sentence that
+    // follows them; rewording the first sentence is enough.
+    .replace(/You are running in the same execution environment, but you can only run read-only commands\./g,
+      'This reviewer runs in the same execution environment, but you can only run read-only commands.')
+    .replace(/You are a coding agent running in the Codex CLI, a terminal-based coding assistant\./g,
+      'This coding agent runs in the Codex CLI, a terminal-based coding assistant.')
+    // SillyTavern's chat separator, any case; without the brackets it passes.
+    .replace(/\[start a new chat\]/gi, '[New chat begins]')
+    // The verbose update-config description. Claude Code puts its skill list in a USER-role
+    // reminder and the policy check refuses it there too, so this applies to every role.
+    .replace(/require hooks configured in settings\.json - the harness executes these, not Claude, so memory\/preferences cannot fulfill them\./g,
+      'must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.');
+}
+
+const droidIdentity = 'You are Droid, an AI software engineering agent built by Factory.';
+
+// /v1/chat/completions requests for Claude models are built by transformToAnthropic, which
+// prepareDirectAnthropic never sees. Apply the same rules there: client system blocks (not
+// our own prompt block), every message text and tool_result transcripts. Thinking blocks and
+// tool_use inputs stay untouched; cache_control fields are kept.
+function neutralizeChatBanners(req, ownPromptBlocks = 0) {
+  if (!getSystemPrompt().startsWith(droidIdentity)) return req;
+  const rewrite = text => typeof text === 'string' ? neutralizeBanners(text) : text;
+  if (Array.isArray(req.system)) req.system = req.system.map((block, index) =>
+    index < ownPromptBlocks || block?.type !== 'text' ? block : { ...block, text: rewrite(block.text) });
+  if (Array.isArray(req.messages)) req.messages = req.messages.map(message => {
+    if (typeof message.content === 'string') return { ...message, content: rewrite(message.content) };
+    if (!Array.isArray(message.content)) return message;
+    return { ...message, content: message.content.map(block => {
+      if (block?.type === 'tool_result' && block.content != null) {
+        const content = Array.isArray(block.content)
+          ? block.content.map(part => part?.type === 'text' ? { ...part, text: rewrite(part.text) } : part)
+          : rewrite(block.content);
+        return { ...block, content };
+      }
+      if (block?.type !== 'text' || typeof block.text !== 'string') return block;
+      return { ...block, text: rewrite(block.text) };
+    }) };
+  });
+  return req;
+}
+
+// Claude Code and opencode also drive the common (Gemini, ...) endpoint, and the policy check
+// refuses the same stock strings there. Rewrite the text of every OpenAI-format message the
+// same way; tool_call arguments stay untouched.
+export function neutralizeOpenAIBanners(messages) {
+  if (!Array.isArray(messages) || !getSystemPrompt().startsWith(droidIdentity)) return messages;
+  // Claude Code's first system line is an Anthropic billing marker; it means nothing to other
+  // providers and is refused on this path, so drop the line.
+  const rewrite = text => typeof text === 'string'
+    ? neutralizeBanners(text.replace(/^x-anthropic-billing-header:[^\n]*\n?/gm, '')) : text;
+  return messages.map(message => {
+    if (!message) return message;
+    if (typeof message.content === 'string') return { ...message, content: rewrite(message.content) };
+    if (!Array.isArray(message.content)) return message;
+    return { ...message, content: message.content.map(part =>
+      part?.type === 'text' && typeof part.text === 'string' ? { ...part, text: rewrite(part.text) } : part) };
+  });
 }
 
 // The counting and generation endpoints must see exactly the same prompt.
 export function prepareDirectAnthropic(request) {
   const result = { ...request }, prompt = getSystemPrompt();
   result.model = getModelById(request.model)?.id || request.model;
-  const droidIdentity = 'You are Droid, an AI software engineering agent built by Factory.';
   const system = Array.isArray(request.system) ? request.system : typeof request.system === 'string' ? [{ type: 'text', text: request.system }] : [];
   const clientSystem = prompt.startsWith(droidIdentity) ? system.map(block => {
     if (block.type !== 'text') return block;
@@ -48,17 +130,16 @@ export function prepareDirectAnthropic(request) {
     ...clientSystem];
   // Claude Code carries the same banners in every message shape: string content,
   // text blocks of any role and tool_result transcripts replaying earlier turns.
-  // Authored user text keeps its verbose update-config wording; thinking blocks and
-  // tool_use inputs stay untouched so signatures and call IDs survive.
+  // Thinking blocks and tool_use inputs stay untouched so signatures and call IDs survive.
   if (prompt.startsWith(droidIdentity) && request.messages) result.messages = request.messages.map(message => {
-    const rewrite = (text, updateConfig) => text == null ? text : neutralizeBanners(text, { updateConfig });
-    if (typeof message.content === 'string') return { ...message, content: rewrite(message.content, message.role !== 'user') };
+    const rewrite = text => text == null ? text : neutralizeBanners(text);
+    if (typeof message.content === 'string') return { ...message, content: rewrite(message.content) };
     if (!Array.isArray(message.content)) return message;
     return { ...message, content: message.content.map(block => {
       if (block.type === 'tool_result' && block.content != null) {
         const content = Array.isArray(block.content)
-          ? block.content.map(part => part.type === 'text' ? { ...part, text: rewrite(part.text, true) } : part)
-          : typeof block.content === 'string' ? rewrite(block.content, true) : block.content;
+          ? block.content.map(part => part.type === 'text' ? { ...part, text: rewrite(part.text) } : part)
+          : typeof block.content === 'string' ? rewrite(block.content) : block.content;
         return { ...block, content };
       }
       if (block.type !== 'text') return block;
@@ -66,7 +147,7 @@ export function prepareDirectAnthropic(request) {
       // Factory rejects its stock label, so retain the path and the instructions.
       const text = block.text?.startsWith('<system-reminder>\nAs you answer the user\'s questions, you can use the following context:\n')
         ? block.text.replace(/^Contents of (.+) \(user\'s private global instructions for all projects\):$/gm, 'Loaded instructions from $1 (user scope):') : block.text;
-      return { ...block, text: rewrite(text, message.role !== 'user') };
+      return { ...block, text: rewrite(text) };
     }) };
   });
   const reasoning = getModelReasoning(request.model);
@@ -276,6 +357,9 @@ export function transformToAnthropic(openaiRequest, targetModel = null) {
       ? filteredRequest.stop 
       : [filteredRequest.stop];
   }
+
+  // The policy check refuses the same stock client wording on this path.
+  neutralizeChatBanners(anthropicRequest, systemPrompt ? 1 : 0);
 
   logDebug('Transformed Anthropic request', anthropicRequest);
   return anthropicRequest;

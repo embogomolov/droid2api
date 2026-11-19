@@ -79,10 +79,10 @@ try {
   assert.deepEqual(prepareDirectAnthropic(metadata),preparedMetadata,'generated reminder rewrites have a stable cache prefix');
   assert.equal(preparedMetadata.messages[0].content[0].text,reminder.replace("Contents of C:\\Users\\Example\\.claude\\CLAUDE.md (user's private global instructions for all projects):",'Loaded instructions from C:\\Users\\Example\\.claude\\CLAUDE.md (user scope):'));
   assert.deepEqual(preparedMetadata.messages[0].content[0].cache_control,metadata.messages[0].content[0].cache_control);
-  assert.equal(preparedMetadata.messages[0].content[1].text,skill,'authored user text is untouched');
+  assert.equal(preparedMetadata.messages[0].content[1].text,skill.replace('require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them.','must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.'),'the update-config wording is refused in user text too');
   assert.equal(preparedMetadata.messages[1].content[0].text,skill.replace('require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them.','must use settings.json hooks, which the runtime executes; memory/preferences do not run automation.'));
   // Claude Code 2.1.326 sends the same banners as string message content and inside
-  // tool_result transcripts; authored user text keeps the verbose update-config wording.
+  // tool_result transcripts; the update-config wording is rephrased in every role.
   const envBanner='# Environment\nYou have been invoked in the following environment: \n - Platform: win32\nYou are powered by the model named Fable 5.5. The exact model ID is claude-fable-5.5. Assistant knowledge cutoff is June 2026.\n';
   const turnShapes={...body,messages:[{role:'system',content:envBanner},
     {role:'user',content:[{type:'text',text:envBanner+skill,cache_control:{type:'ephemeral'}}]},
@@ -100,7 +100,7 @@ try {
   const fileNote='Note: C:\\tmp\\big1.txt was read before the last conversation was summarized, but the contents are too large to include. Use Read tool if you need to access it.';
   assert.equal(prepareDirectAnthropic({...body,messages:[{role:'system',content:fileNote}]}).messages[0].content,
     fileNote.replace('was summarized','was summarised'),'post-compaction file note is rephrased');
-  assert.equal(preparedShapes.messages[1].content[0].text,preparedShapes.messages[0].content+skill,'user banners rephrased, authored update-config kept');
+  assert.equal(preparedShapes.messages[1].content[0].text,preparedShapes.messages[0].content+preparedMetadata.messages[1].content[0].text,'user banners and update-config rephrased');
   assert.deepEqual(preparedShapes.messages[1].content[0].cache_control,turnShapes.messages[1].content[0].cache_control);
   assert.deepEqual(preparedShapes.messages[2].content,turnShapes.messages[2].content,'thinking signatures and tool_use inputs are never touched');
   assert.equal(preparedShapes.messages[3].content[0].content[0].text,preparedShapes.messages[0].content,'tool_result transcripts are rephrased');
