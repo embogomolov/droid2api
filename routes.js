@@ -6,6 +6,7 @@ import { logInfo, logDebug, logError, logWarn, logRequest, logResponse } from '.
 import { transformToAnthropic, getAnthropicHeaders, prepareDirectAnthropic } from './transformers/request-anthropic.js';
 import { transformToOpenAI, getOpenAIHeaders, prepareOpenAIInstructions, prepareOpenAIInput } from './transformers/request-openai.js';
 import { transformToCommon, getCommonHeaders } from './transformers/request-common.js';
+import { aliasAnthropicTools, aliasOpenAITools, restoreAnthropicContent, restoreAnthropicEventLine, restoreOpenAINames } from './utils/tool-names.js';
 import { AnthropicResponseTransformer } from './transformers/response-anthropic.js';
 import { prepareAnthropicToolHistory } from './transformers/anthropic-tool-history.js';
 import { OpenAIResponseTransformer } from './transformers/response-openai.js';
@@ -252,6 +253,11 @@ async function handleChatCompletions(req, res) {
       return res.status(500).json({ error: `Unknown model type: ${model.type}` });
     }
 
+    // Client tools go upstream under prefixed aliases (the usage policy check refuses some tool
+    // names verbatim); answers are mapped back below. Before the tool-history restore, which
+    // matches turns by their (aliased) tool calls.
+    const toolNames = model.type === 'anthropic' ? aliasAnthropicTools(transformedRequest)
+      : model.type === 'common' ? aliasOpenAITools(transformedRequest) : null;
     const isStreaming = transformedRequest.stream === true;
     let logBody, rememberToolTurn;
     if (model.type === 'anthropic' && transformedRequest.tools?.length) {
@@ -266,7 +272,7 @@ async function handleChatCompletions(req, res) {
     if (isStreaming && model.type !== 'common') {
       const Transformer = model.type === 'anthropic' ? AnthropicResponseTransformer : OpenAIResponseTransformer;
       const extractUsage = model.type === 'anthropic' ? extractAnthropicTokens : extractOpenAITokens;
-      adaptStream = (source, observe, usageRecorded) => new Transformer(modelId, undefined, rememberToolTurn).transformStream(source, event => {
+      adaptStream = (source, observe, usageRecorded) => new Transformer(modelId, undefined, rememberToolTurn, toolNames).transformStream(source, event => {
         observe(event);
         if (!usageRecorded) extractUsage(event, tokenStats);
       });
@@ -285,28 +291,40 @@ async function handleChatCompletions(req, res) {
       if (model.type === 'common') {
         try {
           let buffer = '';
+          // With aliased tools the stream is re-emitted line by line (tool_call names mapped back);
+          // a streaming decoder keeps multi-byte characters split across chunks intact.
+          const decoder = toolNames ? new TextDecoder() : null;
           for await (const chunk of response.body) {
-            await writeResponseChunk(res, chunk);
+            if (!toolNames) await writeResponseChunk(res, chunk);
 
             // BaSui: Parse the SSE stream to extract token usage
-            buffer += chunk.toString();
+            buffer += decoder ? decoder.decode(chunk, { stream: true }) : chunk.toString();
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
+            const out = toolNames ? [] : null;
 
             for (const line of lines) {
+              let outLine = line;
               if (line.startsWith('data:')) {
                 try {
                   const dataStr = line.slice(5).trim();
-                  if (dataStr === '[DONE]') continue;
-                  const data = JSON.parse(dataStr);
-                  // Use the new token extraction helper
-                  extractCommonTokens(data, tokenStats);
+                  if (dataStr !== '[DONE]') {
+                    const data = JSON.parse(dataStr);
+                    // Use the new token extraction helper
+                    extractCommonTokens(data, tokenStats);
+                    if (toolNames && data?.choices?.some(c => c?.delta?.tool_calls || c?.message?.tool_calls || c?.delta?.function_call)) {
+                      outLine = 'data: ' + JSON.stringify(restoreOpenAINames(data, toolNames)) + (line.endsWith('\r') ? '\r' : '');
+                    }
+                  }
                 } catch (e) {
                   // Ignore non-JSON lines
                 }
               }
+              out?.push(outLine + '\n');
             }
+            if (out?.length) await writeResponseChunk(res, out.join(''));
           }
+          if (toolNames && buffer) await writeResponseChunk(res, buffer);
           res.end();
           logInfo('Stream forwarded (common type)');
         } catch (streamError) {
@@ -369,7 +387,7 @@ async function handleChatCompletions(req, res) {
         // BaSui: Convert the Anthropic response to OpenAI format
         try {
           if (data.stop_reason === 'tool_use' && Array.isArray(data.content)) rememberToolTurn?.(data.content);
-          const converted = convertAnthropicToChatCompletion(data);
+          const converted = convertAnthropicToChatCompletion(restoreAnthropicContent(data, toolNames));
           logResponse(200, null, converted);
           res.json(converted);
         } catch (e) {
@@ -390,6 +408,7 @@ async function handleChatCompletions(req, res) {
         }
       } else {
         // common: Forward directly
+        restoreOpenAINames(data, toolNames);
         logResponse(200, null, data);
         res.json(data);
       }
@@ -608,6 +627,8 @@ async function handleDirectMessages(req, res) {
     const isStreamingRequest = anthropicRequest.stream === true;
 
     const modifiedRequest = prepareDirectAnthropic(anthropicRequest);
+    // Client tools go upstream under prefixed aliases; tool_use names are mapped back below.
+    const toolNames = aliasAnthropicTools(modifiedRequest);
 
     const upstream = await requestWithFailover(req, res, authHeader => ({
       url: endpoint.base_url, headers: getAnthropicHeaders(authHeader, clientHeaders, isStreamingRequest, modelId), body: modifiedRequest
@@ -619,7 +640,21 @@ async function handleDirectMessages(req, res) {
         setStreamingHeaders(res);
 
         try {
-          for await (const chunk of response.body) await writeResponseChunk(res, chunk);
+          if (!toolNames) {
+            for await (const chunk of response.body) await writeResponseChunk(res, chunk);
+          } else {
+            // Re-emit line by line so tool_use names reach the client unaliased.
+            const decoder = new TextDecoder();
+            let buffer = '';
+            for await (const chunk of response.body) {
+              buffer += decoder.decode(chunk, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              if (lines.length) await writeResponseChunk(res, lines.map(line => restoreAnthropicEventLine(line, toolNames) + '\n').join(''));
+            }
+            buffer += decoder.decode();
+            if (buffer) await writeResponseChunk(res, restoreAnthropicEventLine(buffer, toolNames));
+          }
           res.end();
           if (!upstream.outcome.failed) logInfo('Stream forwarded successfully');
         } catch (streamError) {
@@ -629,8 +664,9 @@ async function handleDirectMessages(req, res) {
       } else {
         const data = await response.json();
         if (!upstream.usageRecorded) recordTokenUsage(data, 'anthropic', currentKeyId);
-        logResponse(200, null, data);
-        res.json(data);
+        const restored = restoreAnthropicContent(data, toolNames);
+        logResponse(200, null, restored);
+        res.json(restored);
       }
 
 
@@ -694,9 +730,12 @@ async function handleCountTokens(req, res) {
 
     logInfo(`Counting tokens for ${model.type} endpoint: ${endpoint.base_url}/count_tokens`);
 
+    // Exactly the body /v1/messages sends, tool aliases included.
+    const countRequest = prepareDirectAnthropic(anthropicRequest);
+    aliasAnthropicTools(countRequest);
     const upstream = await requestWithFailover(req, res, authHeader => ({
       url: `${endpoint.base_url}/count_tokens`,
-      headers: getAnthropicHeaders(authHeader, req.headers, false, modelId), body: prepareDirectAnthropic(anthropicRequest)
+      headers: getAnthropicHeaders(authHeader, req.headers, false, modelId), body: countRequest
     }));
     if (!upstream) return;
     const { response } = upstream;

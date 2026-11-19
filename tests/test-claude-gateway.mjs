@@ -17,6 +17,7 @@ const { getConfig } = await import('../config.js');
 const { validateClientAuth } = await import('../middleware/client-auth.js');
 const { getFactorySession } = await import('../utils/factory-sessions.js');
 const { prepareDirectAnthropic } = await import('../transformers/request-anthropic.js');
+const { aliasAnthropicTools } = await import('../utils/tool-names.js');
 const { logCollectorMiddleware, getLogBuffer } = await import('../middleware/log-collector.js');
 const { upstreamEventError } = await import('../utils/factory-upstream.js');
 const { destroyPool } = await import('../utils/http-client.js');
@@ -111,7 +112,11 @@ try {
   assert.equal(calls[0].headers['x-session-id'],'test-session');
   assert.equal(calls[0].headers['anthropic-beta'],headers['anthropic-beta']);
   assert.equal(calls[0].headers['anthropic-future-capability'],'preserved');
-  for (const k of ['messages','tools','thinking','output_config','context_management']) assert.deepEqual(calls[0].body[k],body[k]);
+  // Client tools go upstream under prefixed aliases (utils/tool-names.js); everything else is forwarded as sent.
+  const aliased=structuredClone(body); aliasAnthropicTools(aliased);
+  assert.ok(calls[0].body.tools.every(tool=>tool.name.startsWith('fn_')),'client tool names are aliased upstream');
+  for (const k of ['messages','tools']) assert.deepEqual(calls[0].body[k],aliased[k]);
+  for (const k of ['thinking','output_config','context_management']) assert.deepEqual(calls[0].body[k],body[k]);
   assert.deepEqual(calls[0].body.system.slice(1),body.system);
   const count=await call({},'/v1/messages/count_tokens'); assert.deepEqual(await count.json(),{input_tokens:321});
   assert.deepEqual(calls[1].body,calls[0].body,'same counting and generation prompt');
