@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const KEYWORD_CONFIG_PATH = path.join(__dirname, '../data/keyword-filter.json');
+const DEFAULT_KEYWORD_CONFIG_PATH = path.join(process.env.DROID2API_DEFAULTS_DIR || path.dirname(KEYWORD_CONFIG_PATH), 'keyword-filter.json.example');
 const PATTERN_TYPE_MAP = {
   prefix: 'startsWith',
   suffix: 'endsWith'
@@ -250,7 +251,7 @@ class KeywordFilter {
         logInfo(`[KeywordFilter] Loaded ${enabledRules} enabled rules from ${this.config.rules.length} total rules`);
       }
     } catch (error) {
-      logError('[KeywordFilter] Failed to load configuration', error);
+      logError('[KeywordFilter] Failed to load data/keyword-filter.json', error);
       this.config = this.getDefaultConfig();
     }
   }
@@ -288,37 +289,11 @@ class KeywordFilter {
   }
 
   createDefaultConfig() {
-    const defaultConfig = {
-      enabled: true,
-      rules: [
-        {
-          id: "rule-example",
-          name: "Example rule",
-          enabled: false,
-          pattern: {
-            type: "contains",
-            value: "keyword",
-            caseSensitive: false
-          },
-          action: {
-            type: "replace",
-            replacement: "replacement"
-          },
-          description: "Example rule demonstrating keyword replacement"
-        }
-      ],
-      logging: {
-        enabled: true,
-        logMatches: true,
-        logActions: true
-      }
-    };
-
+    fs.mkdirSync(path.dirname(KEYWORD_CONFIG_PATH), { recursive: true });
     try {
-      fs.writeFileSync(KEYWORD_CONFIG_PATH, JSON.stringify(defaultConfig, null, 2), 'utf-8');
-      logInfo('[KeywordFilter] Default configuration created');
+      fs.copyFileSync(DEFAULT_KEYWORD_CONFIG_PATH, KEYWORD_CONFIG_PATH, fs.constants.COPYFILE_EXCL);
     } catch (error) {
-      logError('[KeywordFilter] Failed to create default configuration', error);
+      if (error.code !== 'EEXIST') throw error;
     }
   }
 

@@ -14,11 +14,15 @@ for(const name of fs.readdirSync(root).filter(n=>n.endsWith('.js')||n==='package
 for(const name of ['api','middleware','utils','transformers'])fs.cpSync(path.join(root,name),path.join(dir,name),{recursive:true});
 fs.symlinkSync(path.join(root,'node_modules'),path.join(dir,'node_modules'),'junction');
 fs.mkdirSync(path.join(dir,'data'));
+for (const template of ['config.json.example', 'keyword-filter.json.example']) {
+  fs.copyFileSync(path.join(root, 'data', template), path.join(dir, 'data', template));
+}
 const configPath=path.join(dir,'data/config.json'),poolPath=path.join(dir,'data/key_pool.json');
 const config={port:3000,models:[],endpoint:[],system_prompt:'keep-me',key_pool:{algorithm:'max-remaining',retry:{enabled:true,maxRetries:3,retryDelay:1000},multiTier:{enabled:false}}};
 fs.writeFileSync(configPath,JSON.stringify(config));
 fs.writeFileSync(poolPath,JSON.stringify({keys:[],stats:{},config:{algorithm:'round-robin',retry:{enabled:false}}}));
 for(const key of Object.keys(process.env))if(key.startsWith('KEY_POOL_'))delete process.env[key];
+process.env.DROID2API_DEFAULTS_DIR=path.join(dir,'data');
 process.env.ADMIN_ACCESS_KEY='isolated-test';process.env.DROID2API_STATS_FILE=path.join(dir,'data/request_stats.json');
 const {default:pool}=await import(pathToFileURL(path.join(dir,'auth.js')));
 const {getConfig}=await import(pathToFileURL(path.join(dir,'config.js')));

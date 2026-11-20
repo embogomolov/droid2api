@@ -10,6 +10,9 @@ for(const name of fs.readdirSync(root).filter(n=>n.endsWith('.js')||n==='package
 for(const name of ['api','middleware','utils','transformers','tests'])fs.cpSync(path.join(root,name),path.join(dir,name),{recursive:true});
 fs.symlinkSync(path.join(root,'node_modules'),path.join(dir,'node_modules'),'junction');
 fs.mkdirSync(path.join(dir,'data'));
+for (const template of ['config.json.example', 'keyword-filter.json.example']) {
+  fs.copyFileSync(path.join(root, 'data', template), path.join(dir, 'data', template));
+}
 const config=JSON.parse(fs.readFileSync(path.join(root,'data/config.json')));
 fs.writeFileSync(path.join(dir,'data/config.json'),JSON.stringify({models:config.models,endpoint:config.endpoint,token_sync:{enabled:false}}));
 fs.writeFileSync(path.join(dir,'data/key_pool.json'),'{"keys":[],"stats":{}}');

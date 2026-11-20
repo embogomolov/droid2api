@@ -37,11 +37,12 @@ RUN npm ci --only=production && \
     npm cache clean --force
 
 # ===== Stage 3: copy project files =====
-# Copy all project files (.dockerignore excludes unnecessary files)
+# .dockerignore allows only runtime source, package metadata and clean defaults.
 COPY . .
 
-# Create required directories
-RUN mkdir -p /app/data /app/logs
+# Keep the build-time templates outside the runtime data mount.
+RUN mv /app/data /app/defaults && mkdir -p /app/data /app/logs
+ENV DROID2API_DEFAULTS_DIR=/app/defaults
 
 # ===== Stage 4: runtime configuration =====
 # Expose the port (default: 3000; configurable through PORT)

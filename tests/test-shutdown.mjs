@@ -16,6 +16,9 @@ for(const name of fs.readdirSync(root).filter(n=>n.endsWith('.js')||n==='package
 for(const name of ['api','middleware','utils','transformers']) fs.cpSync(path.join(root,name),path.join(dir,name),{recursive:true});
 fs.symlinkSync(path.join(root,'node_modules'),path.join(dir,'node_modules'),'junction');
 fs.mkdirSync(path.join(dir,'data'));
+for (const template of ['config.json.example', 'keyword-filter.json.example']) {
+  fs.copyFileSync(path.join(root, 'data', template), path.join(dir, 'data', template));
+}
 fs.writeFileSync(path.join(dir,'data/config.json'),JSON.stringify({models:[],endpoint:[],token_sync:{enabled:false},key_pool:{algorithm:'max-remaining'}}));
 fs.writeFileSync(path.join(dir,'data/key_pool.json'),JSON.stringify({keys:[],stats:{}}));
 fs.writeFileSync(path.join(dir,'shutdown-probe.mjs'),`
@@ -38,7 +41,7 @@ process.on('message', async message => {
   process.emit(message.testSignal);
 });
 `);
-const env={...process.env,ADMIN_ACCESS_KEY:'isolated-shutdown-test',API_ACCESS_KEY:'isolated-shutdown-test',TOKEN_SYNC_ENABLED:'false',AUTOMATIC_KEY_TESTS:'false',CLUSTER_MODE:'false',DROID2API_STATS_FILE:path.join(dir,'data/request_stats.json')};
+const env={...process.env,DROID2API_DEFAULTS_DIR:path.join(dir,'data'),ADMIN_ACCESS_KEY:'isolated-shutdown-test',API_ACCESS_KEY:'isolated-shutdown-test',TOKEN_SYNC_ENABLED:'false',AUTOMATIC_KEY_TESTS:'false',CLUSTER_MODE:'false',DROID2API_STATS_FILE:path.join(dir,'data/request_stats.json')};
 for(const name of Object.keys(env)) if (/^(DROID_REFRESH_KEY|FACTORY_API_KEY|REDIS_|KEY_POOL_)/.test(name)) delete env[name];
 
 for(const [signal,clusterMode] of [['SIGINT',false],['SIGTERM',false],['SIGBREAK',false],['SIGINT',true]]) {

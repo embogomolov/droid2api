@@ -252,7 +252,7 @@ function readKeywordConfig({ autoMigrate = true } = {}) {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    throw wrapFsError('Failed to parse keyword filter configuration', error);
+    throw wrapFsError('Failed to parse data/keyword-filter.json', error);
   }
 
   if (!autoMigrate) {
