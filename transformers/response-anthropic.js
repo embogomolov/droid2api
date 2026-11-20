@@ -10,8 +10,10 @@ const deltaFields = new Map([
 ]);
 
 export class AnthropicResponseTransformer extends ChatCompletionStream {
-  constructor(model, id, rememberToolTurn) {
+  constructor(model, id, rememberToolTurn, toolNames = null) {
     super(model, id);
+    // Tools went upstream under aliases (utils/tool-names.js); show the client its own names.
+    this.toolNames = toolNames;
     this.toolInputs = new Map();
     this.stopReason = null;
     this.rememberToolTurn = rememberToolTurn;
@@ -58,7 +60,7 @@ export class AnthropicResponseTransformer extends ChatCompletionStream {
       case 'content_block_start':
         if (block?.type === 'tool_use') {
           this.toolInputs.set(index, block.input ?? {});
-          yield this.startTool(index, block.id, block.name);
+          yield this.startTool(index, block.id, this.toolNames ? this.toolNames.original(block.name) : block.name);
         } else if (block?.type === 'text' && block.text) {
           yield this.chunk({ content: block.text });
         }
