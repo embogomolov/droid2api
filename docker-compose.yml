@@ -9,7 +9,7 @@ services:
     build: .
     container_name: droid2api
     ports:
-      - "3000:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     environment:
       # ===== 🔐 Five-level authentication (choose by priority; configure at least one method) =====
 
@@ -21,8 +21,8 @@ services:
       # 3️⃣ Third priority: automatic OAuth refresh (every 6 hours)
       - DROID_REFRESH_KEY=${DROID_REFRESH_KEY}
 
-      # ===== 🔑 Admin access (strongly recommended) =====
-      - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY:-your-admin-password-change-me}
+      # ===== 🔑 Admin access =====
+      - ADMIN_ACCESS_KEY=${ADMIN_ACCESS_KEY:?Set ADMIN_ACCESS_KEY}
 
       # ===== 🛡️ Client access control (optional) =====
       - API_ACCESS_KEY=${API_ACCESS_KEY}
@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-3000}/"]
       interval: 30s
       timeout: 10s
       retries: 3
