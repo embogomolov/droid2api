@@ -62,33 +62,10 @@ function checkDuplicateCode() {
 console.log('\n2️⃣ Check shared function imports\n');
 
 function checkCommonImports() {
-  const files = [
-    { path: '../routes.js', name: 'routes.js' },
-    { path: '../api/admin-routes.js', name: 'admin-routes.js' },
-    { path: '../api/token-usage-routes.js', name: 'token-usage-routes.js' },
-    { path: '../api/stats-routes.js', name: 'stats-routes.js' }
-  ];
-  
-  files.forEach(file => {
-    const filePath = path.join(__dirname, file.path);
-    const content = readFileSync(filePath, 'utf-8');
-    
-    console.log(`  Check ${file.name}:`);
-    
-    if (file.name === 'routes.js') {
-      if (content.includes("from './utils/route-common.js'")) {
-        console.log('    ✅ Imported route-common.js');
-      } else {
-        console.log('    ❌ Missing route-common.js import');
-      }
-    } else {
-      if (content.includes("from '../middleware/admin-auth.js'")) {
-        console.log('    ✅ Imported admin-auth.js');
-      } else {
-        console.log('    ❌ Missing admin-auth.js import');
-      }
-    }
-  });
+  const routes = readFileSync(path.join(__dirname, '../routes.js'), 'utf-8');
+  const server = readFileSync(path.join(__dirname, '../server.js'), 'utf-8');
+  console.log(routes.includes("from './utils/route-common.js'") ? '    ✅ Imported route-common.js' : '    ❌ Missing route-common.js import');
+  console.log(server.includes("app.use('/admin', adminAuth)") ? '    ✅ Shared admin authentication' : '    ❌ Missing admin authentication');
 }
 
 // 3. Check error-handling coverage

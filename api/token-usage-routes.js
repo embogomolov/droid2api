@@ -1,6 +1,5 @@
 import { getLimitState } from '../utils/factory-limits.js';
 import express from 'express';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,9 +22,6 @@ const router = express.Router();
 
 // Token usage data storage path
 const TOKEN_USAGE_FILE = path.join(__dirname, '..', 'data', 'token_usage.json');
-
-// Apply authentication middleware to all token management routes
-router.use(adminAuth);
 
 // Cache lifetime in milliseconds: 5 minutes
 const CACHE_TTL = 5 * 60 * 1000;

@@ -22,10 +22,11 @@ for(const key of Object.keys(process.env))if(key.startsWith('KEY_POOL_'))delete 
 process.env.ADMIN_ACCESS_KEY='isolated-test';process.env.DROID2API_STATS_FILE=path.join(dir,'data/request_stats.json');
 const {default:pool}=await import(pathToFileURL(path.join(dir,'auth.js')));
 const {getConfig}=await import(pathToFileURL(path.join(dir,'config.js')));
+const {adminAuth}=await import(pathToFileURL(path.join(dir,'middleware/admin-auth.js')));
 const {default:router}=await import(pathToFileURL(path.join(dir,'api/admin-routes.js')));
 assert.equal(pool.config.algorithm,'max-remaining','Stale pool snapshot overrode saved settings');
 assert.equal(pool.config.retry.enabled,true);
-const app=express();app.use(express.json());app.use('/admin',router);
+const app=express();app.use('/admin',adminAuth,express.json(),router);
 const server=app.listen(0,'127.0.0.1');await once(server,'listening');
 const call=async(method,url,body)=>{const r=await fetch(`http://127.0.0.1:${server.address().port}/admin${url}`,{method,headers:{'x-admin-key':'isolated-test','content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return{status:r.status,body:await r.json()};};
 try {

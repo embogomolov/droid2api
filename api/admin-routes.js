@@ -13,14 +13,8 @@ import {
   wrapAsync,
   wrapSync
 } from './admin-error-handlers.js';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 
 const router = express.Router();
-
-// 🔧 Optimization: adminAuth moved to ../middleware/admin-auth.js to avoid duplicate code
-
-// Apply authentication middleware to all admin routes
-router.use(adminAuth);
 
 router.get('/window-sync', wrapSync((req, res) => {
   sendSuccessResponse(res, getWindowSync(keyPoolManager).snapshot());

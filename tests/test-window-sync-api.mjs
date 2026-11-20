@@ -5,6 +5,7 @@ import express from 'express';
 import fetch from 'node-fetch';
 import { once } from 'node:events';
 import pool, { KeyPoolManager } from '../auth.js';
+import { adminAuth } from '../middleware/admin-auth.js';
 import router from '../api/admin-routes.js';
 import { getWindowSync, DEFAULT_WINDOW_SYNC } from '../utils/window-sync.js';
 import { getConfig, saveConfig } from '../config.js';
@@ -13,7 +14,7 @@ import { destroyPool } from '../utils/http-client.js';
 process.env.ADMIN_ACCESS_KEY = 'isolated-sync-test';
 pool.keys = ['a','b'].map(id => ({ id, key: `fake-${id}`, status: 'active', last_test_result: 'success' }));
 const scheduler = getWindowSync(pool); await scheduler.stop(); // Never start background probes in this API check.
-const app = express(); app.use(express.json()); app.use('/admin', router);
+const app = express(); app.use('/admin', adminAuth, express.json(), router);
 const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
 const call = async (method, path, body, auth = true) => {
  const r = await fetch(`http://127.0.0.1:${server.address().port}/admin${path}`, { method, headers: { 'content-type': 'application/json', ...(auth ? { 'x-admin-key': 'isolated-sync-test' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import express from 'express';
 import { once } from 'node:events';
 import pool from '../auth.js';
+import { adminAuth } from '../middleware/admin-auth.js';
 import router from '../api/admin-routes.js';
 import { getConfig, saveConfig } from '../config.js';
 import { WindowSync, DEFAULT_WINDOW_SYNC } from '../utils/window-sync.js';
@@ -11,7 +12,7 @@ import writers from '../utils/async-file-writer.js';
 import { destroyPool } from '../utils/http-client.js';
 
 process.env.ADMIN_ACCESS_KEY = 'isolated-deletion-test';
-const app = express(); app.use(express.json()); app.use('/admin', router);
+const app = express(); app.use('/admin', adminAuth, express.json(), router);
 const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
 const make = (id, status = 'active') => ({ id, key: `fake-${id}`, status, last_test_result: 'success' });
 let wakeups = 0;

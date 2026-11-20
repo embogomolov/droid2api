@@ -172,6 +172,7 @@ if (CLUSTER_MODE && cluster.isPrimary) {
   const { logInfo, logError, logWarning, logDebug } = await import('./logger.js');
   const router = (await import('./routes.js')).default;
   const { initializeAuth, default: keyPoolManager } = await import('./auth.js');
+  const { adminAuth } = await import('./middleware/admin-auth.js');
   const adminRouter = (await import('./api/admin-routes.js')).default;
   const tokenUsageRouter = (await import('./api/token-usage-routes.js')).default;
   const statsRouter = (await import('./api/stats-routes.js')).default;
@@ -299,6 +300,8 @@ if (CLUSTER_MODE && cluster.isPrimary) {
     }
     next();
   });
+
+  app.use('/admin', adminAuth);
 
   // BaSui: Log collection middleware (register before routes)
   app.use(logCollectorMiddleware);

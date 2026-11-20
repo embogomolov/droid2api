@@ -4,14 +4,10 @@
  */
 
 import express from 'express';
-import { adminAuth } from '../middleware/admin-auth.js'; // 🔧 Optimization: use shared authentication middleware
 import { getStats, getTodayStats, getStatsSummary, get7DaysTrend, resetStats } from '../utils/request-stats.js';
 import { logInfo, logError } from '../logger.js';
 
 const router = express.Router();
-
-// Apply authentication middleware to all statistics routes
-router.use(adminAuth);
 
 /**
  * GET /admin/stats/summary
